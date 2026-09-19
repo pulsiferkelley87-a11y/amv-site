@@ -101,12 +101,31 @@ def main():
         if st not in (201, 422):
             log("建仓库响应: " + body[:300])
 
-    # 3. push（token 仅存在于进程环境，不落盘）
-    remote = f"https://{TOKEN}@github.com/{USER}/{REPO}.git"
+    # 3. push（token 仅存在于进程环境，不落盘；x-access-token 格式防密码提示）
+    remote = f"https://x-access-token:{TOKEN}@github.com/{USER}/{REPO}.git"
     run(f'{GIT} remote remove origin')
     run(f'{GIT} remote add origin "{remote}"')
     run(f'{GIT} branch -M main')
-    rc = run(f'{GIT} push -u origin main --force')
+    env_extra = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_ASKPASS="echo")
+    p = subprocess.run(
+        f'{GIT} push -u origin main --force', cwd=BASE,
+        capture_output=True, shell=True, timeout=420, env=env_extra,
+    )
+    for raw in (p.stdout, p.stderr):
+        if not raw:
+            continue
+        for enc in ("utf-8", "gbk", "latin-1"):
+            try:
+                text = raw.decode(enc)
+                break
+            except UnicodeDecodeError:
+                continue
+        else:
+            text = str(raw)
+        tail = text.strip()[-600:]
+        if tail:
+            log("  " + tail.replace("\n", "\n  "))
+    rc = p.returncode
     log(f"push exit={rc}")
     # 立即抹掉 remote 里的 token（不留痕迹）
     run(f'{GIT} remote set-url origin "https://github.com/{USER}/{REPO}.git"')
