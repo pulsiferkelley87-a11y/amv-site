@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<title>活跃市值 0AMV 监测台</title>
+<script src="echarts.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --text: #1a1d24; --muted: #6b7280;
+    --red: #d64545; --green: #2fa36b; --blue: #3b6fe0; --amber: #b8860b;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+         font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
+  header { padding: 18px 24px 10px; background: var(--card); border-bottom: 1px solid #e5e7eb; }
+  header h1 { font-size: 20px; font-weight: 700; }
+  header .meta { margin-top: 6px; font-size: 12px; color: var(--muted); }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 16px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .card { background: var(--card); border-radius: 10px; padding: 14px 16px;
+          box-shadow: 0 1px 3px rgba(0,0,0,.06); margin-bottom: 16px; }
+  .card h2 { font-size: 15px; margin-bottom: 8px; }
+  .card .note { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .chart { width: 100%; height: 380px; }
+  .chart.tall { height: 300px; }
+  .full { grid-column: 1 / -1; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 6px 8px; text-align: right; border-bottom: 1px solid #eef0f3; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--card); }
+  .up { color: var(--red); } .down { color: var(--green); }
+  .scroll { max-height: 420px; overflow-y: auto; }
+  .tag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 11px;
+         margin-right: 4px; color: #fff; }
+  .modeBtn { padding: 2px 10px; border: 1px solid #d1d5db; border-radius: 5px;
+             background: #fff; cursor: pointer; font-size: 12px; color: #374151; }
+  .modeBtn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .sectorBtns { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .sectorBtn { padding: 3px 10px; border: 1px solid #d1d5db; border-radius: 14px;
+               background: #fff; cursor: pointer; font-size: 12px; color: #374151;
+               transition: all .15s; }
+  .sectorBtn:hover { border-color: var(--blue); color: var(--blue); }
+  .sectorBtn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .tag.green { background: var(--green); } .tag.amber { background: var(--amber); }
+  .tag.blue { background: var(--blue); } .tag.gray { background: #9aa3af; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>活跃市值 0AMV 监测台</h1>
+  <div class="meta" id="meta">加载中…</div>
+  <div class="meta" style="margin-top:4px;">
+    历史回看：从 <input type="date" id="dateStart" style="padding:2px 6px;border:1px solid #d1d5db;border-radius:5px;">
+    到 <input type="date" id="dateEnd" style="padding:2px 6px;border:1px solid #d1d5db;border-radius:5px;">
+    <button onclick="applyRange()" style="padding:2px 10px;border:1px solid #d1d5db;border-radius:5px;background:#fff;cursor:pointer;">只看这段</button>
+    <button onclick="showLatest()" style="padding:2px 10px;border:1px solid #d1d5db;border-radius:5px;background:#fff;cursor:pointer;">回到最新</button>
+    <span id="histRange" style="color:var(--muted);"></span>
+  </div>
+</header>
+<div class="wrap">
+  <div class="card full">
+    <h2>官方 0AMV 叠加 · 自研活跃市值指标</h2>
+    <div class="note">自研指标为主视图；官方 0AMV 仅作叠加参考（默认隐藏，点图例打开）。amv_reg（回归拟合版）= 流通市值 × (0.015+5.83×SMA换手10 + 0.0021×累计换手250 + 0.005×市值动量250 + 0.037×量能趋势)，测试集 RMSE 7.4%。</div>
+    <div class="chart" id="chartMain"></div>
+  </div>
+  <div class="grid">
+    <div class="card">
+      <h2>官方三件套：0AMV / 0号指数 / 0DMV 叠加</h2>
+      <div class="note">恒等式：0号指数 = 0AMV + 0DMV（活跃筹码 + 死筹）。</div>
+      <div class="chart tall" id="chartTrio"></div>
+    </div>
+    <div class="card">
+      <h2>活跃比例（0AMV / 0号指数）</h2>
+      <div class="note">活跃筹码占流通市值比重，牛熊周期特征明显（历史区间 7.7% ~ 30.6%）。</div>
+      <div class="chart tall" id="chartRatio"></div>
+    </div>
+  </div>
+  <div class="card full">
+    <h2>全历史周线：0AMV 与活跃比例（1993 至今）</h2>
+    <div class="chart tall" id="chartWeekly"></div>
+  </div>
+  <div class="grid">
+    <div class="card">
+      <h2>板块活跃市值贡献 Top 15（按成交额占比）</h2>
+      <div class="note">点击下方按钮或柱子 → 个股贡献榜切换为该板块成分。活跃市值当日贡献 ≈ 板块成交额占比。</div>
+      <div class="sectorBtns" id="sectorBtns"></div>
+      <div class="chart" id="chartSectors"></div>
+    </div>
+    <div class="card">
+      <h2 id="stockTableTitle">个股活跃市值贡献 Top 50（全市场）</h2>
+      <div class="note" id="stockTableNote">按当日成交额排序；占比 = 个股成交额 / 全市场成交额。</div>
+      <div style="margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+        <span style="font-size:12px;color:var(--muted);">口径：</span>
+        <button id="btnAmt" class="modeBtn active" onclick="setMode('amt')">成交额</button>
+        <button id="btnDma" class="modeBtn" onclick="setMode('dma')">活跃市值(DMA)</button>
+        <span style="flex:1;"></span>
+        <button id="backBtn2" onclick="showMarketStocks()" style="display:none;padding:3px 10px;border:1px solid #d1d5db;border-radius:5px;background:#fff;cursor:pointer;">← 返回全市场排名</button>
+      </div>
+      <div class="scroll" id="stockTable"></div>
+    </div>
+  </div>
+</div>
+<script>
+// 时间戳动态加载，彻底绕过浏览器缓存
+(function () {
+  var ts = new Date().getTime();
+  document.write('<script src="app-data.js?v=' + ts + '"><\/script>');
+  document.write('<script src="app.js?v=' + ts + '"><\/script>');
+})();
+</script>
+</body>
+</html>

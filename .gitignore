@@ -1,0 +1,8 @@
+deploy_log.txt
+server_out.log
+server_err.log
+__pycache__/
+*.pyc
+.gh_token
+diag_*.py
+deploy.ps1
