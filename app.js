@@ -17,6 +17,7 @@ let CURRENT_SECTOR = null; // null = 全市场
 let VIEW_RANGE = null;     // null = 最新；否则 [start, end]
 let RANGE_SORT = "amount"; // amount = 区间累计成交额；drag = 拖后腿榜（活跃市值变化升序）
 let SEC_TAB = "industry"; // industry = 行业榜；style = 风格榜
+let SHOW_DROP = true;    // −2.3% 事件标记开关
 
 async function load() {
   D = window.DATA;
@@ -322,17 +323,19 @@ function renderMain() {
     { name: "amv_decay(活跃度递推)", type: "line", data: s.amv_decay, showSymbol: false,
       lineStyle: { width: 2.5, color: "#16a085" }, itemStyle: { color: "#16a085" } },
   ];
-  // −2.3% 事件标记（近 500 日窗口内）
-  const dropPts = (D.drop_events || [])
-    .filter(e => o.date[0] <= e.date && e.date <= o.date[o.date.length - 1])
-    .map(e => ({ coord: [e.date, o.amv[o.date.indexOf(e.date)]], value: e.chg + "%" }));
-  if (dropPts.length) {
-    opt.series[0].markPoint = {
-      symbol: "pin", symbolSize: 26,
-      label: { show: true, fontSize: 9, formatter: p => p.data.value },
-      itemStyle: { color: "#c0392b" },
-      data: dropPts,
-    };
+  // −2.3% 事件标记（可开关，近 500 日窗口内）
+  if (SHOW_DROP) {
+    const dropPts = (D.drop_events || [])
+      .filter(e => o.date[0] <= e.date && e.date <= o.date[o.date.length - 1])
+      .map(e => ({ coord: [e.date, o.amv[o.date.indexOf(e.date)]], value: e.chg + "%" }));
+    if (dropPts.length) {
+      opt.series[0].markPoint = {
+        symbol: "pin", symbolSize: 26,
+        label: { show: true, fontSize: 9, formatter: p => p.data.value },
+        itemStyle: { color: "#c0392b" },
+        data: dropPts,
+      };
+    }
   }
   // 官方 0AMV 默认隐藏（不参与比对，点图例可叠加）
   opt.series[0].lineStyle.opacity = 0.9;
@@ -677,6 +680,13 @@ function renderStockRows(rows) {
   });
   html += "</tbody></table>";
   document.getElementById("stockTable").innerHTML = html;
+}
+
+function toggleDrop() {
+  SHOW_DROP = !SHOW_DROP;
+  const btn = document.getElementById("btnDrop");
+  if (btn) btn.textContent = SHOW_DROP ? "−2.3%标记：开" : "−2.3%标记：关";
+  renderMain();
 }
 
 function line(data, name, color, width) {

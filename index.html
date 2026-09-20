@@ -63,7 +63,9 @@
 </header>
 <div class="wrap">
   <div class="card full">
-    <h2>官方 0AMV 叠加 · 自研活跃市值指标</h2>
+    <h2>官方 0AMV 叠加 · 自研活跃市值指标
+      <button id="btnDrop" onclick="toggleDrop()" style="float:right;padding:2px 10px;border:1px solid #d1d5db;border-radius:5px;background:#fff;cursor:pointer;font-size:12px;">−2.3%标记：开</button>
+    </h2>
     <div class="note">官方定义：活跃SZ = 流通市值 × 换手率，逐股计算再求和（市场总和 = 全市场成交额）。var1（成交额 10 日平滑）即官方 0AMV 的核心结构（相关性 0.993）。历史流传 DMA 公式已证伪，仅留研究对照。</div>
     <div class="chart" id="chartMain"></div>
   </div>
