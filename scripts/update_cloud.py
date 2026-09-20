@@ -241,7 +241,8 @@ def compute_stock_amv(rows):
 
 
 def compute_stock_amv_reg(rows, float_mv):
-    """公式口径活跃市值（amv_reg 市场级系数个股延伸）。"""
+    """递推活跃度模型（报告版参数：D=0.5^(1.15/10)，激活率=换手率/1.1）。
+    活跃SZ = 流通市值 × 活跃度递推。"""
     n = len(rows)
     amt = [k["amount"] for k in rows]
     closes = []
@@ -254,35 +255,20 @@ def compute_stock_amv_reg(rows, float_mv):
     if n < 60 or sum(amt[-20:]) <= 0 or not float_mv or closes[-1] <= 0:
         return None, None, None
     mv_now = float_mv
-    turn_eff = []
+    D = 0.5 ** (1.15 / 10.0)
+    series = []
+    A = None
     for i in range(n):
         t = turns[i]
         if t is None:
             mv_t = mv_now * (closes[i] / closes[-1]) if closes[-1] else mv_now
             t = (amt[i] / mv_t * 100) if mv_t else 0.0
-        turn_eff.append(t / 100.0)
-    st10 = sma(turn_eff, 10)
-    st60 = sma(turn_eff, 60)
-    st250 = sma(turn_eff, 250)
-    cum = [None] * n
-    s = 0.0
-    for i in range(n):
-        s += turn_eff[i]
-        if i >= 250:
-            s -= turn_eff[i - 250]
-        if i >= 249:
-            cum[i] = s
-    series = []
-    for i in range(n):
-        if cum[i] is None or closes[i - 250] <= 0:
-            series.append(None)
-            continue
-        ret250 = closes[i] / closes[i - 250] - 1
-        vt = st60[i] / st250[i] if st250[i] > 0 else 0.0
-        r_hat = 0.01537 + 5.830 * st10[i] + 0.00214 * cum[i] + 0.00496 * ret250 + 0.0372 * vt
+        t = t / 100.0
+        a = min(t / 1.1, 1.0)
+        A = a if A is None else D * A + a * (1.0 - A)
         mv_t = mv_now * (closes[i] / closes[-1])
-        series.append(max(mv_t * r_hat, 0.0))
-    final = series[-1] if series and series[-1] is not None else None
+        series.append(max(mv_t * A, 0.0))
+    final = series[-1] if series else None
     if final is None:
         return None, None, None
     return final, [k["date"] for k in rows], series
@@ -355,12 +341,12 @@ def compute_self(official_rows):
         vt = st60[i] / st250[i] if st250[i] > 0 else 0.0
         r_hat = 0.01537 + 5.830 * st10[i] + 0.00214 * cum250[i] + 0.00496 * zr + 0.0372 * vt
         amv_reg.append(max(z[i] * r_hat, 0.0))
-    # 动态衰减递推（半衰期15天/幂指数1.15，官方数据验证）
+    # 动态衰减递推（报告版参数：D=0.5^(1.15/10)，激活率=换手率/1.1）
     amv_decay = []
-    d_dec = 0.5 ** (1.0 / 15.0)
+    d_dec = 0.5 ** (1.15 / 10.0)
     A_dec = None
     for i in range(n):
-        a = min(turn[i] ** 1.15, 1.0)
+        a = min(turn[i] / 1.1, 1.0)
         A_dec = a if A_dec is None else A_dec * d_dec + a * (1.0 - A_dec)
         amv_decay.append(z[i] * A_dec)
     return {
@@ -522,8 +508,24 @@ def main():
         for r in reg_rows:
             r["amv_reg_pct"] = round(r["amv_reg"] / reg_total * 100, 2)
         reg_rows.sort(key=lambda x: -x["amv_reg"])
+        reg_rows = [r for r in dma_rows if r.get("amv_reg")]
+        reg_total = sum(r["amv_reg"] for r in reg_rows) or 1
+        for r in reg_rows:
+            r["amv_reg_pct"] = round(r["amv_reg"] / reg_total * 100, 2)
+        reg_rows.sort(key=lambda x: -x["amv_reg"])
+        # 板块递推活跃SZ（当日，按行业聚合）
+        sec_reg_map = {}
+        for r in reg_rows:
+            ind = r.get("industry") or "—"
+            sec_reg_map[ind] = sec_reg_map.get(ind, 0.0) + r["amv_reg"]
+        sectors_reg = [{"name": k, "amv_reg": v} for k, v in sec_reg_map.items()]
+        sectors_reg.sort(key=lambda x: -x["amv_reg"])
+        sec_reg_total = sum(x["amv_reg"] for x in sectors_reg) or 1
+        for x in sectors_reg:
+            x["amv_reg_pct"] = round(x["amv_reg"] / sec_reg_total * 100, 2)
         result["stocks_dma"] = dma_rows
         result["stocks_reg"] = reg_rows
+        result["sectors_reg"] = sectors_reg
         result["dma_covered"] = len(dma_rows)
         result["reg_covered"] = len(reg_rows)
         result["dma_updated_at"] = result["updated_at"]

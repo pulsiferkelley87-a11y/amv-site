@@ -396,7 +396,10 @@ function onSectorClick(params) {
 }
 
 function renderSectors() {
-  const secs = (D.sectors || []).filter(s => s.amount).slice(0, 15);
+  const secs = (MODE === "reg"
+    ? (D.sectors_reg || [])
+    : (D.sectors || []).filter(s => s.amount)
+  ).slice(0, 15);
   renderSectorBtns(secs, false);
   // 柱状图
   const secsRev = secs.slice().reverse();
@@ -405,8 +408,9 @@ function renderSectors() {
   opt.grid = { left: 90, right: 70, top: 10, bottom: 30 };
   opt.xAxis = { type: "value", axisLabel: { formatter: "{value}%" } };
   opt.yAxis = { type: "category", data: secsRev.map(s => s.name) };
+  const valField = MODE === "reg" ? "amv_reg_pct" : "amount_pct";
   opt.series = [{
-    type: "bar", data: secsRev.map(s => s.amount_pct), barMaxWidth: 16,
+    type: "bar", data: secsRev.map(s => s[valField]), barMaxWidth: 16,
     itemStyle: { color: COLORS.blue, borderRadius: [0, 4, 4, 0] },
     label: {
       show: true, position: "right", fontSize: 11,
@@ -427,6 +431,7 @@ function renderSectors() {
 function renderSectorBtns(secs, isRange) {
   const btnBox = document.getElementById("sectorBtns");
   btnBox.innerHTML = "";
+  const pctField = (!isRange && MODE === "reg") ? "amv_reg_pct" : "amount_pct";
   secs.forEach(s => {
     const b = document.createElement("button");
     b.className = "sectorBtn";
@@ -434,7 +439,7 @@ function renderSectorBtns(secs, isRange) {
     const chg = s.amv_chg != null
       ? (s.amv_chg >= 0 ? " ▲" : " ▼") + Math.abs(s.amv_chg).toFixed(1) + "%"
       : "";
-    b.textContent = `${s.name} ${s.amount_pct}%${chg}${sc}`;
+    b.textContent = `${s.name} ${s[pctField] ?? s.amount_pct}%${chg}${sc}`;
     b.onclick = () => {
       CURRENT_SECTOR = s.name;
       document.getElementById("backBtn2").style.display = "inline-block";
@@ -460,6 +465,7 @@ function setMode(mode) {
     renderRangeStocks(VIEW_RANGE[0], VIEW_RANGE[1]);
     return;
   }
+  renderSectors();
   if (CURRENT_SECTOR) {
     showSectorStocks(CURRENT_SECTOR);
   } else {
@@ -492,7 +498,7 @@ function showSectorStocks(sectorName) {
     const pctField = regMode ? "amv_reg_pct" : "amv_dma_pct";
     if (!list.length) {
       document.getElementById("stockTableTitle").textContent =
-        regMode ? "活跃市值（公式口径）数据采集中" : "活跃市值（流传DMA版）数据采集中";
+        regMode ? "活跃SZ（递推口径）数据采集中" : "活跃市值（流传DMA版）数据采集中";
       document.getElementById("stockTableNote").innerHTML =
         "东财历史行情接口每日自动补充约 60 只股票，完成前可先用其他口径。";
       document.getElementById("stockTable").innerHTML = "";
@@ -515,12 +521,12 @@ function showSectorStocks(sectorName) {
   }
   document.getElementById("stockTableTitle").textContent =
     `板块「${sectorName}」成分个股贡献 Top ${rows.length}` +
-    (MODE === "dma" ? "（流传DMA版）" : MODE === "reg" ? "（公式口径）" : "");
+    (MODE === "dma" ? "（流传DMA版）" : MODE === "reg" ? "（递推口径）" : "");
   document.getElementById("stockTableNote").innerHTML =
     (MODE === "dma"
       ? `活跃市值 = DMA(SMA(成交额,10), 换手率/110%)，覆盖成交额前 300 名；占比 = 个股活跃市值 / 已覆盖个股活跃市值合计。`
       : MODE === "reg"
-        ? `活跃市值 = 流通市值 × r̂（4 特征活跃比例，市场级系数个股延伸）；占比 = 个股活跃市值 / 已覆盖个股活跃市值合计。`
+        ? `递推活跃度 A_t = 0.9234×A_t-1 + min(换手率/1.1,1)×(1−A_t-1)；活跃SZ = 流通市值 × A；占比 = 个股活跃SZ / 已覆盖个股活跃SZ合计。`
         : `按成交额排序；占比 = 个股成交额 / 全市场成交额。`);
   renderStockRows(rows);
 }
@@ -551,16 +557,16 @@ function showMarketStocks() {
     const regList = D.stocks_reg || [];
     if (!regList.length) {
       document.getElementById("stockTableTitle").textContent =
-        "活跃市值（公式口径）数据采集中";
+        "活跃SZ（递推口径）数据采集中";
       document.getElementById("stockTableNote").innerHTML =
-        "公式口径 = 流通市值 × (0.015+5.83×SMA换手10 + 0.0021×累计换手250 + 0.005×价格动量250 + 0.037×量能趋势)，市场级系数个股延伸，每日自动补充。";
+        "递推活跃度 A_t = D×A_t-1 + min(换手率/1.1,1)×(1−A_t-1)，D=0.5^(1.15/10)；活跃SZ = 流通市值 × A。每日自动补充。";
       document.getElementById("stockTable").innerHTML = "";
       return;
     }
     document.getElementById("stockTableTitle").textContent =
-      `个股活跃市值贡献 Top ${regList.length}（公式口径）`;
+      `个股活跃SZ贡献 Top ${regList.length}（递推口径）`;
     document.getElementById("stockTableNote").innerHTML =
-      `活跃市值 = 流通市值 × r̂（r̂ 为 4 特征活跃比例，市场级系数个股延伸，${D.reg_covered || 0} 只有效数据）。`;
+      `递推活跃度（半衰期10天/幂指数1.15/激活率÷1.1，市场级验证 MAPE 4.87%），活跃SZ = 流通市值 × 活跃度；占比 = 个股活跃SZ / 已覆盖个股活跃SZ合计。`;
     renderStockRows(regList.slice(0, 50));
     return;
   }
