@@ -355,9 +355,18 @@ def compute_self(official_rows):
         vt = st60[i] / st250[i] if st250[i] > 0 else 0.0
         r_hat = 0.01537 + 5.830 * st10[i] + 0.00214 * cum250[i] + 0.00496 * zr + 0.0372 * vt
         amv_reg.append(max(z[i] * r_hat, 0.0))
+    # 动态衰减递推（半衰期15天/幂指数1.15，官方数据验证）
+    amv_decay = []
+    d_dec = 0.5 ** (1.0 / 15.0)
+    A_dec = None
+    for i in range(n):
+        a = min(turn[i] ** 1.15, 1.0)
+        A_dec = a if A_dec is None else A_dec * d_dec + a * (1.0 - A_dec)
+        amv_decay.append(z[i] * A_dec)
     return {
         "date": dates, "var1": var1, "c5": c5, "c13": c13, "c34": c34,
-        "cinf": cinf, "amv_hat": amv_hat, "amv_reg": amv_reg, "turn": turn,
+        "cinf": cinf, "amv_hat": amv_hat, "amv_reg": amv_reg,
+        "amv_decay": amv_decay, "turn": turn,
     }
 
 

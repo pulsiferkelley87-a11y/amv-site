@@ -295,7 +295,7 @@ function renderMain() {
   const o = D.official, s = D.self;
   const ch = echarts.init(document.getElementById("chartMain"));
   const opt = baseOption();
-  opt.legend = { top: 0, data: ["官方 0AMV", "var1(成交额平滑)", "C5", "C13", "C34", "∞", "amv_hat(近似版)", "amv_reg(回归拟合版)"] };
+  opt.legend = { top: 0, data: ["官方 0AMV", "var1(成交额平滑)", "amv_decay(活跃度递推)", "C5", "C13", "C34", "∞", "amv_hat(近似版)", "amv_reg(回归拟合版)"] };
   opt.xAxis = { type: "category", data: o.date };
   opt.yAxis = { type: "value", scale: true };
   opt.dataZoom = [
@@ -314,6 +314,8 @@ function renderMain() {
       itemStyle: { color: COLORS.amv_hat } },
     { name: "amv_reg(回归拟合版)", type: "line", data: s.amv_reg, showSymbol: false,
       lineStyle: { width: 2.5, color: "#8e44ad" }, itemStyle: { color: "#8e44ad" } },
+    { name: "amv_decay(活跃度递推)", type: "line", data: s.amv_decay, showSymbol: false,
+      lineStyle: { width: 2.5, color: "#16a085" }, itemStyle: { color: "#16a085" } },
   ];
   // 官方 0AMV 默认隐藏（不参与比对，点图例可叠加）
   opt.series[0].lineStyle.opacity = 0.9;
