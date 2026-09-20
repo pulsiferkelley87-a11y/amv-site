@@ -108,7 +108,7 @@ def main():
     run(f'{GIT} branch -M main')
     env_extra = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_ASKPASS="echo")
     p = subprocess.run(
-        f'{GIT} push -u origin main --force', cwd=BASE,
+        f'{GIT} -c credential.helper= push -u origin main --force', cwd=BASE,
         capture_output=True, shell=True, timeout=420, env=env_extra,
     )
     for raw in (p.stdout, p.stderr):
