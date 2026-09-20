@@ -12,6 +12,7 @@ const COLORS = {
 };
 
 let D = null;
+let mainLegendInit = false; // 官方 0AMV 图例开关只在首次初始化时设置，重绘时保持用户选择
 let MODE = "amt";        // amt = 成交额口径, reg = 公式口径, dma = 流传DMA版
 let CURRENT_SECTOR = null; // null = 全市场
 let VIEW_RANGE = null;     // null = 最新；否则 [start, end]
@@ -344,10 +345,13 @@ function renderMain() {
       };
     }
   }
-  // 官方 0AMV 默认隐藏（不参与比对，点图例可叠加）
+  // 官方 0AMV 默认隐藏（不参与比对，点图例可叠加）——仅在首次初始化时执行一次
   opt.series[0].lineStyle.opacity = 0.9;
   ch.setOption(opt);
-  ch.dispatchAction({ type: "legendToggleSelect", name: "官方 0AMV" });
+  if (!mainLegendInit) {
+    ch.dispatchAction({ type: "legendToggleSelect", name: "官方 0AMV" });
+    mainLegendInit = true;
+  }
   window.addEventListener("resize", () => ch.resize());
 }
 
