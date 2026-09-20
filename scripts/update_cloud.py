@@ -255,7 +255,7 @@ def compute_stock_amv_reg(rows, float_mv):
     if n < 60 or sum(amt[-20:]) <= 0 or not float_mv or closes[-1] <= 0:
         return None, None, None
     mv_now = float_mv
-    D = 0.5 ** (1.15 / 10.0)
+    D = 0.5 ** (1.25 / 10.0)
     series = []
     A = None
     for i in range(n):
@@ -343,7 +343,7 @@ def compute_self(official_rows):
         amv_reg.append(max(z[i] * r_hat, 0.0))
     # 动态衰减递推（报告版参数：D=0.5^(1.15/10)，激活率=换手率/1.1）
     amv_decay = []
-    d_dec = 0.5 ** (1.15 / 10.0)
+    d_dec = 0.5 ** (1.25 / 10.0)
     A_dec = None
     for i in range(n):
         a = min(turn[i] / 1.1, 1.0)
