@@ -12,9 +12,10 @@ const COLORS = {
 };
 
 let D = null;
-let MODE = "amt";        // amt = 成交额口径, dma = 活跃市值DMA口径
+let MODE = "amt";        // amt = 成交额口径, reg = 公式口径, dma = 流传DMA版
 let CURRENT_SECTOR = null; // null = 全市场
 let VIEW_RANGE = null;     // null = 最新；否则 [start, end]
+let RANGE_SORT = "amount"; // amount = 区间累计成交额；drag = 拖后腿榜（活跃市值变化升序）
 
 async function load() {
   D = window.DATA;
@@ -126,11 +127,25 @@ function renderRangeStocks(s, e) {
     amount: a.sumAmount,
     turnover: a.cnt ? a.turnSum / a.cnt : null,
     amv_chg: a.firstAmv && a.lastAmv ? (a.lastAmv / a.firstAmv - 1) * 100 : null,
-  })).sort((x, y) => y.amount - x.amount).slice(0, 50);
+  }));
+  const dragMode = RANGE_SORT === "drag";
+  rows.sort(dragMode
+    ? (x, y) => (x.amv_chg == null ? 1 : y.amv_chg == null ? -1 : x.amv_chg - y.amv_chg)
+    : (x, y) => y.amount - x.amount);
+  const topRows = rows.slice(0, 50);
 
   window._rangeAgg = agg;  // 供区间板块按钮复用
   window._rangeSecAmv = secAmv;
-  renderRangeRows(rows, `${s} ~ ${e} 区间累计成交额 Top ${rows.length}（快照覆盖成交额前300名）`);
+  const title = dragMode
+    ? `${s} ~ ${e} 拖后腿榜 Top ${topRows.length}（活跃市值缩水最狠的个股）`
+    : `${s} ~ ${e} 区间累计成交额 Top ${topRows.length}（快照覆盖成交额前300名）`;
+  renderRangeRows(topRows, title);
+  document.getElementById("stockTableNote").innerHTML =
+    (dragMode
+      ? `按区间活跃市值变化从最差到最好排序（拖后腿的在前）；变化 = 区间内 DMA 活跃市值首末变化。`
+      : `按区间累计成交额排序；活跃市值变化 = 区间内 DMA 活跃市值首末变化。`) +
+    ` <button onclick="setRangeSort('amount')" style="margin-left:6px;cursor:pointer;${dragMode ? '' : 'font-weight:700;'}">成交额榜</button>` +
+    ` <button onclick="setRangeSort('drag')" style="cursor:pointer;${dragMode ? 'font-weight:700;' : ''}">拖后腿榜</button>`;
   // 板块区间榜（按钮云 + 柱状图都切到区间）
   const secs = [...secAgg.entries()].map(([name, sec]) => ({ name, amount: sec.amount }))
     .sort((a, b) => b.amount - a.amount).slice(0, 15);
@@ -148,6 +163,13 @@ function renderRangeStocks(s, e) {
   });
   renderSectorsFor(secs, true);
   renderSectorBtns(secs, true);
+}
+
+function setRangeSort(mode) {
+  RANGE_SORT = mode;
+  if (VIEW_RANGE) {
+    applyRange();
+  }
 }
 
 function renderRangeRows(rows, title) {
@@ -440,10 +462,10 @@ function renderSectorBtns(secs, isRange) {
 
 function setMode(mode) {
   MODE = mode;
-  document.getElementById("btnAmt").className =
-    "modeBtn" + (mode === "amt" ? " active" : "");
-  document.getElementById("btnDma").className =
-    "modeBtn" + (mode === "dma" ? " active" : "");
+  ["btnAmt", "btnReg", "btnDma"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.className = "modeBtn" + (id === "btn" + mode.charAt(0).toUpperCase() + mode.slice(1) ? " active" : "");
+  });
   if (VIEW_RANGE) {
     renderRangeStocks(VIEW_RANGE[0], VIEW_RANGE[1]);
     return;
@@ -473,33 +495,43 @@ function showSectorStocks(sectorName) {
       .filter(s => s.industry === sectorName && s.amount)
       .sort((a, b) => b.amount - a.amount);
   }
-  if (MODE === "dma") {
-    if (!(D.stocks_dma || []).length) {
+  if (MODE === "dma" || MODE === "reg") {
+    const regMode = MODE === "reg";
+    const list = regMode ? (D.stocks_reg || []) : (D.stocks_dma || []);
+    const field = regMode ? "amv_reg" : "amv_dma";
+    const pctField = regMode ? "amv_reg_pct" : "amv_dma_pct";
+    if (!list.length) {
       document.getElementById("stockTableTitle").textContent =
-        "活跃市值（DMA 口径）数据采集中";
+        regMode ? "活跃市值（公式口径）数据采集中" : "活跃市值（流传DMA版）数据采集中";
       document.getElementById("stockTableNote").innerHTML =
-        "东财历史行情接口今日受限（风控），每日自动补充约 60 只股票、几天内覆盖成交额前 300 名。完成前可先用成交额口径。";
+        "东财历史行情接口每日自动补充约 60 只股票，完成前可先用其他口径。";
       document.getElementById("stockTable").innerHTML = "";
       return;
     }
-    const dmaMap = new Map((D.stocks_dma || []).map(s => [s.code, s]));
+    const amvMap = new Map(list.map(s => [s.code, s]));
     rows = rows
       .map(s => {
-        const d = dmaMap.get(s.code);
-        return d ? { ...s, amv_dma: d.amv_dma, amv_dma_pct: d.amv_dma_pct } : s;
+        const d = amvMap.get(s.code);
+        if (!d) return s;
+        const o = { ...s };
+        o[field] = d[field];
+        o[pctField] = d[pctField];
+        return o;
       })
-      .sort((a, b) => (b.amv_dma || 0) - (a.amv_dma || 0))
+      .sort((a, b) => (b[field] || 0) - (a[field] || 0))
       .slice(0, 50);
   } else {
     rows = rows.slice(0, 50);
   }
   document.getElementById("stockTableTitle").textContent =
     `板块「${sectorName}」成分个股贡献 Top ${rows.length}` +
-    (MODE === "dma" ? "（活跃市值 DMA 口径）" : "");
+    (MODE === "dma" ? "（流传DMA版）" : MODE === "reg" ? "（公式口径）" : "");
   document.getElementById("stockTableNote").innerHTML =
     (MODE === "dma"
-      ? `活跃市值 = DMA(SMA(成交额,10), 换手率/110%)，只覆盖全市场成交额前 300 名（其余个股无 DMA 值）；占比 = 个股活跃市值 / 已覆盖个股活跃市值合计。`
-      : `按成交额排序；占比 = 个股成交额 / 全市场成交额。`);
+      ? `活跃市值 = DMA(SMA(成交额,10), 换手率/110%)，覆盖成交额前 300 名；占比 = 个股活跃市值 / 已覆盖个股活跃市值合计。`
+      : MODE === "reg"
+        ? `活跃市值 = 流通市值 × r̂（4 特征活跃比例，市场级系数个股延伸）；占比 = 个股活跃市值 / 已覆盖个股活跃市值合计。`
+        : `按成交额排序；占比 = 个股成交额 / 全市场成交额。`);
   renderStockRows(rows);
 }
 
@@ -512,17 +544,34 @@ function showMarketStocks() {
     const dmaList = D.stocks_dma || [];
     if (!dmaList.length) {
       document.getElementById("stockTableTitle").textContent =
-        "活跃市值（DMA 口径）数据采集中";
+        "活跃市值（流传DMA版）数据采集中";
       document.getElementById("stockTableNote").innerHTML =
-        "东财历史行情接口今日受限（风控），每日自动补充约 60 只股票、几天内覆盖成交额前 300 名。完成前可先用成交额口径。";
+        "东财历史行情接口每日自动补充约 60 只股票，完成前可先用其他口径。";
       document.getElementById("stockTable").innerHTML = "";
       return;
     }
     document.getElementById("stockTableTitle").textContent =
-      `个股活跃市值贡献 Top ${dmaList.length}（活跃市值 DMA 口径）`;
+      `个股活跃市值贡献 Top ${dmaList.length}（流传DMA版）`;
     document.getElementById("stockTableNote").innerHTML =
-      `活跃市值 = DMA(SMA(成交额,10), 换手率/110%)，覆盖全市场成交额前 300 名（${D.dma_covered || 0} 只有效数据，随每日更新增加）；占比 = 个股活跃市值 / 已覆盖个股活跃市值合计。`;
+      `活跃市值 = DMA(SMA(成交额,10), 换手率/110%)，覆盖全市场成交额前 300 名（${D.dma_covered || 0} 只有效数据）。`;
     renderStockRows(dmaList.slice(0, 50));
+    return;
+  }
+  if (MODE === "reg") {
+    const regList = D.stocks_reg || [];
+    if (!regList.length) {
+      document.getElementById("stockTableTitle").textContent =
+        "活跃市值（公式口径）数据采集中";
+      document.getElementById("stockTableNote").innerHTML =
+        "公式口径 = 流通市值 × (0.015+5.83×SMA换手10 + 0.0021×累计换手250 + 0.005×价格动量250 + 0.037×量能趋势)，市场级系数个股延伸，每日自动补充。";
+      document.getElementById("stockTable").innerHTML = "";
+      return;
+    }
+    document.getElementById("stockTableTitle").textContent =
+      `个股活跃市值贡献 Top ${regList.length}（公式口径）`;
+    document.getElementById("stockTableNote").innerHTML =
+      `活跃市值 = 流通市值 × r̂（r̂ 为 4 特征活跃比例，市场级系数个股延伸，${D.reg_covered || 0} 只有效数据）。`;
+    renderStockRows(regList.slice(0, 50));
     return;
   }
   document.getElementById("stockTableTitle").textContent =
@@ -539,7 +588,10 @@ function renderStocks() {
 function renderStockRows(rows) {
   const fmt = (v, d = 1) =>
     v == null ? "—" : Number(v).toLocaleString("zh-CN", { maximumFractionDigits: d });
-  const isDma = MODE === "dma";
+  const isAmv = MODE === "dma" || MODE === "reg";
+  const regMode = MODE === "reg";
+  const amvField = regMode ? "amv_reg" : "amv_dma";
+  const amvPctField = regMode ? "amv_reg_pct" : "amv_dma_pct";
   const scoreCell = s => {
     if (s.score == null) return "—";
     const sc = Number(s.score);
@@ -548,18 +600,19 @@ function renderStockRows(rows) {
   };
   let html = `<table><thead><tr>
     <th>#</th><th>代码</th><th>名称</th><th>行业</th><th>评分</th>` +
-    (isDma ? `<th>活跃市值(亿)</th><th>占比</th>` : "") +
+    (isAmv ? `<th>活跃市值(亿)</th><th>占比</th>` : "") +
     `<th>成交额(亿)</th><th>流通市值(亿)</th><th>换手率</th><th>涨跌幅</th></tr></thead><tbody>`;
   rows.forEach((s, i) => {
     const pct = s.pct == null ? null : Number(s.pct);
     const pctCls = pct == null ? "" : (pct >= 0 ? "up" : "down");
     const pctTxt = pct == null ? "—" : (pct >= 0 ? "+" : "") + fmt(pct, 2) + "%";
-    const amvTxt = s.amv_dma ? fmt(s.amv_dma / 1e8, 0) : "—";
-    const amvPctTxt = s.amv_dma_pct != null ? fmt(s.amv_dma_pct, 2) + "%" : "—";
+    const amvVal = s[amvField];
+    const amvTxt = amvVal ? fmt(amvVal / 1e8, 0) : "—";
+    const amvPctTxt = s[amvPctField] != null ? fmt(s[amvPctField], 2) + "%" : "—";
     html += `<tr>
       <td>${i + 1}</td><td>${s.code}</td><td>${s.name}</td><td>${s.industry || "—"}</td>` +
       `<td>${scoreCell(s)}</td>` +
-      (isDma ? `<td>${amvTxt}</td><td>${amvPctTxt}</td>` : "") +
+      (isAmv ? `<td>${amvTxt}</td><td>${amvPctTxt}</td>` : "") +
       `<td>${fmt(s.amount / 1e8, 1)}</td>` +
       `<td>${fmt(s.float_mv / 1e8, 0)}</td><td>${fmt(s.turnover, 2)}%</td>` +
       `<td class="${pctCls}">${pctTxt}</td>
