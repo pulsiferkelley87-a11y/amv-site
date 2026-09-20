@@ -82,9 +82,12 @@ function renderRangeStocks(s, e) {
     document.getElementById("stockTable").innerHTML = "";
     return;
   }
-  // 聚合：区间累计成交额 + 区间活跃市值变化 + 平均换手率
+  // 聚合：区间累计活跃SZ（=累计成交额）+ 首末贡献占比变化
   const agg = new Map();
-  const secAgg = new Map();  // name -> {amount, firstAmv, lastAmv, cnt}
+  const secAgg = new Map();
+  const firstDay = days[0], lastDay = days[days.length - 1];
+  const firstStocks = new Map((snaps[firstDay].stocks || []).map(x => [x.code, x]));
+  const lastStocks = new Map((snaps[lastDay].stocks || []).map(x => [x.code, x]));
   days.forEach(d => {
     (snaps[d].stocks || []).forEach(st => {
       let a = agg.get(st.code);
@@ -99,7 +102,6 @@ function renderRangeStocks(s, e) {
         if (a.firstAmv == null) a.firstAmv = st.amv_dma;
         a.lastAmv = st.amv_dma;
       }
-      // 板块级聚合
       const ind = st.industry || "—";
       let sec = secAgg.get(ind);
       if (!sec) {
@@ -109,42 +111,34 @@ function renderRangeStocks(s, e) {
       sec.amount += st.amount || 0;
     });
   });
-  // 板块级活跃市值首末（重新遍历，累加每只成分的 first/last）
-  const secAmv = new Map();
-  days.forEach(d => {
-    (snaps[d].stocks || []).forEach(st => {
-      const ind = st.industry || "—";
-      let s2 = secAmv.get(ind);
-      if (!s2) { s2 = { first: new Map(), last: new Map() }; secAmv.set(ind, s2); }
-      if (st.amv_dma != null) {
-        if (!s2.first.has(st.code)) s2.first.set(st.code, st.amv_dma);
-        s2.last.set(st.code, st.amv_dma);
-      }
-    });
+  const rows = [...agg.values()].map(a => {
+    const f = firstStocks.get(a.code);
+    const l = lastStocks.get(a.code);
+    return {
+      code: a.code, name: a.name, industry: a.industry,
+      amount: a.sumAmount,
+      turnover: a.cnt ? a.turnSum / a.cnt : null,
+      amv_chg: a.firstAmv && a.lastAmv ? (a.lastAmv / a.firstAmv - 1) * 100 : null,
+      pct_chg: (f && l && f.amount_pct != null && l.amount_pct != null)
+        ? l.amount_pct - f.amount_pct : null,
+    };
   });
-  const rows = [...agg.values()].map(a => ({
-    code: a.code, name: a.name, industry: a.industry,
-    amount: a.sumAmount,
-    turnover: a.cnt ? a.turnSum / a.cnt : null,
-    amv_chg: a.firstAmv && a.lastAmv ? (a.lastAmv / a.firstAmv - 1) * 100 : null,
-  }));
   const dragMode = RANGE_SORT === "drag";
   rows.sort(dragMode
-    ? (x, y) => (x.amv_chg == null ? 1 : y.amv_chg == null ? -1 : x.amv_chg - y.amv_chg)
+    ? (x, y) => (x.pct_chg == null ? 1 : y.pct_chg == null ? -1 : x.pct_chg - y.pct_chg)
     : (x, y) => y.amount - x.amount);
   const topRows = rows.slice(0, 50);
 
-  window._rangeAgg = agg;  // 供区间板块按钮复用
-  window._rangeSecAmv = secAmv;
+  window._rangeAgg = agg;
   const title = dragMode
-    ? `${s} ~ ${e} 拖后腿榜 Top ${topRows.length}（活跃市值缩水最狠的个股）`
-    : `${s} ~ ${e} 区间累计成交额 Top ${topRows.length}（快照覆盖成交额前300名）`;
+    ? `${s} ~ ${e} 拖后腿榜 Top ${topRows.length}（活跃SZ贡献占比缩水最狠的个股）`
+    : `${s} ~ ${e} 区间累计活跃SZ Top ${topRows.length}（覆盖成交额前300名）`;
   renderRangeRows(topRows, title);
   document.getElementById("stockTableNote").innerHTML =
     (dragMode
-      ? `按区间活跃市值变化从最差到最好排序（拖后腿的在前）；变化 = 区间内 DMA 活跃市值首末变化。`
-      : `按区间累计成交额排序；活跃市值变化 = 区间内 DMA 活跃市值首末变化。`) +
-    ` <button onclick="setRangeSort('amount')" style="margin-left:6px;cursor:pointer;${dragMode ? '' : 'font-weight:700;'}">成交额榜</button>` +
+      ? `按贡献占比变化从最差到最好排序（活跃SZ占比 = 个股成交额/全市场成交额，首末对比）。`
+      : `按区间累计活跃SZ（=累计成交额）排序；占比变化 = 区间首末贡献占比差。`) +
+    ` <button onclick="setRangeSort('amount')" style="margin-left:6px;cursor:pointer;${dragMode ? '' : 'font-weight:700;'}">贡献榜</button>` +
     ` <button onclick="setRangeSort('drag')" style="cursor:pointer;${dragMode ? 'font-weight:700;' : ''}">拖后腿榜</button>`;
   // 板块区间榜（按钮云 + 柱状图都切到区间）
   const secs = [...secAgg.entries()].map(([name, sec]) => ({ name, amount: sec.amount }))
@@ -152,16 +146,8 @@ function renderRangeStocks(s, e) {
   const totS = secs.reduce((t, x) => t + x.amount, 0) || 1;
   secs.forEach(x => {
     x.amount_pct = +(x.amount / totS * 100).toFixed(2);
-    const s2 = secAmv.get(x.name);
-    if (s2 && s2.first.size) {
-      const f = [...s2.first.values()].reduce((t, v) => t + v, 0);
-      const l = [...s2.last.values()].reduce((t, v) => t + v, 0);
-      x.amv_chg = f ? (l / f - 1) * 100 : null;
-    } else {
-      x.amv_chg = null;
-    }
   });
-  renderSectorsFor(secs, true);
+  renderSectorsFor(secs, false);
   renderSectorBtns(secs, true);
 }
 
@@ -174,15 +160,17 @@ function setRangeSort(mode) {
 
 function renderRangeRows(rows, title) {
   document.getElementById("stockTableTitle").textContent = title;
-  document.getElementById("stockTableNote").innerHTML =
-    `按区间累计成交额排序；活跃市值变化 = 区间内 DMA 活跃市值首末变化。`;
   const fmt = (v, d = 1) => v == null ? "—" : Number(v).toLocaleString("zh-CN", { maximumFractionDigits: d });
+  const dragMode = RANGE_SORT === "drag";
   let html = `<table><thead><tr>
     <th>#</th><th>代码</th><th>名称</th><th>行业</th>
-    <th>累计成交额(亿)</th><th>平均换手率</th><th>活跃市值变化</th></tr></thead><tbody>`;
+    <th>区间累计活跃SZ(亿)</th><th>平均换手率</th>` +
+    (dragMode ? `<th>贡献占比变化(pp)</th>` : `<th>活跃SZ变化</th>`) +
+    `</tr></thead><tbody>`;
   rows.forEach((s, i) => {
-    const chg = s.amv_chg == null ? "—" : (s.amv_chg >= 0 ? "+" : "") + fmt(s.amv_chg, 1) + "%";
-    const cls = s.amv_chg == null ? "" : (s.amv_chg >= 0 ? "up" : "down");
+    const val = dragMode ? s.pct_chg : s.amv_chg;
+    const chg = val == null ? "—" : (val >= 0 ? "+" : "") + fmt(val, 2) + (dragMode ? "pp" : "%");
+    const cls = val == null ? "" : (val >= 0 ? "up" : "down");
     html += `<tr><td>${i + 1}</td><td>${s.code}</td><td>${s.name}</td><td>${s.industry || "—"}</td>` +
       `<td>${fmt(s.amount / 1e8, 1)}</td><td>${fmt(s.turnover, 2)}%</td>` +
       `<td class="${cls}">${chg}</td></tr>`;
@@ -601,7 +589,7 @@ function renderStockRows(rows) {
   let html = `<table><thead><tr>
     <th>#</th><th>代码</th><th>名称</th><th>行业</th><th>评分</th>` +
     (isAmv ? `<th>活跃市值(亿)</th><th>占比</th>` : "") +
-    `<th>成交额(亿)</th><th>流通市值(亿)</th><th>换手率</th><th>涨跌幅</th></tr></thead><tbody>`;
+    `<th>活跃SZ(亿)</th><th>流通市值(亿)</th><th>换手率</th><th>涨跌幅</th></tr></thead><tbody>`;
   rows.forEach((s, i) => {
     const pct = s.pct == null ? null : Number(s.pct);
     const pctCls = pct == null ? "" : (pct >= 0 ? "up" : "down");

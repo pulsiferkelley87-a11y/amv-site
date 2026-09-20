@@ -64,7 +64,7 @@
 <div class="wrap">
   <div class="card full">
     <h2>官方 0AMV 叠加 · 自研活跃市值指标</h2>
-    <div class="note">自研指标为主视图；官方 0AMV 仅作叠加参考（默认隐藏，点图例打开）。amv_reg（回归拟合版）= 流通市值 × (0.015+5.83×SMA换手10 + 0.0021×累计换手250 + 0.005×市值动量250 + 0.037×量能趋势)，测试集 RMSE 7.4%。</div>
+    <div class="note">官方定义：活跃SZ = 流通市值 × 换手率，逐股计算再求和（市场总和 = 全市场成交额）。var1（成交额 10 日平滑）即官方 0AMV 的核心结构（相关性 0.993）。历史流传 DMA 公式已证伪，仅留研究对照。</div>
     <div class="chart" id="chartMain"></div>
   </div>
   <div class="grid">
@@ -85,19 +85,17 @@
   </div>
   <div class="grid">
     <div class="card">
-      <h2>板块活跃市值贡献 Top 15（按成交额占比）</h2>
-      <div class="note">点击下方按钮或柱子 → 个股贡献榜切换为该板块成分。活跃市值当日贡献 ≈ 板块成交额占比。</div>
+      <h2>板块活跃SZ贡献 Top 15（官方定义口径）</h2>
+      <div class="note">活跃SZ = 流通市值 × 换手率（= 成交额），逐股求和。点击按钮或柱子 → 个股贡献榜切换为该板块成分。</div>
       <div class="sectorBtns" id="sectorBtns"></div>
       <div class="chart" id="chartSectors"></div>
     </div>
     <div class="card">
-      <h2 id="stockTableTitle">个股活跃市值贡献 Top 50（全市场）</h2>
-      <div class="note" id="stockTableNote">按当日成交额排序；占比 = 个股成交额 / 全市场成交额。</div>
+      <h2 id="stockTableTitle">个股活跃SZ贡献 Top 50（全市场）</h2>
+      <div class="note" id="stockTableNote">按当日活跃SZ排序；占比 = 个股活跃SZ / 全市场活跃SZ（活跃SZ = 流通市值 × 换手率 = 成交额）。</div>
       <div style="margin-bottom:6px;display:flex;align-items:center;gap:6px;">
         <span style="font-size:12px;color:var(--muted);">口径：</span>
-        <button id="btnAmt" class="modeBtn active" onclick="setMode('amt')">成交额</button>
-        <button id="btnReg" class="modeBtn" onclick="setMode('reg')">活跃市值(公式)</button>
-        <button id="btnDma" class="modeBtn" onclick="setMode('dma')">流传DMA版</button>
+        <button id="btnAmt" class="modeBtn active" onclick="setMode('amt')">活跃SZ贡献</button>
         <span style="flex:1;"></span>
         <button id="backBtn2" onclick="showMarketStocks()" style="display:none;padding:3px 10px;border:1px solid #d1d5db;border-radius:5px;background:#fff;cursor:pointer;">← 返回全市场排名</button>
       </div>
