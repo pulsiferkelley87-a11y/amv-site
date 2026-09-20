@@ -85,8 +85,12 @@
   </div>
   <div class="grid">
     <div class="card">
-      <h2>板块活跃SZ贡献 Top 15（官方定义口径）</h2>
-      <div class="note">活跃SZ = 流通市值 × 换手率（= 成交额），逐股求和。点击按钮或柱子 → 个股贡献榜切换为该板块成分。</div>
+      <h2 id="sectorChartTitle">板块活跃SZ贡献 Top 15</h2>
+      <div class="note">
+        <button id="tabInd" class="modeBtn active" onclick="setSecTab('industry')">行业</button>
+        <button id="tabStyle" class="modeBtn" onclick="setSecTab('style')">风格</button>
+        活跃SZ = 流通市值 × 换手率（= 成交额），逐股求和。点击按钮或柱子 → 个股贡献榜切换为该板块成分。
+      </div>
       <div class="sectorBtns" id="sectorBtns"></div>
       <div class="chart" id="chartSectors"></div>
     </div>

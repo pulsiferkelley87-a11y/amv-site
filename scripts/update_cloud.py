@@ -91,6 +91,33 @@ def fetch_spot():
     return out
 
 
+STYLE_NAMES = [
+    "百元股", "近期新高", "百日新高", "大盘股", "中盘股", "小盘股", "微盘股",
+    "低价股", "破净股", "高股息", "红利", "次新股", "ST股", "举牌", "壳资源",
+    "高市盈率", "低市盈率", "绩优股", "亏损股", "扭亏", "预盈预增", "科技",
+]
+
+
+def fetch_styles():
+    """东财风格板块快照（按名称白名单筛选）。"""
+    fields = "f12,f14,f3,f6,f8,f104,f105"
+    rows = em_paginate("m:90+t:3", fields)
+    out = []
+    for x in rows:
+        try:
+            name = x["f14"]
+        except KeyError:
+            continue
+        if name not in STYLE_NAMES:
+            continue
+        out.append({
+            "code": x["f12"], "name": name, "pct": x.get("f3"),
+            "amount": x.get("f6"), "turnover": x.get("f8"),
+            "up": x.get("f104"), "down": x.get("f105"),
+        })
+    return out
+
+
 def fetch_sectors():
     fields = "f12,f14,f3,f6,f8,f20,f104,f105,f128,f140"
     rows = em_paginate("m:90+t:2+f:!50", fields)
@@ -367,6 +394,7 @@ def main():
     # 2) 快照
     spot = fetch_spot()
     sectors = fetch_sectors()
+    styles = fetch_styles()
     if not spot:
         result["errors"].append("spot fetch failed")
         spot = []
@@ -428,9 +456,38 @@ def main():
             s["score"] = round((a if a else 50) * 0.5 + (b if b else 50) * 0.3 + (c if c else 50) * 0.2, 1)
         result["sectors"] = sorted(sectors, key=lambda x: -(x.get("amount") or 0))
         result["sector_members"] = fetch_sector_members(result["sectors"], top_n=50)
+    if styles:
+        for s in styles:
+            s["amount"] = num(s.get("amount"))
+            s["pct"] = num(s.get("pct"))
+            s["turnover"] = num(s.get("turnover"))
+        tot_s = sum(s["amount"] for s in styles if s.get("amount")) or 1
+        for s in styles:
+            s["amount_pct"] = round((s.get("amount") or 0) / tot_s * 100, 2)
+        result["styles"] = sorted(styles, key=lambda x: -(x.get("amount") or 0))
 
     # 3) 官方序列 + 自研指标
     if official:
+        amv_series = [r["amv"] for r in official]
+
+        def _ma(seq, w):
+            out = [None] * len(seq)
+            s = 0.0
+            for i, v in enumerate(seq):
+                s += v
+                if i >= w:
+                    s -= seq[i - w]
+                if i >= w - 1:
+                    out[i] = round(s / w, 2)
+            return out
+
+        ma10_full = _ma(amv_series, 10)
+        ma80_full = _ma(amv_series, 80)
+        drop_events = []
+        for i in range(1, len(amv_series)):
+            chg = (amv_series[i] / amv_series[i - 1] - 1) * 100
+            if chg <= -2.3:
+                drop_events.append({"date": official[i]["date"], "chg": round(chg, 2)})
         result["official"] = {
             "date": [r["date"] for r in official][-500:],
             "amv": [r["amv"] for r in official][-500:],
@@ -438,7 +495,10 @@ def main():
             "amount": [r["amount"] for r in official][-500:],
             "dmv": [r["znz0"] - r["amv"] for r in official][-500:],
             "ratio": [r["amv"] / r["znz0"] for r in official][-500:],
+            "ma10": ma10_full[-500:],
+            "ma80": ma80_full[-500:],
         }
+        result["drop_events"] = drop_events
         result["official_full"] = {
             "date": [r["date"] for r in official],
             "amv": [r["amv"] for r in official],

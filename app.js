@@ -16,6 +16,7 @@ let MODE = "amt";        // amt = 成交额口径, reg = 公式口径, dma = 流
 let CURRENT_SECTOR = null; // null = 全市场
 let VIEW_RANGE = null;     // null = 最新；否则 [start, end]
 let RANGE_SORT = "amount"; // amount = 区间累计成交额；drag = 拖后腿榜（活跃市值变化升序）
+let SEC_TAB = "industry"; // industry = 行业榜；style = 风格榜
 
 async function load() {
   D = window.DATA;
@@ -118,6 +119,7 @@ function renderRangeStocks(s, e) {
       code: a.code, name: a.name, industry: a.industry,
       amount: a.sumAmount,
       turnover: a.cnt ? a.turnSum / a.cnt : null,
+      days: a.cnt,
       amv_chg: a.firstAmv && a.lastAmv ? (a.lastAmv / a.firstAmv - 1) * 100 : null,
       pct_chg: (f && l && f.amount_pct != null && l.amount_pct != null)
         ? l.amount_pct - f.amount_pct : null,
@@ -163,7 +165,7 @@ function renderRangeRows(rows, title) {
   const fmt = (v, d = 1) => v == null ? "—" : Number(v).toLocaleString("zh-CN", { maximumFractionDigits: d });
   const dragMode = RANGE_SORT === "drag";
   let html = `<table><thead><tr>
-    <th>#</th><th>代码</th><th>名称</th><th>行业</th>
+    <th>#</th><th>代码</th><th>名称</th><th>行业</th><th>在榜天数</th>
     <th>区间累计活跃SZ(亿)</th><th>平均换手率</th>` +
     (dragMode ? `<th>贡献占比变化(pp)</th>` : `<th>活跃SZ变化</th>`) +
     `</tr></thead><tbody>`;
@@ -172,6 +174,7 @@ function renderRangeRows(rows, title) {
     const chg = val == null ? "—" : (val >= 0 ? "+" : "") + fmt(val, 2) + (dragMode ? "pp" : "%");
     const cls = val == null ? "" : (val >= 0 ? "up" : "down");
     html += `<tr><td>${i + 1}</td><td>${s.code}</td><td>${s.name}</td><td>${s.industry || "—"}</td>` +
+      `<td>${s.days ?? "—"}</td>` +
       `<td>${fmt(s.amount / 1e8, 1)}</td><td>${fmt(s.turnover, 2)}%</td>` +
       `<td class="${cls}">${chg}</td></tr>`;
   });
@@ -304,6 +307,8 @@ function renderMain() {
   ];
   opt.series = [
     line(o.amv, "官方 0AMV", COLORS.official, 2.5),
+    line(o.ma10 || [], "MA10", "#e67e22", 1.2),
+    line(o.ma80 || [], "MA80(80天周期)", "#2980b9", 1.2),
     line(s.var1, "var1(成交额平滑)", COLORS.var1, 1),
     line(s.c5, "C5", COLORS.c5, 1),
     line(s.c13, "C13", COLORS.c13, 1),
@@ -317,6 +322,18 @@ function renderMain() {
     { name: "amv_decay(活跃度递推)", type: "line", data: s.amv_decay, showSymbol: false,
       lineStyle: { width: 2.5, color: "#16a085" }, itemStyle: { color: "#16a085" } },
   ];
+  // −2.3% 事件标记（近 500 日窗口内）
+  const dropPts = (D.drop_events || [])
+    .filter(e => o.date[0] <= e.date && e.date <= o.date[o.date.length - 1])
+    .map(e => ({ coord: [e.date, o.amv[o.date.indexOf(e.date)]], value: e.chg + "%" }));
+  if (dropPts.length) {
+    opt.series[0].markPoint = {
+      symbol: "pin", symbolSize: 26,
+      label: { show: true, fontSize: 9, formatter: p => p.data.value },
+      itemStyle: { color: "#c0392b" },
+      data: dropPts,
+    };
+  }
   // 官方 0AMV 默认隐藏（不参与比对，点图例可叠加）
   opt.series[0].lineStyle.opacity = 0.9;
   ch.setOption(opt);
@@ -395,8 +412,40 @@ function onSectorClick(params) {
   else showSectorStocks(params.name);
 }
 
+function setSecTab(tab) {
+  SEC_TAB = tab;
+  document.getElementById("tabInd").className = "modeBtn" + (tab === "industry" ? " active" : "");
+  document.getElementById("tabStyle").className = "modeBtn" + (tab === "style" ? " active" : "");
+  document.getElementById("sectorChartTitle").textContent =
+    tab === "industry" ? "板块活跃SZ贡献 Top 15" : "风格贡献 Top 15（版本陷阱识别）";
+  renderSectors();
+}
+
 function renderSectors() {
-  const secs = (MODE === "reg"
+  let secs;
+  if (SEC_TAB === "style") {
+    secs = (D.styles || []).slice(0, 15);
+    // 风格榜无成分映射，直接渲染按钮与柱状图，点击提示
+    renderSectorBtnsStyle(secs);
+    const ch = echarts.init(document.getElementById("chartSectors"));
+    const data = secs.slice().reverse();
+    ch.setOption({
+      grid: { left: 90, right: 70, top: 10, bottom: 30 },
+      xAxis: { type: "value", axisLabel: { formatter: "{value}%" } },
+      yAxis: { type: "category", data: data.map(s => s.name) },
+      series: [{
+        type: "bar", data: data.map(s => s.amount_pct), barMaxWidth: 16,
+        itemStyle: { color: COLORS.blue, borderRadius: [0, 4, 4, 0] },
+        label: { show: true, position: "right", formatter: p => p.value + "%", fontSize: 11 },
+      }],
+    });
+    ch.off("click");
+    ch.on("click", () => {
+      alert("风格板块暂无成分个股数据，仅展示风格层面的贡献占比。");
+    });
+    return;
+  }
+  secs = (MODE === "reg"
     ? (D.sectors_reg || [])
     : (D.sectors || []).filter(s => s.amount)
   ).slice(0, 15);
@@ -426,6 +475,18 @@ function renderSectors() {
   ch.off("click");
   ch.on("click", onSectorClick);
   window.addEventListener("resize", () => ch.resize());
+}
+
+function renderSectorBtnsStyle(secs) {
+  const btnBox = document.getElementById("sectorBtns");
+  btnBox.innerHTML = "";
+  secs.forEach(s => {
+    const b = document.createElement("button");
+    b.className = "sectorBtn";
+    b.textContent = `${s.name} ${s.amount_pct}%`;
+    b.onclick = () => alert("风格板块暂无成分个股数据，仅展示风格层面的贡献占比。");
+    btnBox.appendChild(b);
+  });
 }
 
 function renderSectorBtns(secs, isRange) {
