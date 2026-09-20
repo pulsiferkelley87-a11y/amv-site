@@ -297,7 +297,8 @@ function baseOption() {
 
 function renderMain() {
   const o = D.official, s = D.self;
-  const ch = echarts.init(document.getElementById("chartMain"));
+  const dom = document.getElementById("chartMain");
+  const ch = echarts.getInstanceByDom(dom) || echarts.init(dom);
   const opt = baseOption();
   opt.legend = { top: 0, data: ["官方 0AMV", "var1(成交额平滑)", "amv_decay(活跃度递推)", "C5", "C13", "C34", "∞", "amv_hat(近似版)", "amv_reg(回归拟合版)"] };
   opt.xAxis = { type: "category", data: o.date };
@@ -352,7 +353,8 @@ function renderMain() {
 
 function renderTrio() {
   const o = D.official;
-  const ch = echarts.init(document.getElementById("chartTrio"));
+  const dom = document.getElementById("chartTrio");
+  const ch = echarts.getInstanceByDom(dom) || echarts.init(dom);
   const opt = baseOption();
   opt.legend = { top: 0, data: ["0号指数(流通市值)", "0AMV(活跃)", "0DMV(死筹)"] };
   opt.xAxis = { type: "category", data: o.date };
@@ -378,7 +380,8 @@ function renderTrio() {
 
 function renderRatio() {
   const o = D.official;
-  const ch = echarts.init(document.getElementById("chartRatio"));
+  const dom = document.getElementById("chartRatio");
+  const ch = echarts.getInstanceByDom(dom) || echarts.init(dom);
   const opt = baseOption();
   opt.xAxis = { type: "category", data: o.date };
   opt.yAxis = { type: "value", scale: true,
