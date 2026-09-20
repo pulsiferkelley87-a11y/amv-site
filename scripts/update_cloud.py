@@ -144,6 +144,7 @@ def fetch_kline_em(code, lmt=250):
                     continue
                 out.append({
                     "date": p[0],
+                    "close": float(p[2]) if p[2] not in ("", "-") else 0.0,
                     "amount": float(p[6]) if p[6] not in ("", "-") else 0.0,
                     "volume": float(p[5]) if p[5] not in ("", "-") else 0.0,
                     "turnover": float(p[10]) if p[10] not in ("", "-") else None,
@@ -173,7 +174,7 @@ def fetch_kline_tx(code, lmt=250):
             except (ValueError, IndexError):
                 continue
             avg = (o + h + l + c) / 4
-            out.append({"date": row[0], "amount": v * 100 * avg,
+            out.append({"date": row[0], "close": c, "amount": v * 100 * avg,
                         "volume": v * 100, "turnover": None})
         return out if out else None
     except Exception:
@@ -237,6 +238,54 @@ def compute_stock_amv(rows):
         alpha = min(t / 110.0, 1.0) if t and t > 0 else 0.0
         y.append(alpha * x[i] + (1 - alpha) * y[-1])
     return y[-1], [k["date"] for k in rows], y
+
+
+def compute_stock_amv_reg(rows, float_mv):
+    """公式口径活跃市值（amv_reg 市场级系数个股延伸）。"""
+    n = len(rows)
+    amt = [k["amount"] for k in rows]
+    closes = []
+    for k in rows:
+        c = k.get("close") or 0.0
+        if c <= 0 and k.get("volume"):
+            c = k["amount"] / k["volume"] if k["volume"] > 0 else 0.0
+        closes.append(c)
+    turns = [k["turnover"] for k in rows]
+    if n < 60 or sum(amt[-20:]) <= 0 or not float_mv or closes[-1] <= 0:
+        return None, None, None
+    mv_now = float_mv
+    turn_eff = []
+    for i in range(n):
+        t = turns[i]
+        if t is None:
+            mv_t = mv_now * (closes[i] / closes[-1]) if closes[-1] else mv_now
+            t = (amt[i] / mv_t * 100) if mv_t else 0.0
+        turn_eff.append(t / 100.0)
+    st10 = sma(turn_eff, 10)
+    st60 = sma(turn_eff, 60)
+    st250 = sma(turn_eff, 250)
+    cum = [None] * n
+    s = 0.0
+    for i in range(n):
+        s += turn_eff[i]
+        if i >= 250:
+            s -= turn_eff[i - 250]
+        if i >= 249:
+            cum[i] = s
+    series = []
+    for i in range(n):
+        if cum[i] is None or closes[i - 250] <= 0:
+            series.append(None)
+            continue
+        ret250 = closes[i] / closes[i - 250] - 1
+        vt = st60[i] / st250[i] if st250[i] > 0 else 0.0
+        r_hat = 0.01537 + 5.830 * st10[i] + 0.00214 * cum[i] + 0.00496 * ret250 + 0.0372 * vt
+        mv_t = mv_now * (closes[i] / closes[-1])
+        series.append(max(mv_t * r_hat, 0.0))
+    final = series[-1] if series and series[-1] is not None else None
+    if final is None:
+        return None, None, None
+    return final, [k["date"] for k in rows], series
 
 
 def pct_rank(values):
@@ -411,8 +460,8 @@ def main():
         ind = compute_self(official)
         result["self"] = {k: v[-500:] for k, v in ind.items()}
 
-    # 4) DMA（云端不限量，全量 300，缓存持久化到 repo）
-    dma_rows, dma_total, day_map = [], 0.0, {}
+    # 4) DMA + 公式口径（云端不限量，全量 300，缓存持久化到 repo）
+    dma_rows, reg_rows, dma_total, day_map = [], [], 0.0, {}
     if spot:
         top300 = sorted(spot, key=lambda x: -(x.get("amount") or 0))[:300]
         for idx, s in enumerate(top300):
@@ -426,48 +475,73 @@ def main():
                 time.sleep(0.3)
             if kl:
                 amv, kdates, kseries = compute_stock_amv(kl)
+                amv_r, kdates_r, kseries_r = compute_stock_amv_reg(kl, s.get("float_mv"))
                 if amv:
-                    dma_rows.append({
+                    row = {
                         "code": s["code"], "name": s["name"], "industry": s.get("industry"),
                         "amount": s.get("amount"), "float_mv": s.get("float_mv"),
                         "turnover": s.get("turnover"), "pct": s.get("pct"),
                         "amount_pct": s.get("amount_pct"), "amv_dma": amv,
-                    })
+                    }
+                    if amv_r:
+                        row["amv_reg"] = amv_r
+                    dma_rows.append(row)
                     dma_total += amv
                     for i in range(max(0, len(kl) - 250), len(kl)):
                         d = kl[i]["date"]
-                        day = day_map.setdefault(d, {"stocks": [], "sector_amt": {}})
-                        day["stocks"].append({
+                        day = day_map.setdefault(d, {"stocks": [], "sector_amt": {}, "sector_reg": {}})
+                        rec = {
                             "code": s["code"], "name": s["name"], "industry": s.get("industry"),
                             "amount": kl[i]["amount"], "turnover": kl[i]["turnover"],
                             "amv_dma": kseries[i] if i < len(kseries) else None,
-                        })
+                        }
+                        if kseries_r and i < len(kseries_r) and kseries_r[i] is not None:
+                            rec["amv_reg"] = kseries_r[i]
+                        day["stocks"].append(rec)
                         ind = s.get("industry") or "—"
                         day["sector_amt"][ind] = day["sector_amt"].get(ind, 0.0) + (kl[i]["amount"] or 0.0)
+                        if rec.get("amv_reg"):
+                            day["sector_reg"][ind] = day["sector_reg"].get(ind, 0.0) + rec["amv_reg"]
             if idx % 50 == 49:
                 print(f"  dma progress {idx+1}/300 done={len(dma_rows)}", flush=True)
         dma_total = dma_total or 1
         for r in dma_rows:
             r["amv_dma_pct"] = round(r["amv_dma"] / dma_total * 100, 2)
         dma_rows.sort(key=lambda x: -x["amv_dma"])
+        reg_rows = [r for r in dma_rows if r.get("amv_reg")]
+        reg_total = sum(r["amv_reg"] for r in reg_rows) or 1
+        for r in reg_rows:
+            r["amv_reg_pct"] = round(r["amv_reg"] / reg_total * 100, 2)
+        reg_rows.sort(key=lambda x: -x["amv_reg"])
         result["stocks_dma"] = dma_rows
+        result["stocks_reg"] = reg_rows
         result["dma_covered"] = len(dma_rows)
+        result["reg_covered"] = len(reg_rows)
         result["dma_updated_at"] = result["updated_at"]
         history_snaps = {}
         for d, day in day_map.items():
             stocks_d = sorted(day["stocks"], key=lambda x: -(x["amount"] or 0))[:50]
             tot_amt = sum(x["amount"] or 0 for x in day["stocks"]) or 1
             dma_tot = sum(x["amv_dma"] or 0 for x in day["stocks"]) or 1
+            reg_tot = sum(x.get("amv_reg") or 0 for x in day["stocks"]) or 1
             for x in stocks_d:
                 x["amount_pct"] = round((x["amount"] or 0) / tot_amt * 100, 2)
                 if x["amv_dma"]:
                     x["amv_dma_pct"] = round(x["amv_dma"] / dma_tot * 100, 2)
+                if x.get("amv_reg"):
+                    x["amv_reg_pct"] = round(x["amv_reg"] / reg_tot * 100, 2)
             secs = sorted(day["sector_amt"].items(), key=lambda kv: -kv[1])[:20]
             sec_tot = sum(v for _, v in secs) or 1
+            secs_reg = sorted(day["sector_reg"].items(), key=lambda kv: -kv[1])[:20]
+            sec_reg_tot = sum(v for _, v in secs_reg) or 1
             history_snaps[d] = {
                 "stocks": stocks_d,
-                "sectors": [{"name": k, "amount": v, "amount_pct": round(v / sec_tot * 100, 2)}
-                            for k, v in secs],
+                "sectors": [
+                    {"name": k, "amount": v, "amount_pct": round(v / sec_tot * 100, 2),
+                     "amv_reg": day["sector_reg"].get(k),
+                     "amv_reg_pct": round((day["sector_reg"].get(k) or 0) / sec_reg_tot * 100, 2)}
+                    for k, v in secs
+                ],
             }
         result["history_snaps"] = history_snaps
 
