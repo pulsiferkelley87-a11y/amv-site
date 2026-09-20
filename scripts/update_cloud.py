@@ -489,14 +489,14 @@ def main():
             if chg <= -2.3:
                 drop_events.append({"date": official[i]["date"], "chg": round(chg, 2)})
         result["official"] = {
-            "date": [r["date"] for r in official][-500:],
-            "amv": [r["amv"] for r in official][-500:],
-            "znz0": [r["znz0"] for r in official][-500:],
-            "amount": [r["amount"] for r in official][-500:],
-            "dmv": [r["znz0"] - r["amv"] for r in official][-500:],
-            "ratio": [r["amv"] / r["znz0"] for r in official][-500:],
-            "ma10": ma10_full[-500:],
-            "ma80": ma80_full[-500:],
+            "date": [r["date"] for r in official],
+            "amv": [r["amv"] for r in official],
+            "znz0": [r["znz0"] for r in official],
+            "amount": [r["amount"] for r in official],
+            "dmv": [r["znz0"] - r["amv"] for r in official],
+            "ratio": [r["amv"] / r["znz0"] for r in official],
+            "ma10": ma10_full,
+            "ma80": ma80_full,
         }
         result["drop_events"] = drop_events
         result["official_full"] = {
@@ -513,7 +513,7 @@ def main():
             "ratio": [r["amv"] / r["znz0"] for r in w],
         }
         ind = compute_self(official)
-        result["self"] = {k: v[-500:] for k, v in ind.items()}
+        result["self"] = ind
 
     # 4) DMA + 公式口径（云端不限量，全量 300，缓存持久化到 repo）
     dma_rows, reg_rows, dma_total, day_map = [], [], 0.0, {}

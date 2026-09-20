@@ -306,6 +306,12 @@ function renderMain() {
     { type: "inside", xAxisIndex: 0 },
     { type: "slider", xAxisIndex: 0, bottom: 5, height: 16 },
   ];
+  {
+    const total = o.date.length;
+    const st = Math.max(0, (1 - 500 / total) * 100);
+    opt.dataZoom[0].start = st; opt.dataZoom[0].end = 100;
+    opt.dataZoom[1].start = st; opt.dataZoom[1].end = 100;
+  }
   opt.series = [
     line(o.amv, "官方 0AMV", COLORS.official, 2.5),
     line(o.ma10 || [], "MA10", "#e67e22", 1.2),
@@ -355,6 +361,12 @@ function renderTrio() {
     { type: "inside", xAxisIndex: 0 },
     { type: "slider", xAxisIndex: 0, bottom: 5, height: 16 },
   ];
+  {
+    const total = o.date.length;
+    const st = Math.max(0, (1 - 500 / total) * 100);
+    opt.dataZoom[0].start = st; opt.dataZoom[0].end = 100;
+    opt.dataZoom[1].start = st; opt.dataZoom[1].end = 100;
+  }
   opt.series = [
     line(o.znz0, "0号指数(流通市值)", COLORS.znz0, 2),
     line(o.amv, "0AMV(活跃)", COLORS.official, 2.5),
@@ -375,6 +387,12 @@ function renderRatio() {
     { type: "inside", xAxisIndex: 0 },
     { type: "slider", xAxisIndex: 0, bottom: 5, height: 16 },
   ];
+  {
+    const total = o.date.length;
+    const st = Math.max(0, (1 - 500 / total) * 100);
+    opt.dataZoom[0].start = st; opt.dataZoom[0].end = 100;
+    opt.dataZoom[1].start = st; opt.dataZoom[1].end = 100;
+  }
   opt.series = [{
     name: "活跃比例", type: "line", data: o.ratio, showSymbol: false,
     lineStyle: { width: 2, color: COLORS.amber },
