@@ -40,6 +40,7 @@ jobs:
             echo "no changes"
           else
             git commit -m "auto update $(date -u +%F)"
+            git pull --rebase --no-edit origin main
             git push
           fi
 
