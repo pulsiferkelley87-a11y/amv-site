@@ -147,7 +147,7 @@ def fetch_sector_members(sectors, top_n=50):
     return mapping
 
 
-def fetch_kline_em(code, lmt=250):
+def fetch_kline_em(code, lmt=500):
     if code.startswith("6"):
         secid = "1." + code
     elif code.startswith(("0", "3", "4", "8", "9")):
@@ -183,7 +183,7 @@ def fetch_kline_em(code, lmt=250):
     return None
 
 
-def fetch_kline_tx(code, lmt=250):
+def fetch_kline_tx(code, lmt=500):
     prefix = "sh" if code.startswith("6") else ("sz" if code.startswith(("0", "3")) else None)
     if not prefix:
         return None
@@ -515,11 +515,18 @@ def main():
         ind = compute_self(official)
         result["self"] = ind
 
-    # 4) DMA + 公式口径（云端不限量，全量 300，缓存持久化到 repo）
+    # 4) DMA + 公式口径（全市场轮拉：每天 300 只未缓存股票，约 19 天覆盖 5917 只）
     dma_rows, reg_rows, dma_total, day_map = [], [], 0.0, {}
     if spot:
+        # 优先拉没缓存的股票（按成交额排序，缓存已有则跳过拉取）
         top300 = sorted(spot, key=lambda x: -(x.get("amount") or 0))[:300]
-        for idx, s in enumerate(top300):
+        uncached = [s for s in spot if not load_cache(s["code"])]
+        uncached.sort(key=lambda x: -(x.get("amount") or 0))
+        fetch_list = (uncached[:300] + [s for s in top300 if load_cache(s["code"])])[:600]
+        # 去重保持顺序
+        seen = set()
+        fetch_list = [s for s in fetch_list if not (s["code"] in seen or seen.add(s["code"]))]
+        for idx, s in enumerate(fetch_list):
             kl = load_cache(s["code"])
             if kl:
                 kl = kl.get("rows")
