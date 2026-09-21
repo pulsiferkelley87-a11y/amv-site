@@ -36,8 +36,13 @@ jobs:
             echo "no changes"
           else
             git commit -m "auto update $(date -u +%F)"
-            git pull --rebase --no-edit origin main
-            git push
+            for i in 1 2 3 4 5; do
+              if git pull --rebase -X ours --no-edit origin main && git push; then
+                echo "pushed"
+                break
+              fi
+              sleep 5
+            done
           fi
 
       - name: Setup Pages
