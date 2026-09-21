@@ -214,8 +214,9 @@ def fetch_kline(code, spot_amount=None, float_mv=None):
         return kl, "em"
     kl = fetch_kline_tx(code)
     if kl and spot_amount:
+        # 量纲校验放宽（腾讯数据股本变化时量纲漂移，0.1~10 倍均可接受）
         ratio = (kl[-1]["amount"] or 0) / (spot_amount or 1)
-        if not (0.2 <= ratio <= 3.0):
+        if not (0.1 <= ratio <= 10.0):
             return None, "tx_rejected"
         if float_mv:
             for k in kl:
