@@ -523,7 +523,7 @@ def main():
         top300 = sorted(spot, key=lambda x: -(x.get("amount") or 0))[:300]
         uncached = [s for s in spot if not load_cache(s["code"])]
         uncached.sort(key=lambda x: -(x.get("amount") or 0))
-        fetch_list = (uncached[:300] + [s for s in top300 if load_cache(s["code"])])[:600]
+        fetch_list = (uncached[:1500] + [s for s in top300 if load_cache(s["code"])])[:1800]
         # 去重保持顺序
         seen = set()
         fetch_list = [s for s in fetch_list if not (s["code"] in seen or seen.add(s["code"]))]
@@ -535,7 +535,7 @@ def main():
                 kl, _ = fetch_kline(s["code"], spot_amount=s.get("amount"), float_mv=s.get("float_mv"))
                 if kl:
                     save_cache(s["code"], kl)
-                time.sleep(0.3)
+                time.sleep(0.1)
             if kl:
                 amv, kdates, kseries = compute_stock_amv(kl)
                 amv_r, kdates_r, kseries_r = compute_stock_amv_reg(kl, s.get("float_mv"))
