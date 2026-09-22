@@ -56,12 +56,18 @@ def em_get(params, retries=3):
 
 def em_paginate(fs, fields, fid="f6"):
     rows, pn = [], 1
+    empty_streak = 0
     while pn <= 100:
         params = {"pn": pn, "pz": 100, "po": 1, "np": 1, "fltt": 2,
                   "invt": 2, "fid": fid, "fs": fs, "fields": fields}
         data = em_get(params)
         if not data or not data.get("diff"):
-            break
+            empty_streak += 1
+            if empty_streak >= 3:
+                break
+            time.sleep(3)
+            continue
+        empty_streak = 0
         diff = data["diff"]
         if isinstance(diff, dict):
             diff = [diff]
@@ -69,7 +75,7 @@ def em_paginate(fs, fields, fid="f6"):
         if len(rows) >= data.get("total", 0) or len(diff) < 100:
             break
         pn += 1
-        time.sleep(0.3)
+        time.sleep(0.5)
     return rows
 
 
