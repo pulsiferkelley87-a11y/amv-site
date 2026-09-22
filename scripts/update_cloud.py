@@ -291,7 +291,7 @@ def compute_stock_amv(rows):
     x = sma(amt, 10)
     y = [x[0]]
     for i in range(1, len(x)):
-        t = rows[i]["turnover"]
+        t = rows[i].get("turnover")
         alpha = min(t / 110.0, 1.0) if t and t > 0 else 0.0
         y.append(alpha * x[i] + (1 - alpha) * y[-1])
     return y[-1], [k["date"] for k in rows], y
@@ -413,7 +413,7 @@ def compute_stock_amv_reg(rows, float_mv):
         if c <= 0 and k.get("volume"):
             c = k["amount"] / k["volume"] if k["volume"] > 0 else 0.0
         closes.append(c)
-    turns = [k["turnover"] for k in rows]
+    turns = [k.get("turnover") for k in rows]
     if n < 60 or sum(amt[-20:]) <= 0 or not float_mv or closes[-1] <= 0:
         return None, None, None
     mv_now = float_mv
@@ -656,7 +656,7 @@ def main():
                         day = day_map.setdefault(d, {"stocks": [], "sector_amv": {}})
                         rec = {
                             "code": s["code"], "name": s["name"], "industry": s.get("industry"),
-                            "amount": kl[i]["amount"], "turnover": kl[i]["turnover"],
+                            "amount": kl[i].get("amount"), "turnover": kl[i].get("turnover"),
                             "amv": kseries_r[i] if i < len(kseries_r) and kseries_r[i] is not None else None,
                         }
                         day["stocks"].append(rec)
