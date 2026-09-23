@@ -250,15 +250,16 @@ def _load_chunk_map():
     global _chunk_index
     if _chunk_index is None:
         _chunk_index = {}
-        ch_dir = os.path.join(DATA_DIR, "kline_chunks")
-        if os.path.isdir(ch_dir):
-            for fn in os.listdir(ch_dir):
-                if fn.startswith("part_") and fn.endswith(".json"):
-                    try:
-                        with open(os.path.join(ch_dir, fn), encoding="utf-8") as f:
-                            _chunk_index[fn] = json.load(f)
-                    except (OSError, ValueError):
-                        pass
+        for ch_dir_name in ("kline_chunks_v2", "kline_chunks"):
+            ch_dir = os.path.join(DATA_DIR, ch_dir_name)
+            if os.path.isdir(ch_dir):
+                for fn in os.listdir(ch_dir):
+                    if fn.startswith("part_") and fn.endswith(".json"):
+                        try:
+                            with open(os.path.join(ch_dir, fn), encoding="utf-8") as f:
+                                _chunk_index[ch_dir_name + "/" + fn] = json.load(f)
+                        except (OSError, ValueError):
+                            pass
     return _chunk_index
 
 
@@ -736,16 +737,15 @@ def main():
     # 4) 逐股递推口径（实测版，相关 0.9983）：每日增量拉取 + 全市场汇总
     amv_rows, amv_total, day_map = [], 0.0, {}
     if spot:
-        # 数据已全量在仓库 chunks 里，云端每日只需少量增量拉取（限时保护）
+        # 数据已全量在仓库 chunks 里，云端每日只拉新上市股票（不重拉已有，避免旧数据覆盖新数据包）
         t_fetch_start = time.time()
-        top100 = sorted(spot, key=lambda x: -(x.get("amount") or 0))[:100]
         uncached = [s for s in spot if not load_cache(s["code"])]
         uncached.sort(key=lambda x: -(x.get("amount") or 0))
-        fetch_list = (uncached[:100] + [s for s in top100 if load_cache(s["code"])])[:200]
+        fetch_list = uncached[:100]
         seen = set()
         fetch_list = [s for s in fetch_list if not (s["code"] in seen or seen.add(s["code"]))]
         for idx, s in enumerate(fetch_list):
-            if time.time() - t_fetch_start > 2400:
+            if time.time() - t_fetch_start > 1200:
                 print("  fetch time budget reached, break", flush=True)
                 break
             kl = load_cache(s["code"])
