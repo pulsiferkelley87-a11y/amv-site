@@ -376,16 +376,17 @@ def compute_market_amv(official_dates):
                 sum_lamv[d] = sum_lamv.get(d, 0.0) + mv_t * A
 
     seen = set()
-    for fn in os.listdir(KLINE_DIR):
-        if not fn.endswith(".json"):
-            continue
-        code = fn[:-5]
-        seen.add(code)
-        try:
-            with open(os.path.join(KLINE_DIR, fn), encoding="utf-8") as f:
-                process(code, json.load(f))
-        except (OSError, ValueError):
-            continue
+    if os.path.isdir(KLINE_DIR):
+        for fn in os.listdir(KLINE_DIR):
+            if not fn.endswith(".json"):
+                continue
+            code = fn[:-5]
+            seen.add(code)
+            try:
+                with open(os.path.join(KLINE_DIR, fn), encoding="utf-8") as f:
+                    process(code, json.load(f))
+            except (OSError, ValueError):
+                continue
     for ch in _load_chunk_map().values():
         for code, cache in ch.items():
             if code in seen:
