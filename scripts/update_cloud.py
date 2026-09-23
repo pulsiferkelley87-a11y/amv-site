@@ -92,7 +92,49 @@ def fetch_spot():
             })
         except KeyError:
             continue
-    return out
+    if len(out) >= 500:
+        return out
+    # 东财风控兜底：用新浪股票列表构造快照（成交额/流通市值/换手率齐全）
+    ind_map = {}
+    for p in (os.path.join(DATA_DIR, "industry_map.json"),
+              os.path.join(BASE, "industry_map.json")):
+        if os.path.exists(p):
+            try:
+                with open(p, encoding="utf-8") as f:
+                    ind_map = json.load(f)
+            except (OSError, ValueError):
+                ind_map = {}
+            break
+    fallback = []
+    for lst_path in (os.path.join(DATA_DIR, "stock_list.json"),
+                     os.path.join(BASE, "stock_list.json")):
+        if not os.path.exists(lst_path):
+            continue
+        try:
+            with open(lst_path, encoding="utf-8") as f:
+                lst = json.load(f)
+        except (OSError, ValueError):
+            continue
+        for x in lst:
+            c = x.get("code") or ""
+            if c.startswith(("sh", "sz", "bj")):
+                c = c[2:]
+            if not c or not x.get("name"):
+                continue
+            try:
+                ltsz = float(x.get("ltsz") or 0)
+                amt = float(x.get("amount") or 0)
+                turn = float(x.get("turnover") or 0)
+            except (TypeError, ValueError):
+                ltsz = amt = turn = 0.0
+            fallback.append({
+                "code": c, "name": x["name"], "price": None, "pct": None,
+                "volume": None, "amount": amt, "turnover": turn,
+                "total_mv": None, "float_mv": ltsz * 1e8,
+                "industry": ind_map.get(c, "—"),
+            })
+        break
+    return fallback
 
 
 STYLE_NAMES = [
