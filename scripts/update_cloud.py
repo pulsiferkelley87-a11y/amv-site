@@ -734,28 +734,30 @@ def main():
         ind = compute_self(official)
         result["self"] = ind
 
-    # 4) 逐股递推口径（实测版，相关 0.9983）：每日增量拉取 + 全市场汇总
+    # 4) 逐股递推口径（实测版，相关 0.9983）：只拉新股，全部 spot 股票参与排名
     amv_rows, amv_total, day_map = [], 0.0, {}
     if spot:
-        # 数据已全量在仓库 chunks 里，云端每日只拉新上市股票（不重拉已有，避免旧数据覆盖新数据包）
+        # 阶段 1：只拉未缓存的新股（限时保护，不重拉已有避免旧数据覆盖）
         t_fetch_start = time.time()
         uncached = [s for s in spot if not load_cache(s["code"])]
         uncached.sort(key=lambda x: -(x.get("amount") or 0))
-        fetch_list = uncached[:100]
         seen = set()
-        fetch_list = [s for s in fetch_list if not (s["code"] in seen or seen.add(s["code"]))]
+        fetch_list = [s for s in uncached[:100] if not (s["code"] in seen or seen.add(s["code"]))]
         for idx, s in enumerate(fetch_list):
             if time.time() - t_fetch_start > 1200:
                 print("  fetch time budget reached, break", flush=True)
                 break
+            if load_cache(s["code"]):
+                continue
+            kl, _ = fetch_kline(s["code"], spot_amount=s.get("amount"), float_mv=s.get("float_mv"))
+            if kl:
+                save_cache(s["code"], kl)
+            time.sleep(0.1)
+        # 阶段 2：全部 spot 股票用缓存计算递推贡献（chunks 已含全市场）
+        for s in spot:
             kl = load_cache(s["code"])
             if kl:
                 kl = kl.get("rows")
-            else:
-                kl, _ = fetch_kline(s["code"], spot_amount=s.get("amount"), float_mv=s.get("float_mv"))
-                if kl:
-                    save_cache(s["code"], kl)
-                time.sleep(0.1)
             if kl:
                 amv_r, kdates_r, kseries_r = compute_stock_amv_reg(kl, s.get("float_mv"))
                 if amv_r:
@@ -779,8 +781,7 @@ def main():
                         ind = s.get("industry") or "—"
                         if rec.get("amv"):
                             day["sector_amv"][ind] = day["sector_amv"].get(ind, 0.0) + rec["amv"]
-            if idx % 50 == 49:
-                print(f"  amv progress {idx+1} done={len(amv_rows)}", flush=True)
+        print(f"  amv compute done={len(amv_rows)}", flush=True)
         amv_total = amv_total or 1
         for r in amv_rows:
             r["amv_pct"] = round(r["amv"] / amv_total * 100, 2)
