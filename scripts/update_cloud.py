@@ -28,8 +28,6 @@ EM_HOSTS = [
 ]
 KLINE_HOSTS = [
     "https://push2his.eastmoney.com/api/qt/stock/kline/get",
-    "https://push2delay.eastmoney.com/api/qt/stock/kline/get",
-    "https://92.push2his.eastmoney.com/api/qt/stock/kline/get",
 ]
 
 session = requests.Session()
@@ -625,13 +623,18 @@ def main():
     # 4) 逐股递推口径（实测版，相关 0.9983）：每日增量拉取 + 全市场汇总
     amv_rows, amv_total, day_map = [], 0.0, {}
     if spot:
-        top300 = sorted(spot, key=lambda x: -(x.get("amount") or 0))[:300]
+        # 数据已全量在仓库 chunks 里，云端每日只需少量增量拉取（限时保护）
+        t_fetch_start = time.time()
+        top100 = sorted(spot, key=lambda x: -(x.get("amount") or 0))[:100]
         uncached = [s for s in spot if not load_cache(s["code"])]
         uncached.sort(key=lambda x: -(x.get("amount") or 0))
-        fetch_list = (uncached[:1500] + [s for s in top300 if load_cache(s["code"])])[:1800]
+        fetch_list = (uncached[:100] + [s for s in top100 if load_cache(s["code"])])[:200]
         seen = set()
         fetch_list = [s for s in fetch_list if not (s["code"] in seen or seen.add(s["code"]))]
         for idx, s in enumerate(fetch_list):
+            if time.time() - t_fetch_start > 2400:
+                print("  fetch time budget reached, break", flush=True)
+                break
             kl = load_cache(s["code"])
             if kl:
                 kl = kl.get("rows")
