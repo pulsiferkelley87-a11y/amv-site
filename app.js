@@ -473,10 +473,12 @@ function renderSectors() {
     });
     return;
   }
-  secs = (MODE === "reg"
-    ? (D.sectors_amv || [])
-    : (D.sectors || []).filter(s => s.amount)
-  ).slice(0, 15);
+  const secsAmt = (D.sectors || []).filter(s => s.amount);
+  if (MODE === "reg" || !secsAmt.length) {
+    secs = (D.sectors_amv || []).slice(0, 15);
+  } else {
+    secs = secsAmt.slice(0, 15);
+  }
   renderSectorBtns(secs, false);
   // 柱状图
   const secsRev = secs.slice().reverse();
@@ -485,7 +487,7 @@ function renderSectors() {
   opt.grid = { left: 90, right: 70, top: 10, bottom: 30 };
   opt.xAxis = { type: "value", axisLabel: { formatter: "{value}%" } };
   opt.yAxis = { type: "category", data: secsRev.map(s => s.name) };
-  const valField = MODE === "reg" ? "amv_pct" : "amount_pct";
+  const valField = (MODE === "reg" || !(D.sectors || []).filter(s => s.amount).length) ? "amv_pct" : "amount_pct";
   opt.series = [{
     type: "bar", data: secsRev.map(s => s[valField]), barMaxWidth: 16,
     itemStyle: { color: COLORS.blue, borderRadius: [0, 4, 4, 0] },
@@ -520,7 +522,8 @@ function renderSectorBtnsStyle(secs) {
 function renderSectorBtns(secs, isRange) {
   const btnBox = document.getElementById("sectorBtns");
   btnBox.innerHTML = "";
-  const pctField = (!isRange && MODE === "reg") ? "amv_pct" : "amount_pct";
+  const useAmvPct = (MODE === "reg" || !(D.sectors || []).filter(s => s.amount).length);
+  const pctField = (!isRange && useAmvPct) ? "amv_pct" : "amount_pct";
   secs.forEach(s => {
     const b = document.createElement("button");
     b.className = "sectorBtn";
