@@ -86,8 +86,11 @@
     <div class="chart tall" id="chartWeekly"></div>
   </div>
   <div class="card full">
-    <h2>今日选股 · 活跃度拐头（方向A）</h2>
+    <h2>今日选股 · 活跃度拐头（方向A）
+      <button id="btnRefresh" onclick="refreshAll()" style="float:right;padding:3px 12px;border:1px solid #d1d5db;border-radius:5px;background:#fff;cursor:pointer;font-size:12px;">刷新数据</button>
+    </h2>
     <div class="note" id="pickNote">活跃度 A 上穿自身 10 日均线（昨日在均线下、今日站上），捕捉资金重新激活。按活跃SZ从大到小排列。</div>
+    <div id="refreshMsg" style="font-size:12px;color:var(--muted);margin:4px 0 8px;"></div>
     <div class="scroll" id="pickTable"></div>
   </div>
   <div class="grid">
