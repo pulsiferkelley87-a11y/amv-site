@@ -648,6 +648,41 @@ function showMarketStocks() {
 
 function renderStocks() {
   showMarketStocks();
+  renderPicks();
+}
+
+function renderPicks() {
+  const picks = D.picks || [];
+  const el = document.getElementById("pickTable");
+  if (!el) return;
+  if (!picks.length) {
+    el.innerHTML = "<p style='color:var(--muted);'>今日暂无拐头信号（活跃度均线以下运行或数据未更新）。</p>";
+    return;
+  }
+  const fmt = (v, d = 1) =>
+    v == null ? "—" : Number(v).toLocaleString("zh-CN", { maximumFractionDigits: d });
+  const top = picks.slice(0, 60);
+  const lastDate = top[0].date || "";
+  document.getElementById("pickNote").innerHTML =
+    `选股日 <b>${lastDate}</b>：活跃度 A 上穿自身 10 日均线（昨日在均线下、今日站上），捕捉资金重新激活。共 <b>${picks.length}</b> 只，按活跃SZ从大到小排列（展示前 ${top.length}）。`;
+  let html = `<table><thead><tr>
+    <th>#</th><th>代码</th><th>名称</th><th>活跃度A</th><th>10日均线</th>
+    <th>上穿幅度</th><th>活跃SZ(亿)</th><th>当日成交额(亿)</th><th>连续上升</th></tr></thead><tbody>`;
+  top.forEach((s, i) => {
+    const aPct = s.A != null ? (s.A * 100).toFixed(1) + "%" : "—";
+    const maPct = s.ma != null ? (s.ma * 100).toFixed(1) + "%" : "—";
+    const gapCls = (s.gap || 0) >= 2 ? "up" : "";
+    html += `<tr>
+      <td>${i + 1}</td><td>${s.code}</td><td>${s.name}</td>
+      <td>${aPct}</td><td>${maPct}</td>
+      <td class="${gapCls}">${s.gap != null ? "+" + fmt(s.gap, 2) + "%" : "—"}</td>
+      <td>${fmt((s.amv || 0) / 1e8, 1)}</td>
+      <td>${fmt((s.amount || 0) / 1e8, 1)}</td>
+      <td>${s.up_days ?? "—"} 天</td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  el.innerHTML = html;
 }
 
 function renderStockRows(rows) {
