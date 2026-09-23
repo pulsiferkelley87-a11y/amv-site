@@ -489,6 +489,118 @@ def compute_self(official_rows):
     }
 
 
+def compute_picks():
+    """方向 A：活跃度拐头。A 上穿自身 10 日均线（昨日在均线下，今日站上）。"""
+    mv_map = load_mv_map([])
+    if not mv_map:
+        return []
+    name_map = {}
+    for lst_path in (os.path.join(DATA_DIR, "stock_list.json"),
+                     os.path.join(BASE, "stock_list.json")):
+        if os.path.exists(lst_path):
+            try:
+                with open(lst_path, encoding="utf-8") as f:
+                    for x in json.load(f):
+                        c = x.get("code") or ""
+                        if c.startswith(("sh", "sz", "bj")):
+                            c = c[2:]
+                        if c and x.get("name"):
+                            name_map[c] = x["name"]
+            except (OSError, ValueError):
+                pass
+            break
+    D = 0.5 ** (1.25 / 10.0)
+    picks = []
+
+    def analyze(code, cache, mv_now):
+        rows = cache.get("rows") or []
+        if len(rows) < 70 or not mv_now:
+            return
+        closes = [k.get("close") or 0.0 for k in rows]
+        if closes[-1] <= 0:
+            return
+        fac = cache.get("factors")
+        fmap = None
+        if fac:
+            ev = sorted(fac.items())
+            fmap = {}
+            cur = 1.0
+            ei = 0
+            for k in rows:
+                while ei < len(ev) and ev[ei][0] <= k["date"]:
+                    cur = ev[ei][1]
+                    ei += 1
+                fmap[k["date"]] = cur
+            f_last = fmap[rows[-1]["date"]]
+        else:
+            f_last = 1.0
+        A = None
+        A_list = []
+        for i, k in enumerate(rows):
+            t = k.get("turnover")
+            if t is None:
+                mv_t = mv_now * (closes[i] / closes[-1]) if closes[-1] else mv_now
+                if fmap is not None:
+                    mv_t *= fmap[k["date"]] / f_last
+                t = (k["amount"] / mv_t * 100) if mv_t else 0.0
+            t = t / 100.0
+            a = min(t / 1.1, 1.0)
+            A = a if A is None else D * A + a * (1.0 - A)
+            A_list.append(A)
+        if len(A_list) < 12:
+            return
+        ma = sum(A_list[-11:-1]) / 10.0  # 昨日及之前 10 日均值
+        ma_today = (sum(A_list[-10:])) / 10.0  # 今日 10 日均值
+        prev_a, cur_a = A_list[-2], A_list[-1]
+        prev_ma = ma
+        if not (cur_a > ma_today and prev_a <= prev_ma):
+            return
+        name = name_map.get(code, code)
+        if "ST" in name.upper() or "退" in name:
+            return
+        amt_today = rows[-1].get("amount") or 0
+        if amt_today <= 0:
+            return
+        mv_t_last = mv_now * (closes[-1] / closes[-1])
+        # 连续上升天数
+        up = 1
+        for j in range(len(A_list) - 2, -1, -1):
+            if A_list[j + 1] > A_list[j]:
+                up += 1
+            else:
+                break
+        picks.append({
+            "code": code, "name": name,
+            "date": rows[-1]["date"],
+            "A": round(cur_a, 4), "ma": round(ma_today, 4),
+            "gap": round((cur_a / ma_today - 1) * 100, 2) if ma_today else None,
+            "amv": round(mv_t_last * cur_a, 2),
+            "amount": amt_today,
+            "up_days": up,
+        })
+
+    seen = set()
+    if os.path.isdir(KLINE_DIR):
+        for fn in os.listdir(KLINE_DIR):
+            if not fn.endswith(".json"):
+                continue
+            code = fn[:-5]
+            seen.add(code)
+            try:
+                with open(os.path.join(KLINE_DIR, fn), encoding="utf-8") as f:
+                    analyze(code, json.load(f), mv_map.get(code) or 0)
+            except (OSError, ValueError):
+                continue
+    for ch in _load_chunk_map().values():
+        for code, cache in ch.items():
+            if code in seen:
+                continue
+            seen.add(code)
+            analyze(code, cache, mv_map.get(code) or 0)
+    picks.sort(key=lambda x: -x["amv"])
+    return picks
+
+
 def main():
     result = {"updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "errors": []}
 
@@ -737,6 +849,10 @@ def main():
                 mk["amv"] = [round(v * s, 2) for v in mk["amv"]]
                 mk["scale"] = round(s, 6)
             result["amv_perstock"] = mk
+
+    # 6) 选股：方向 A 活跃度拐头
+    result["picks"] = compute_picks()
+    result["picks_updated_at"] = result["updated_at"]
 
     with open(OUT_JSON, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False)
