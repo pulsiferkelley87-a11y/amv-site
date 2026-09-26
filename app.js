@@ -685,32 +685,59 @@ function renderPicks() {
     el.innerHTML = "<p style='color:var(--muted);'>该日暂无拐头信号（活跃度均线以下运行或数据未更新）。</p>";
     return;
   }
+  // 板块筛选下拉（每次重建，保留选择）
+  const indSel = document.getElementById("pickIndSel");
+  if (indSel) {
+    const curVal = indSel.value;
+    const inds = [...new Set(list.map(s => s.industry || "—"))].sort();
+    indSel.innerHTML = "";
+    const allOpt = document.createElement("option");
+    allOpt.value = "";
+    allOpt.textContent = "全部板块";
+    indSel.appendChild(allOpt);
+    inds.forEach(name => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      indSel.appendChild(opt);
+    });
+    if (inds.includes(curVal)) indSel.value = curVal;
+  }
+  // 板块筛选
+  const indFilter = indSel ? indSel.value : "";
+  let filtered = indFilter ? list.filter(s => (s.industry || "—") === indFilter) : list;
+  // 排序
+  const sortSel = document.getElementById("pickSortSel");
+  const sortKey = sortSel ? sortSel.value : "amv";
+  const sortKeys = { amv: "amv", gap: "gap", up: "up_days", amount: "amount" };
+  const k = sortKeys[sortKey] || "amv";
+  filtered = filtered.slice().sort((a, b) => (b[k] || 0) - (a[k] || 0));
   const fmt = (v, d = 1) =>
     v == null ? "—" : Number(v).toLocaleString("zh-CN", { maximumFractionDigits: d });
-  const top = list; // 全部展示
-  const lastDate = top[0].date || "";
+  const top = filtered; // 全部展示
+  const lastDate = top.length ? top[0].date : (list[0] || {}).date;
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
   const stale = lastDate < todayStr;
   const infoEl = document.getElementById("pickDateInfo");
   if (infoEl) {
-    infoEl.textContent = isHistory
-      ? "历史回看：该日共 " + list.length + " 只（历史仅存每日 top 30）"
-      : "当日共 " + list.length + " 只";
+    infoEl.textContent = (indFilter ? "板块「" + indFilter + "」" : "全板块") +
+      "，" + filtered.length + " / " + list.length + " 只" +
+      (isHistory ? "（历史仅存每日 top 30）" : "");
   }
   document.getElementById("pickNote").innerHTML =
     `选股日 <b>${lastDate}</b>` +
     (stale && !isHistory ? ` <span style="color:#c0392b;">（非最新交易日，云端数据待更新）</span>` : "") +
-    `：活跃度 A 上穿自身 10 日均线（昨日在均线下、今日站上），捕捉资金重新激活。按活跃SZ从大到小排列（${top.length} 只全部展示）。`;
+    `：活跃度 A 上穿自身 10 日均线（昨日在均线下、今日站上），捕捉资金重新激活。`;
   let html = `<table><thead><tr>
-    <th>#</th><th>代码</th><th>名称</th><th>活跃度A</th><th>10日均线</th>
+    <th>#</th><th>代码</th><th>名称</th><th>板块</th><th>活跃度A</th><th>10日均线</th>
     <th>上穿幅度</th><th>活跃SZ(亿)</th><th>当日成交额(亿)</th><th>连续上升</th></tr></thead><tbody>`;
   top.forEach((s, i) => {
     const aPct = s.A != null ? (s.A * 100).toFixed(1) + "%" : "—";
     const maPct = s.ma != null ? (s.ma * 100).toFixed(1) + "%" : "—";
     const gapCls = (s.gap || 0) >= 2 ? "up" : "";
     html += `<tr>
-      <td>${i + 1}</td><td>${s.code}</td><td>${s.name}</td>
+      <td>${i + 1}</td><td>${s.code}</td><td>${s.name}</td><td>${s.industry || "—"}</td>
       <td>${aPct}</td><td>${maPct}</td>
       <td class="${gapCls}">${s.gap != null ? "+" + fmt(s.gap, 2) + "%" : "—"}</td>
       <td>${fmt((s.amv || 0) / 1e8, 1)}</td>
