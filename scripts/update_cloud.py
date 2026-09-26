@@ -533,7 +533,8 @@ def compute_self(official_rows):
 
 
 def compute_picks():
-    """方向 A：活跃度拐头。A 上穿自身 10 日均线（昨日在均线下，今日站上）。"""
+    """方向 A：活跃度拐头。A 上穿自身 10 日均线（昨日在均线下，今日站上）。
+    同时生成最近 90 个交易日的选股历史（每日 top 30，按活跃SZ）。"""
     mv_map = load_mv_map([])
     if not mv_map:
         return []
@@ -554,6 +555,7 @@ def compute_picks():
             break
     D = 0.5 ** (1.25 / 10.0)
     picks = []
+    hist_raw = {}
 
     def analyze(code, cache, mv_now):
         rows = cache.get("rows") or []
@@ -590,37 +592,53 @@ def compute_picks():
             a = min(t / 1.1, 1.0)
             A = a if A is None else D * A + a * (1.0 - A)
             A_list.append(A)
-        if len(A_list) < 12:
-            return
-        ma = sum(A_list[-11:-1]) / 10.0  # 昨日及之前 10 日均值
-        ma_today = (sum(A_list[-10:])) / 10.0  # 今日 10 日均值
-        prev_a, cur_a = A_list[-2], A_list[-1]
-        prev_ma = ma
-        if not (cur_a > ma_today and prev_a <= prev_ma):
+        n = len(A_list)
+        if n < 12:
             return
         name = name_map.get(code, code)
         if "ST" in name.upper() or "退" in name:
             return
-        amt_today = rows[-1].get("amount") or 0
-        if amt_today <= 0:
-            return
-        mv_t_last = mv_now * (closes[-1] / closes[-1])
-        # 连续上升天数
-        up = 1
-        for j in range(len(A_list) - 2, -1, -1):
-            if A_list[j + 1] > A_list[j]:
-                up += 1
-            else:
-                break
-        picks.append({
-            "code": code, "name": name,
-            "date": rows[-1]["date"],
-            "A": round(cur_a, 4), "ma": round(ma_today, 4),
-            "gap": round((cur_a / ma_today - 1) * 100, 2) if ma_today else None,
-            "amv": round(mv_t_last * cur_a, 2),
-            "amount": amt_today,
-            "up_days": up,
-        })
+        # 滚动 10 日均线
+        ma_list = [None] * n
+        s = 0.0
+        for i in range(n):
+            s += A_list[i]
+            if i >= 10:
+                s -= A_list[i - 10]
+            if i >= 9:
+                ma_list[i] = s / 10.0
+        # 历史窗口：最近 110 个交易日检测拐头（额外留余量）
+        start = max(10, n - 110)
+        for i in range(start + 1, n):
+            cur_a, prev_a = A_list[i], A_list[i - 1]
+            cur_ma, prev_ma = ma_list[i], ma_list[i - 1]
+            if prev_ma is None or cur_ma is None or cur_ma <= 0:
+                continue
+            if not (cur_a > cur_ma and prev_a <= prev_ma):
+                continue
+            amt_today = rows[i].get("amount") or 0
+            if amt_today <= 0:
+                continue
+            mv_t_last = mv_now * (closes[i] / closes[-1])
+            # 连续上升天数（截至当日）
+            up = 1
+            for j in range(i - 1, -1, -1):
+                if A_list[j + 1] > A_list[j]:
+                    up += 1
+                else:
+                    break
+            rec = {
+                "code": code, "name": name,
+                "date": rows[i]["date"],
+                "A": round(cur_a, 4), "ma": round(cur_ma, 4),
+                "gap": round((cur_a / cur_ma - 1) * 100, 2),
+                "amv": round(mv_t_last * cur_a, 2),
+                "amount": amt_today,
+                "up_days": up,
+            }
+            hist_raw.setdefault(rec["date"], []).append(rec)
+            if i == n - 1:
+                picks.append(rec)
 
     seen = set()
     if os.path.isdir(KLINE_DIR):
@@ -641,7 +659,16 @@ def compute_picks():
             seen.add(code)
             analyze(code, cache, mv_map.get(code) or 0)
     picks.sort(key=lambda x: -x["amv"])
-    return picks
+    return picks, hist_raw
+
+
+def build_picks_history(hist_raw, days_back=90):
+    """历史选股：每日按活跃SZ排序取 top 30，只保留最近 N 个交易日。"""
+    out = {}
+    for date in sorted(hist_raw.keys(), reverse=True)[:days_back]:
+        lst = sorted(hist_raw[date], key=lambda x: -x["amv"])[:30]
+        out[date] = lst
+    return out
 
 
 def main():
@@ -893,8 +920,10 @@ def main():
                 mk["scale"] = round(s, 6)
             result["amv_perstock"] = mk
 
-    # 6) 选股：方向 A 活跃度拐头
-    result["picks"] = compute_picks()
+    # 6) 选股：方向 A 活跃度拐头（当日 + 历史 90 天）
+    picks, hist_raw = compute_picks()
+    result["picks"] = picks
+    result["picks_history"] = build_picks_history(hist_raw)
     result["picks_updated_at"] = result["updated_at"]
 
     with open(OUT_JSON, "w", encoding="utf-8") as f:
