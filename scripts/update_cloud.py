@@ -556,6 +556,16 @@ def compute_picks():
     D = 0.5 ** (1.25 / 10.0)
     picks = []
     hist_raw = {}
+    ind_map = {}
+    for p in (os.path.join(DATA_DIR, "industry_map.json"),
+              os.path.join(BASE, "industry_map.json")):
+        if os.path.exists(p):
+            try:
+                with open(p, encoding="utf-8") as f:
+                    ind_map = json.load(f)
+            except (OSError, ValueError):
+                ind_map = {}
+            break
 
     def analyze(code, cache, mv_now):
         rows = cache.get("rows") or []
@@ -630,6 +640,7 @@ def compute_picks():
             rec = {
                 "code": code, "name": name,
                 "date": rows[i]["date"],
+                "industry": ind_map.get(code, "—"),
                 "A": round(cur_a, 4), "ma": round(cur_ma, 4),
                 "gap": round((cur_a / cur_ma - 1) * 100, 2),
                 "amv": round(mv_t_last * cur_a, 2),
