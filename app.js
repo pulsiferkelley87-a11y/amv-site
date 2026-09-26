@@ -656,23 +656,52 @@ function renderStocks() {
 
 function renderPicks() {
   const picks = D.picks || [];
+  const hist = D.picks_history || {};
   const el = document.getElementById("pickTable");
   if (!el) return;
-  if (!picks.length) {
-    el.innerHTML = "<p style='color:var(--muted);'>今日暂无拐头信号（活跃度均线以下运行或数据未更新）。</p>";
+  // 日期下拉：当日 + 历史（倒序）
+  const sel = document.getElementById("pickDateSel");
+  if (sel && sel.options.length === 0) {
+    const histDates = Object.keys(hist).sort().reverse();
+    const latestDate = picks.length ? picks[0].date : (histDates[0] || "");
+    const allDates = histDates.includes(latestDate) ? histDates : [latestDate, ...histDates];
+    allDates.forEach(d => {
+      const opt = document.createElement("option");
+      opt.value = d;
+      opt.textContent = d + (d === latestDate ? "（最新）" : "");
+      sel.appendChild(opt);
+    });
+  }
+  const selDate = sel ? sel.value : "";
+  let list;
+  let isHistory = false;
+  if (selDate && hist[selDate] && selDate !== (picks[0] || {}).date) {
+    list = hist[selDate];
+    isHistory = true;
+  } else {
+    list = picks;
+  }
+  if (!list.length) {
+    el.innerHTML = "<p style='color:var(--muted);'>该日暂无拐头信号（活跃度均线以下运行或数据未更新）。</p>";
     return;
   }
   const fmt = (v, d = 1) =>
     v == null ? "—" : Number(v).toLocaleString("zh-CN", { maximumFractionDigits: d });
-  const top = picks.slice(0, 60);
+  const top = list; // 全部展示
   const lastDate = top[0].date || "";
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
   const stale = lastDate < todayStr;
+  const infoEl = document.getElementById("pickDateInfo");
+  if (infoEl) {
+    infoEl.textContent = isHistory
+      ? "历史回看：该日共 " + list.length + " 只（历史仅存每日 top 30）"
+      : "当日共 " + list.length + " 只";
+  }
   document.getElementById("pickNote").innerHTML =
     `选股日 <b>${lastDate}</b>` +
-    (stale ? ` <span style="color:#c0392b;">（非最新交易日，云端数据待更新）</span>` : "") +
-    `：活跃度 A 上穿自身 10 日均线（昨日在均线下、今日站上），捕捉资金重新激活。共 <b>${picks.length}</b> 只，按活跃SZ从大到小排列（展示前 ${top.length}）。`;
+    (stale && !isHistory ? ` <span style="color:#c0392b;">（非最新交易日，云端数据待更新）</span>` : "") +
+    `：活跃度 A 上穿自身 10 日均线（昨日在均线下、今日站上），捕捉资金重新激活。按活跃SZ从大到小排列（${top.length} 只全部展示）。`;
   let html = `<table><thead><tr>
     <th>#</th><th>代码</th><th>名称</th><th>活跃度A</th><th>10日均线</th>
     <th>上穿幅度</th><th>活跃SZ(亿)</th><th>当日成交额(亿)</th><th>连续上升</th></tr></thead><tbody>`;
@@ -691,6 +720,10 @@ function renderPicks() {
   });
   html += "</tbody></table>";
   el.innerHTML = html;
+}
+
+function onPickDateChange() {
+  renderPicks();
 }
 
 function renderStockRows(rows) {
