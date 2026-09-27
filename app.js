@@ -730,9 +730,43 @@ function showMarketStocks() {
   renderStockRows((D.stocks_top || []));
 }
 
+function filterSectorBtns() {
+  const kw = (document.getElementById("sectorSearch") || {}).value || "";
+  const btns = document.querySelectorAll("#sectorBtns .sectorBtn");
+  btns.forEach(b => {
+    b.style.display = (!kw || b.textContent.includes(kw)) ? "" : "none";
+  });
+}
+
+function renderNews() {
+  const news = D.news || [];
+  const el = document.getElementById("newsList");
+  if (!el) return;
+  if (!news.length) {
+    el.innerHTML = "<p style='color:var(--muted);'>快讯抓取中，稍后刷新。</p>";
+    return;
+  }
+  const t = document.getElementById("newsTime");
+  if (t) t.textContent = "最新 " + (news[0].time || "");
+  const GOOD = ["利好", "获批", "中标", "涨价", "预增", "超预期", "增长", "突破", "签约", "回购", "增持", "创新高", "提价", "政策"];
+  const BAD = ["利空", "处罚", "立案", "亏损", "下滑", "减持", "退市", "违规", "爆雷", "风险", "终止", "下调"];
+  let html = "";
+  news.forEach(n => {
+    let txt = n.text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    let cls = "";
+    if (GOOD.some(k => txt.includes(k))) cls = "good";
+    else if (BAD.some(k => txt.includes(k))) cls = "bad";
+    html += `<div class="newsItem ${cls}" style="padding:4px 0;border-bottom:1px solid #f0f0f0;font-size:13px;">
+      <span style="color:#999;margin-right:8px;">${n.time || ""}</span>${txt}
+    </div>`;
+  });
+  el.innerHTML = html;
+}
+
 function renderStocks() {
   showMarketStocks();
   renderPicks();
+  renderNews();
 }
 
 function renderPicks() {
