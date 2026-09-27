@@ -532,6 +532,74 @@ def compute_self(official_rows):
     }
 
 
+def fetch_kline_sina(code):
+    """新浪日线（原始价），云端主力数据源。"""
+    prefix = "sh" if code.startswith("6") else (
+        "sz" if code.startswith(("0", "3")) else (
+            "bj" if code.startswith(("4", "8", "9")) else None))
+    if not prefix:
+        return None
+    try:
+        r = session.get(
+            "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData",
+            params={"symbol": prefix + code, "scale": 240, "ma": "no", "datalen": 600},
+            timeout=15)
+        if r.status_code != 200 or not r.text.startswith("["):
+            return None
+        raw = json.loads(r.text)
+        out = []
+        for d in raw:
+            try:
+                o, c, h, l, v = (float(d[k]) for k in ("open", "close", "high", "low", "volume"))
+            except (KeyError, ValueError):
+                continue
+            avg = (o + h + l + c) / 4
+            out.append({"date": d["day"], "close": c, "amount": v * avg,
+                        "volume": v, "turnover": None})
+        return out if out else None
+    except Exception:
+        return None
+
+
+def refresh_stock_list_sina():
+    """拉新浪全市场快照（当日成交额/换手率/流通市值），更新 stock_list.json。"""
+    try:
+        rows = []
+        for page in range(1, 60):
+            r = session.get(
+                "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData",
+                params={"page": page, "num": 100, "sort": "symbol", "asc": 1, "node": "hs_a"},
+                timeout=20)
+            if r.status_code != 200 or not r.text.startswith("["):
+                break
+            j = json.loads(r.text)
+            if not j:
+                break
+            rows.extend(j)
+            if len(j) < 100:
+                break
+            time.sleep(0.3)
+        if len(rows) < 1000:
+            return False
+        out = []
+        for x in rows:
+            try:
+                out.append({"code": x["symbol"], "name": x["name"],
+                            "ltsz": float(x.get("nmc") or 0) / 1e4,
+                            "mktcap": float(x.get("mktcap") or 0) / 1e4,
+                            "amount": float(x.get("amount") or 0),
+                            "turnover": float(x.get("turnoverratio") or 0)})
+            except (KeyError, ValueError):
+                continue
+        with open(os.path.join(BASE, "stock_list.json"), "w", encoding="utf-8") as f:
+            json.dump(out, f, ensure_ascii=False)
+        print(f"  sina 快照刷新: {len(out)} 只", flush=True)
+        return True
+    except Exception as e:
+        print("  sina 快照失败:", str(e)[:100], flush=True)
+        return False
+
+
 def compute_picks():
     """方向 A：活跃度拐头。A 上穿自身 10 日均线（昨日在均线下，今日站上）。
     同时生成最近 90 个交易日的选股历史（每日 top 30，按活跃SZ）。"""
@@ -690,7 +758,8 @@ def main():
     if not official:
         result["errors"].append("official csv missing")
 
-    # 2) 快照
+    # 2) 快照（先刷新新浪快照再拉东财，东财失败时用新浪数据兜底）
+    refresh_stock_list_sina()
     spot = fetch_spot()
     sectors = fetch_sectors()
     styles = fetch_styles()
@@ -814,25 +883,23 @@ def main():
         ind = compute_self(official)
         result["self"] = ind
 
-    # 4) 逐股递推口径（实测版，相关 0.9983）：只拉新股，全部 spot 股票参与排名
+    # 4) 逐股递推口径（实测版，相关 0.9983）：新浪自动拉取 + 全部 spot 股票参与排名
     amv_rows, amv_total, day_map = [], 0.0, {}
     if spot:
-        # 阶段 1：只拉未缓存的新股（限时保护，不重拉已有避免旧数据覆盖）
+        # 阶段 1：前 500 只成交额股票用新浪更新当日 kline（单文件覆盖 chunks）
         t_fetch_start = time.time()
-        uncached = [s for s in spot if not load_cache(s["code"])]
-        uncached.sort(key=lambda x: -(x.get("amount") or 0))
-        seen = set()
-        fetch_list = [s for s in uncached[:100] if not (s["code"] in seen or seen.add(s["code"]))]
-        for idx, s in enumerate(fetch_list):
-            if time.time() - t_fetch_start > 1200:
-                print("  fetch time budget reached, break", flush=True)
+        top500 = sorted(spot, key=lambda x: -(x.get("amount") or 0))[:500]
+        fetched = 0
+        for idx, s in enumerate(top500):
+            if time.time() - t_fetch_start > 2400:
+                print("  sina fetch time budget reached", flush=True)
                 break
-            if load_cache(s["code"]):
-                continue
-            kl, _ = fetch_kline(s["code"], spot_amount=s.get("amount"), float_mv=s.get("float_mv"))
+            kl = fetch_kline_sina(s["code"])
             if kl:
                 save_cache(s["code"], kl)
-            time.sleep(0.1)
+                fetched += 1
+            time.sleep(0.15)
+        print(f"  sina kline 更新: {fetched}/{min(500, len(top500))}", flush=True)
         # 阶段 2：全部 spot 股票用缓存计算递推贡献（chunks 已含全市场）
         for s in spot:
             kl = load_cache(s["code"])
