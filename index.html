@@ -86,6 +86,13 @@
     <div class="chart tall" id="chartWeekly"></div>
   </div>
   <div class="card full">
+    <h2>市场快讯 · 7×24 自动捕捉
+      <span style="float:right;font-size:12px;color:var(--muted);font-weight:normal;" id="newsTime"></span>
+    </h2>
+    <div class="note">来自新浪财经直播（市场级消息），利好关键词标红、利空标绿。每日 15:30 自动更新。</div>
+    <div class="scroll" id="newsList" style="max-height:400px;"></div>
+  </div>
+  <div class="card full">
     <h2>今日选股 · 活跃度拐头（方向A）
       <button id="btnRefresh" onclick="refreshAll()" style="float:right;padding:3px 12px;border:1px solid #d1d5db;border-radius:5px;background:#fff;cursor:pointer;font-size:12px;">刷新数据</button>
     </h2>
@@ -114,6 +121,7 @@
         <button id="tabInd" class="modeBtn active" onclick="setSecTab('industry')">行业</button>
         <button id="tabConcept" class="modeBtn" onclick="setSecTab('concept')">概念(通达信)</button>
         <button id="tabTdxStyle" class="modeBtn" onclick="setSecTab('tdxstyle')">风格(通达信)</button>
+        <input id="sectorSearch" type="text" placeholder="搜索板块…" oninput="filterSectorBtns()" style="float:right;padding:2px 8px;border:1px solid #d1d5db;border-radius:5px;width:140px;">
         板块活跃SZ = 成分股递推活跃SZ加总。点击按钮或柱子 → 成分个股榜（通达信板块代码 880xxx 可对照通达信软件）。
       </div>
       <div class="sectorBtns" id="sectorBtns" style="max-height:220px;overflow-y:auto;"></div>
