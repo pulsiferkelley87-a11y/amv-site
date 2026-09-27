@@ -750,6 +750,44 @@ def build_picks_history(hist_raw, days_back=90):
     return out
 
 
+def compute_concept_boards(stocks_amv, picks):
+    """通达信概念板块：板块活跃SZ = 成分股递推活跃SZ加总，排序 + 拐头强度。"""
+    blk_path = os.path.join(BASE, "concept_blocks.json")
+    if not os.path.exists(blk_path):
+        blk_path = os.path.join(DATA_DIR, "concept_blocks.json")
+    if not os.path.exists(blk_path):
+        return []
+    try:
+        with open(blk_path, encoding="utf-8") as f:
+            blocks = json.load(f)
+    except (OSError, ValueError):
+        return []
+    amv_map = {s["code"]: s.get("amv") or 0 for s in stocks_amv}
+    amount_map = {s["code"]: s.get("amount") or 0 for s in stocks_amv}
+    pick_codes = {p["code"] for p in picks}
+    out = []
+    for b in blocks:
+        codes = list(dict.fromkeys(b["stocks"]))  # 去重保持顺序
+        amv_total = sum(amv_map.get(c, 0) for c in codes)
+        amt_total = sum(amount_map.get(c, 0) for c in codes)
+        covered = sum(1 for c in codes if c in amv_map)
+        n_pick = sum(1 for c in codes if c in pick_codes)
+        if covered < 5:
+            continue
+        out.append({
+            "name": b["name"], "code": b["code"],
+            "type": b.get("type", "概念"),
+            "amv": round(amv_total, 2), "amount": amt_total,
+            "covered": covered, "total": len(codes),
+            "pick_n": n_pick,
+        })
+    out.sort(key=lambda x: -x["amv"])
+    amv_sum = sum(x["amv"] for x in out) or 1
+    for x in out:
+        x["amv_pct"] = round(x["amv"] / amv_sum * 100, 2)
+    return out
+
+
 def main():
     result = {"updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "errors": []}
 
@@ -1007,6 +1045,21 @@ def main():
     result["picks"] = picks
     result["picks_history"] = build_picks_history(hist_raw)
     result["picks_updated_at"] = result["updated_at"]
+
+    # 7) 通达信概念板块榜（活跃SZ排序 + 拐头强度）
+    result["concept_boards"] = compute_concept_boards(
+        result.get("stocks_amv", []), picks)
+    # 板块成分映射（前端点击查成分）
+    blk_path = os.path.join(BASE, "concept_blocks.json")
+    if not os.path.exists(blk_path):
+        blk_path = os.path.join(DATA_DIR, "concept_blocks.json")
+    if os.path.exists(blk_path):
+        try:
+            with open(blk_path, encoding="utf-8") as f:
+                result["concept_members"] = {
+                    b["name"]: b["stocks"] for b in json.load(f)}
+        except (OSError, ValueError):
+            pass
 
     with open(OUT_JSON, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False)
