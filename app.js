@@ -443,14 +443,45 @@ function onSectorClick(params) {
 function setSecTab(tab) {
   SEC_TAB = tab;
   document.getElementById("tabInd").className = "modeBtn" + (tab === "industry" ? " active" : "");
-  document.getElementById("tabStyle").className = "modeBtn" + (tab === "style" ? " active" : "");
+  document.getElementById("tabConcept").className = "modeBtn" + (tab === "concept" ? " active" : "");
+  document.getElementById("tabTdxStyle").className = "modeBtn" + (tab === "tdxstyle" ? " active" : "");
   document.getElementById("sectorChartTitle").textContent =
-    tab === "industry" ? "板块活跃SZ贡献 Top 15" : "风格贡献 Top 15（版本陷阱识别）";
+    tab === "industry" ? "板块活跃SZ贡献 Top 15（行业）" :
+    tab === "concept" ? "概念板块活跃SZ Top 15（通达信）" :
+    "风格板块活跃SZ Top 15（通达信）";
   renderSectors();
 }
 
 function renderSectors() {
   let secs;
+  if (SEC_TAB === "concept" || SEC_TAB === "tdxstyle") {
+    // 通达信概念/风格板块：按活跃SZ排序
+    const wantType = SEC_TAB === "concept" ? "概念" : "风格";
+    secs = (D.concept_boards || []).filter(b => b.type === wantType).slice(0, 15);
+    renderConceptBtns(secs);
+    const ch = echarts.init(document.getElementById("chartSectors"));
+    const data = secs.slice().reverse();
+    ch.setOption({
+      grid: { left: 100, right: 80, top: 10, bottom: 30 },
+      xAxis: { type: "value", axisLabel: { formatter: "{value}%" } },
+      yAxis: { type: "category", data: data.map(s => s.name) },
+      series: [{
+        type: "bar", data: data.map(s => s.amv_pct), barMaxWidth: 16,
+        itemStyle: { color: COLORS.blue, borderRadius: [0, 4, 4, 0] },
+        label: {
+          show: true, position: "right", fontSize: 11,
+          formatter: p => {
+            const s = data[p.dataIndex];
+            return p.value + "%" + (s.pick_n ? " 拐头" + s.pick_n : "");
+          },
+        },
+      }],
+    });
+    ch.off("click");
+    ch.on("click", p => showConceptStocks(p.name));
+    window.addEventListener("resize", () => ch.resize());
+    return;
+  }
   if (SEC_TAB === "style") {
     secs = (D.styles || []).slice(0, 15);
     // 风格榜无成分映射，直接渲染按钮与柱状图，点击提示
@@ -505,6 +536,53 @@ function renderSectors() {
   ch.off("click");
   ch.on("click", onSectorClick);
   window.addEventListener("resize", () => ch.resize());
+}
+
+function renderConceptBtns(secs) {
+  const btnBox = document.getElementById("sectorBtns");
+  btnBox.innerHTML = "";
+  secs.forEach(s => {
+    const b = document.createElement("button");
+    b.className = "sectorBtn";
+    b.textContent = `${s.name} ${s.amv_pct}%` + (s.pick_n ? `·拐${s.pick_n}` : "");
+    b.onclick = () => showConceptStocks(s.name);
+    btnBox.appendChild(b);
+  });
+}
+
+function showConceptStocks(name) {
+  const members = (D.concept_members || {})[name] || [];
+  const codeSet = new Set(members);
+  const amvList = (D.stocks_amv || []).filter(s => codeSet.has(s.code));
+  const board = (D.concept_boards || []).find(b => b.name === name);
+  const titleEl = document.getElementById("stockTableTitle");
+  const noteEl = document.getElementById("stockTableNote");
+  if (!amvList.length) {
+    titleEl.textContent = `概念「${name}」成分股（数据采集中）`;
+    noteEl.innerHTML = "该板块成分股活跃SZ数据暂未覆盖，明日自动更新后可见。";
+    document.getElementById("stockTable").innerHTML = "";
+    return;
+  }
+  const sorted = amvList.slice().sort((a, b) => (b.amv || 0) - (a.amv || 0));
+  const total = sorted.reduce((t, s) => t + (s.amv || 0), 0) || 1;
+  titleEl.textContent = `概念「${name}」成分个股 · 活跃SZ Top ${Math.min(sorted.length, 50)}`;
+  noteEl.innerHTML = `通达信板块代码 <b>${board ? board.code : "—"}</b>（可在通达信搜该代码看板块指数）· 成分 ${members.length} 只，已覆盖 ${sorted.length} 只 · 板块内今日拐头 ${board ? board.pick_n : "—"} 只。按个股活跃SZ排序。`;
+  const fmt = (v, d = 1) =>
+    v == null ? "—" : Number(v).toLocaleString("zh-CN", { maximumFractionDigits: d });
+  let html = `<table><thead><tr>
+    <th>#</th><th>代码</th><th>名称</th><th>行业</th><th>活跃SZ(亿)</th><th>板块内占比</th>
+    <th>成交额(亿)</th><th>换手率</th></tr></thead><tbody>`;
+  sorted.slice(0, 50).forEach((s, i) => {
+    html += `<tr>
+      <td>${i + 1}</td><td>${s.code}</td><td>${s.name}</td><td>${s.industry || "—"}</td>
+      <td>${fmt((s.amv || 0) / 1e8, 1)}</td>
+      <td>${fmt((s.amv || 0) / total * 100, 2)}%</td>
+      <td>${fmt((s.amount || 0) / 1e8, 1)}</td>
+      <td>${fmt(s.turnover, 2)}%</td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  document.getElementById("stockTable").innerHTML = html;
 }
 
 function renderSectorBtnsStyle(secs) {
