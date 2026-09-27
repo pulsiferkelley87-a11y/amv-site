@@ -600,6 +600,38 @@ def refresh_stock_list_sina():
         return False
 
 
+def fetch_news():
+    """抓新浪 7x24 财经快讯（市场级利好/利空，实时）。"""
+    try:
+        s = requests.Session()
+        s.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0",
+            "Referer": "https://finance.sina.com.cn/",
+        })
+        r = s.get(
+            "https://zhibo.sina.com.cn/api/zhibo/feed",
+            params={"page": 1, "page_size": 30, "zhibo_id": 152,
+                    "tag_id": 0, "dire": "f", "dpc": 1},
+            timeout=20)
+        j = r.json()
+        feed = (j.get("result") or {}).get("data") or {}
+        lst = (feed.get("feed") or {}).get("list") or []
+        out = []
+        for it in lst:
+            text = (it.get("rich_text") or "").strip()
+            if not text:
+                continue
+            out.append({
+                "time": (it.get("create_time") or "")[:16],
+                "text": text,
+                "tag": it.get("tag", []),
+            })
+        return out
+    except Exception as e:
+        print("  news fetch failed:", str(e)[:80], flush=True)
+        return []
+
+
 def compute_picks():
     """方向 A：活跃度拐头。A 上穿自身 10 日均线（昨日在均线下，今日站上）。
     同时生成最近 90 个交易日的选股历史（每日 top 30，按活跃SZ）。"""
@@ -1049,6 +1081,8 @@ def main():
     # 7) 通达信概念板块榜（活跃SZ排序 + 拐头强度）
     result["concept_boards"] = compute_concept_boards(
         result.get("stocks_amv", []), picks)
+    # 8) 市场快讯（新浪 7x24）
+    result["news"] = fetch_news()
     # 板块成分映射（前端点击查成分）
     blk_path = os.path.join(BASE, "concept_blocks.json")
     if not os.path.exists(blk_path):
