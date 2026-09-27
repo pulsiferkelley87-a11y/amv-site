@@ -758,9 +758,11 @@ def main():
     if not official:
         result["errors"].append("official csv missing")
 
-    # 2) 快照（先刷新新浪快照再拉东财，东财失败时用新浪数据兜底）
-    refresh_stock_list_sina()
+    # 2) 快照（东财优先，风控时用新浪数据兜底）
     spot = fetch_spot()
+    if len(spot) < 500:
+        refresh_stock_list_sina()
+        spot = fetch_spot()
     sectors = fetch_sectors()
     styles = fetch_styles()
     if not spot:
@@ -892,9 +894,11 @@ def main():
         fetched = 0
         for idx, s in enumerate(top500):
             if time.time() - t_fetch_start > 2400:
-                print("  sina fetch time budget reached", flush=True)
+                print("  fetch time budget reached", flush=True)
                 break
-            kl = fetch_kline_sina(s["code"])
+            kl = fetch_kline_em(s["code"])   # 东财优先（真实成交额/换手率）
+            if not kl:
+                kl = fetch_kline_sina(s["code"])  # 新浪兜底
             if kl:
                 save_cache(s["code"], kl)
                 fetched += 1
