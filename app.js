@@ -455,10 +455,11 @@ function setSecTab(tab) {
 function renderSectors() {
   let secs;
   if (SEC_TAB === "concept" || SEC_TAB === "tdxstyle") {
-    // 通达信概念/风格板块：按活跃SZ排序
+    // 通达信概念/风格板块：按钮云全部展示，柱状图 Top 15
     const wantType = SEC_TAB === "concept" ? "概念" : "风格";
-    secs = (D.concept_boards || []).filter(b => b.type === wantType).slice(0, 15);
-    renderConceptBtns(secs);
+    const allBoards = (D.concept_boards || []).filter(b => b.type === wantType);
+    renderConceptBtns(allBoards);
+    secs = allBoards.slice(0, 15);
     const ch = echarts.init(document.getElementById("chartSectors"));
     const data = secs.slice().reverse();
     ch.setOption({
@@ -506,11 +507,14 @@ function renderSectors() {
   }
   const secsAmt = (D.sectors || []).filter(s => s.amount);
   if (MODE === "reg" || !secsAmt.length) {
-    secs = (D.sectors_amv || []).slice(0, 15);
+    secs = (D.sectors_amv || []);
+    renderSectorBtns(secs, false);
+    secs = secs.slice(0, 15);
   } else {
-    secs = secsAmt.slice(0, 15);
+    secs = secsAmt;
+    renderSectorBtns(secs, false);
+    secs = secs.slice(0, 15);
   }
-  renderSectorBtns(secs, false);
   // 柱状图
   const secsRev = secs.slice().reverse();
   const ch = echarts.init(document.getElementById("chartSectors"));
@@ -565,14 +569,14 @@ function showConceptStocks(name) {
   }
   const sorted = amvList.slice().sort((a, b) => (b.amv || 0) - (a.amv || 0));
   const total = sorted.reduce((t, s) => t + (s.amv || 0), 0) || 1;
-  titleEl.textContent = `概念「${name}」成分个股 · 活跃SZ Top ${Math.min(sorted.length, 50)}`;
+  titleEl.textContent = `概念「${name}」成分个股 · 活跃SZ 排序（${sorted.length} 只全部展示）`;
   noteEl.innerHTML = `通达信板块代码 <b>${board ? board.code : "—"}</b>（可在通达信搜该代码看板块指数）· 成分 ${members.length} 只，已覆盖 ${sorted.length} 只 · 板块内今日拐头 ${board ? board.pick_n : "—"} 只。按个股活跃SZ排序。`;
   const fmt = (v, d = 1) =>
     v == null ? "—" : Number(v).toLocaleString("zh-CN", { maximumFractionDigits: d });
   let html = `<table><thead><tr>
     <th>#</th><th>代码</th><th>名称</th><th>行业</th><th>活跃SZ(亿)</th><th>板块内占比</th>
     <th>成交额(亿)</th><th>换手率</th></tr></thead><tbody>`;
-  sorted.slice(0, 50).forEach((s, i) => {
+  sorted.forEach((s, i) => {
     html += `<tr>
       <td>${i + 1}</td><td>${s.code}</td><td>${s.name}</td><td>${s.industry || "—"}</td>
       <td>${fmt((s.amv || 0) / 1e8, 1)}</td>
@@ -683,10 +687,9 @@ function showSectorStocks(sectorName) {
         o[pctField] = d[pctField];
         return o;
       })
-      .sort((a, b) => (b[field] || 0) - (a[field] || 0))
-      .slice(0, 50);
+      .sort((a, b) => (b[field] || 0) - (a[field] || 0));
   } else {
-    rows = rows.slice(0, 50);
+    rows = rows;
   }
   document.getElementById("stockTableTitle").textContent =
     `板块「${sectorName}」成分个股贡献 Top ${rows.length}` +
@@ -717,14 +720,14 @@ function showMarketStocks() {
       `个股活跃SZ贡献 Top ${regList.length}（逐股递推·实测）`;
     document.getElementById("stockTableNote").innerHTML =
       `递推活跃度（半衰期10天/激活率=换手率÷1.1），活跃SZ = 流通市值 × 活跃度；逐股加总与官方 0AMV 相关 0.9983、2021+ 误差 1.8%。占比 = 个股活跃SZ / 已覆盖个股活跃SZ合计。`;
-    renderStockRows(regList.slice(0, 50));
+    renderStockRows(regList);
     return;
   }
   document.getElementById("stockTableTitle").textContent =
     "个股活跃市值贡献 Top 50（全市场）";
   document.getElementById("stockTableNote").innerHTML =
     "按当日成交额排序；占比 = 个股成交额 / 全市场成交额。";
-  renderStockRows((D.stocks_top || []).slice(0, 50));
+  renderStockRows((D.stocks_top || []));
 }
 
 function renderStocks() {
