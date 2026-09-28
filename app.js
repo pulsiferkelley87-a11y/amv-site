@@ -914,7 +914,7 @@ function renderStockRows(rows) {
 function refreshAll() {
   const msg = document.getElementById("refreshMsg");
   if (msg) {
-    msg.innerHTML = "正在重新拉取最新数据并查询云端更新状态…";
+    msg.innerHTML = "正在重新拉取最新数据…（数据每小时自动更新，点此立即拉最新）";
   }
   const ts = new Date().getTime();
   const script = document.createElement("script");
