@@ -958,9 +958,13 @@ def main():
     # 4) 逐股递推口径（实测版，相关 0.9983）：新浪自动拉取 + 全部 spot 股票参与排名
     amv_rows, amv_total, day_map = [], 0.0, {}
     if spot:
-        # 阶段 1：前 500 只成交额股票用新浪更新当日 kline（单文件覆盖 chunks）
+        # 阶段 1：前 N 只成交额股票更新当日 kline（N 由环境变量 TOP_N 控制，默认 500）
         t_fetch_start = time.time()
-        top500 = sorted(spot, key=lambda x: -(x.get("amount") or 0))[:500]
+        try:
+            top_n = int(os.environ.get("TOP_N", "500"))
+        except ValueError:
+            top_n = 500
+        top500 = sorted(spot, key=lambda x: -(x.get("amount") or 0))[:top_n]
         fetched = 0
         for idx, s in enumerate(top500):
             if time.time() - t_fetch_start > 2400:
