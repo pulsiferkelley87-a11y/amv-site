@@ -911,6 +911,16 @@ function renderStockRows(rows) {
   document.getElementById("stockTable").innerHTML = html;
 }
 
+function renderAll() {
+  renderMeta();
+  renderMain();
+  renderTrio();
+  renderRatio();
+  renderWeekly();
+  renderSectors();
+  renderStocks();
+}
+
 function refreshAll() {
   const msg = document.getElementById("refreshMsg");
   if (msg) {
@@ -921,13 +931,7 @@ function refreshAll() {
   script.src = "app-data.js?v=" + ts;
   script.onload = () => {
     D = window.DATA;
-    renderMeta();
-    renderMain();
-    renderTrio();
-    renderRatio();
-    renderWeekly();
-    renderSectors();
-    renderStocks();
+    renderAll();
     if (msg) {
       msg.innerHTML = "数据已刷新（更新时间：" + (D.updated_at || "—") + "）";
     }
@@ -937,6 +941,31 @@ function refreshAll() {
     if (msg) msg.innerHTML = "刷新失败，请稍后重试或按 Ctrl+F5 强制刷新。";
   };
   document.body.appendChild(script);
+}
+
+function autoRefreshData() {
+  // 静默自动刷新：每 10 分钟拉最新数据重渲染（板块/个股/选股）
+  const ts = new Date().getTime();
+  const script = document.createElement("script");
+  script.src = "app-data.js?v=" + ts;
+  script.onload = () => {
+    if (window.DATA) {
+      D = window.DATA;
+      renderAll();
+    }
+  };
+  document.body.appendChild(script);
+}
+
+function autoRefreshNews() {
+  fetch("news.json?v=" + new Date().getTime())
+    .then(r => r.json())
+    .then(j => {
+      if (j && j.news) {
+        renderNewsList(j.news, j.updated_at || "");
+      }
+    })
+    .catch(() => {});
 }
 
 function queryCloudStatus(msg) {
@@ -970,3 +999,7 @@ function line(data, name, color, width) {
 }
 
 load();
+
+// 自动刷新：数据每 10 分钟、快讯每 5 分钟（静默，无需手动操作）
+setInterval(autoRefreshData, 600000);
+setInterval(autoRefreshNews, 300000);
