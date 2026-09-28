@@ -367,7 +367,7 @@ def load_mv_map(spot):
     return mv_map
 
 
-def compute_market_amv(official_dates):
+def compute_market_amv(official_dates, snap_map=None, snap_date=None):
     """逐股递推汇总序列（实测版：相关 0.9983 vs 官方 0AMV）。
     每只股票：A_t = D*A_{t-1} + min(t/1.1,1)*(1-A_{t-1})，D=0.5^(1.25/10)，活跃SZ=流通市值*A。"""
     mv_map = load_mv_map([])
@@ -379,6 +379,8 @@ def compute_market_amv(official_dates):
 
     def process(code, cache):
         rows = cache.get("rows") or []
+        if snap_map:
+            rows = augment_rows(code, rows, snap_map, snap_date)
         mv_now = mv_map.get(code) or 0
         if len(rows) < 60 or not mv_now:
             return
@@ -588,7 +590,8 @@ def refresh_stock_list_sina():
                             "ltsz": float(x.get("nmc") or 0) / 1e4,
                             "mktcap": float(x.get("mktcap") or 0) / 1e4,
                             "amount": float(x.get("amount") or 0),
-                            "turnover": float(x.get("turnoverratio") or 0)})
+                            "turnover": float(x.get("turnoverratio") or 0),
+                            "close": float(x.get("trade") or 0)})
             except (KeyError, ValueError):
                 continue
         with open(os.path.join(BASE, "stock_list.json"), "w", encoding="utf-8") as f:
@@ -598,6 +601,60 @@ def refresh_stock_list_sina():
     except Exception as e:
         print("  sina 快照失败:", str(e)[:100], flush=True)
         return False
+
+
+def get_latest_trade_date():
+    """最新交易日：北京时间推算（收盘 15:05 后才补齐当日；周末回退周五）。"""
+    import datetime
+    now = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
+    if now.hour < 15 or (now.hour == 15 and now.minute < 5):
+        return None  # 未收盘，不补齐当日
+    d = now.date()
+    wd = d.weekday()
+    if wd == 5:
+        d -= datetime.timedelta(days=1)
+    elif wd == 6:
+        d -= datetime.timedelta(days=2)
+    return str(d)
+
+
+def build_snap_map():
+    """快照补齐映射：code -> {date, close, amount, turnover}（当日全市场）。"""
+    snap = {}
+    for p in (os.path.join(DATA_DIR, "stock_list.json"),
+              os.path.join(BASE, "stock_list.json")):
+        if os.path.exists(p):
+            try:
+                with open(p, encoding="utf-8") as f:
+                    lst = json.load(f)
+            except (OSError, ValueError):
+                continue
+            for x in lst:
+                c = x.get("code") or ""
+                if c.startswith(("sh", "sz", "bj")):
+                    c = c[2:]
+                if c and (x.get("amount") or x.get("close")):
+                    snap[c] = x
+            break
+    return snap
+
+
+def augment_rows(code, rows, snap_map, snap_date):
+    """快照补齐：缓存最新日 < 最新交易日时，用快照补当日行（不写盘）。"""
+    if not rows or not snap_date:
+        return rows
+    if rows[-1].get("date") >= snap_date:
+        return rows
+    s = snap_map.get(code)
+    if not s or not s.get("close"):
+        return rows
+    return rows + [{
+        "date": snap_date,
+        "close": s.get("close") or 0.0,
+        "amount": s.get("amount") or 0.0,
+        "volume": None,
+        "turnover": s.get("turnover"),
+    }]
 
 
 def fetch_news():
@@ -632,7 +689,7 @@ def fetch_news():
         return []
 
 
-def compute_picks():
+def compute_picks(snap_map=None, snap_date=None):
     """方向 A：活跃度拐头。A 上穿自身 10 日均线（昨日在均线下，今日站上）。
     同时生成最近 90 个交易日的选股历史（每日 top 30，按活跃SZ）。"""
     mv_map = load_mv_map([])
@@ -669,6 +726,8 @@ def compute_picks():
 
     def analyze(code, cache, mv_now):
         rows = cache.get("rows") or []
+        if snap_map:
+            rows = augment_rows(code, rows, snap_map, snap_date)
         if len(rows) < 70 or not mv_now:
             return
         closes = [k.get("close") or 0.0 for k in rows]
@@ -978,11 +1037,14 @@ def main():
                 fetched += 1
             time.sleep(0.15)
         print(f"  sina kline 更新: {fetched}/{min(500, len(top500))}", flush=True)
-        # 阶段 2：全部 spot 股票用缓存计算递推贡献（chunks 已含全市场）
+        # 阶段 2：全部 spot 股票用缓存计算递推贡献（chunks 已含全市场，快照补齐当日）
+        snap_map = build_snap_map()
+        snap_date = get_latest_trade_date()
         for s in spot:
             kl = load_cache(s["code"])
             if kl:
                 kl = kl.get("rows")
+                kl = augment_rows(s["code"], kl, snap_map, snap_date)
             if kl:
                 amv_r, kdates_r, kseries_r = compute_stock_amv_reg(kl, s.get("float_mv"))
                 if amv_r:
@@ -1047,7 +1109,9 @@ def main():
     # 5) 全市场递推汇总序列（历史序列 + 新算尾部合并）
     if official:
         off_dates = [r["date"] for r in official]
-        mk = compute_market_amv(off_dates)
+        if snap_date and snap_date > off_dates[-1]:
+            off_dates = off_dates + [snap_date]
+        mk = compute_market_amv(off_dates, snap_map, snap_date)
         if mk and mk["date"]:
             om = {r["date"]: r["amv"] for r in official}
             common = [(d, v) for d, v in zip(mk["date"], mk["amv"]) if d in om]
@@ -1076,8 +1140,10 @@ def main():
                 mk["scale"] = round(s, 6)
             result["amv_perstock"] = mk
 
-    # 6) 选股：方向 A 活跃度拐头（当日 + 历史 90 天）
-    picks, hist_raw = compute_picks()
+    # 6) 选股：方向 A 活跃度拐头（当日 + 历史 90 天，快照补齐当日）
+    snap_map = build_snap_map()
+    snap_date = get_latest_trade_date()
+    picks, hist_raw = compute_picks(snap_map, snap_date)
     result["picks"] = picks
     result["picks_history"] = build_picks_history(hist_raw)
     result["picks_updated_at"] = result["updated_at"]
