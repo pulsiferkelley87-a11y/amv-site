@@ -1,0 +1,60 @@
+name: Light Update (hourly)
+
+on:
+  schedule:
+    - cron: '30 * * * *'   # 每小时第 30 分（UTC），与整点快讯错开
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: pip install requests
+
+      - name: Light update (snapshot + top100 kline + recompute)
+        env:
+          TOP_N: '100'
+        run: python scripts/update_cloud.py
+        timeout-minutes: 30
+
+      - name: Commit data
+        run: |
+          git config user.name "amv-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "no changes"
+          else
+            git commit -m "hourly update $(date -u +%F-%H)"
+            for i in 1 2 3 4 5; do
+              if git pull --rebase -X ours --no-edit origin main && git push; then
+                echo "pushed"
+                break
+              fi
+              sleep 5
+            done
+          fi
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
