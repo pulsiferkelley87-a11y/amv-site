@@ -739,7 +739,14 @@ function filterSectorBtns() {
 }
 
 function renderNews() {
-  const news = D.news || [];
+  // 优先独立 news.json（每小时自动更新），失败回退 data.json 的日更快讯
+  fetch("news.json?v=" + new Date().getTime())
+    .then(r => r.json())
+    .then(j => renderNewsList(j.news || [], j.updated_at || ""))
+    .catch(() => renderNewsList(D.news || [], ""));
+}
+
+function renderNewsList(news, updatedAt) {
   const el = document.getElementById("newsList");
   if (!el) return;
   if (!news.length) {
@@ -747,7 +754,7 @@ function renderNews() {
     return;
   }
   const t = document.getElementById("newsTime");
-  if (t) t.textContent = "最新 " + (news[0].time || "");
+  if (t) t.textContent = "更新 " + (updatedAt || news[0].time || "");
   const GOOD = ["利好", "获批", "中标", "涨价", "预增", "超预期", "增长", "突破", "签约", "回购", "增持", "创新高", "提价", "政策"];
   const BAD = ["利空", "处罚", "立案", "亏损", "下滑", "减持", "退市", "违规", "爆雷", "风险", "终止", "下调"];
   let html = "";
