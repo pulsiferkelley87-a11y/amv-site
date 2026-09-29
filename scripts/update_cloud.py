@@ -128,8 +128,9 @@ def fetch_spot():
             except (TypeError, ValueError):
                 ltsz = amt = turn = 0.0
             fallback.append({
-                "code": c, "name": x["name"], "price": None, "pct": None,
-                "volume": None, "amount": amt, "turnover": turn,
+                "code": c, "name": x["name"], "price": None,
+                "pct": float(x.get("pct") or 0), "volume": None,
+                "amount": amt, "turnover": turn,
                 "total_mv": None, "float_mv": ltsz * 1e8,
                 "industry": ind_map.get(c, "—"),
             })
@@ -591,7 +592,8 @@ def refresh_stock_list_sina():
                             "mktcap": float(x.get("mktcap") or 0) / 1e4,
                             "amount": float(x.get("amount") or 0),
                             "turnover": float(x.get("turnoverratio") or 0),
-                            "close": float(x.get("trade") or 0)})
+                            "close": float(x.get("trade") or 0),
+                            "pct": float(x.get("changepercent") or 0)})
             except (KeyError, ValueError):
                 continue
         with open(os.path.join(BASE, "stock_list.json"), "w", encoding="utf-8") as f:
@@ -855,6 +857,7 @@ def compute_concept_boards(stocks_amv, picks):
         return []
     amv_map = {s["code"]: s.get("amv") or 0 for s in stocks_amv}
     amount_map = {s["code"]: s.get("amount") or 0 for s in stocks_amv}
+    pct_map = {s["code"]: s.get("pct") for s in stocks_amv if s.get("pct") is not None}
     pick_codes = {p["code"] for p in picks}
     out = []
     for b in blocks:
@@ -863,6 +866,9 @@ def compute_concept_boards(stocks_amv, picks):
         amt_total = sum(amount_map.get(c, 0) for c in codes)
         covered = sum(1 for c in codes if c in amv_map)
         n_pick = sum(1 for c in codes if c in pick_codes)
+        # 板块实时涨跌：成分股简单平均
+        pcts = [pct_map[c] for c in codes if c in pct_map]
+        avg_pct = round(sum(pcts) / len(pcts), 2) if pcts else None
         if covered < 5:
             continue
         out.append({
@@ -870,7 +876,7 @@ def compute_concept_boards(stocks_amv, picks):
             "type": b.get("type", "概念"),
             "amv": round(amv_total, 2), "amount": amt_total,
             "covered": covered, "total": len(codes),
-            "pick_n": n_pick,
+            "pick_n": n_pick, "pct": avg_pct,
         })
     out.sort(key=lambda x: -x["amv"])
     amv_sum = sum(x["amv"] for x in out) or 1
@@ -887,10 +893,10 @@ def main():
     if not official:
         result["errors"].append("official csv missing")
 
-    # 2) 快照（东财优先，风控时用新浪数据兜底）
+    # 2) 快照（东财优先，风控时用新浪数据兜底；新浪快照始终刷新用于补齐+实时涨跌）
     spot = fetch_spot()
+    refresh_stock_list_sina()
     if len(spot) < 500:
-        refresh_stock_list_sina()
         spot = fetch_spot()
     sectors = fetch_sectors()
     styles = fetch_styles()
@@ -899,6 +905,13 @@ def main():
         spot = []
     if not sectors:
         sectors = []
+
+    def num_any(v):
+        try:
+            f = float(v)
+            return f if f == f else None
+        except (TypeError, ValueError):
+            return None
 
     def num(v):
         try:
@@ -913,7 +926,7 @@ def main():
             s["float_mv"] = num(s.get("float_mv"))
             s["total_mv"] = num(s.get("total_mv"))
             s["turnover"] = num(s.get("turnover"))
-            s["pct"] = num(s.get("pct"))
+            s["pct"] = num_any(s.get("pct"))
             s["price"] = num(s.get("price"))
         valid = [s for s in spot if s.get("amount") and s.get("float_mv")]
         tot_amt = sum(s["amount"] for s in valid) or 1
@@ -943,7 +956,7 @@ def main():
         for s in sectors:
             s["amount"] = num(s.get("amount"))
             s["mv"] = num(s.get("mv"))
-            s["pct"] = num(s.get("pct"))
+            s["pct"] = num_any(s.get("pct"))
             s["turnover"] = num(s.get("turnover"))
         tot_s = sum(s["amount"] for s in sectors if s.get("amount")) or 1
         for s in sectors:
@@ -958,7 +971,7 @@ def main():
     if styles:
         for s in styles:
             s["amount"] = num(s.get("amount"))
-            s["pct"] = num(s.get("pct"))
+            s["pct"] = num_any(s.get("pct"))
             s["turnover"] = num(s.get("turnover"))
         tot_s = sum(s["amount"] for s in styles if s.get("amount")) or 1
         for s in styles:
