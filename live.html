@@ -47,9 +47,13 @@ th { color:var(--muted); font-weight:600; position:sticky; top:0; background:var
 </header>
 <div class="wrap">
   <div class="indices" id="idxBox"></div>
+  <div class="card">
+    <h2>市场情绪</h2>
+    <div id="breadth" style="font-size:13px;"></div>
+  </div>
   <div class="grid">
     <div class="card">
-      <h2>板块实时（通达信口径）</h2>
+      <h2>板块实时（通达信口径）<span id="blkDetail" style="font-size:12px;color:var(--muted);float:right;"></span></h2>
       <div class="tabs">
         <button class="tab active" onclick="setBlkTab('concept')">概念</button>
         <button class="tab" onclick="setBlkTab('style')">风格</button>
@@ -60,7 +64,7 @@ th { color:var(--muted); font-weight:600; position:sticky; top:0; background:var
       <div class="scroll" id="blkList"></div>
     </div>
     <div class="card">
-      <h2>个股实时</h2>
+      <h2>个股实时 <button class="tab" onclick="backToStkList()" style="float:right;">返回全市场</button></h2>
       <div class="tabs">
         <button class="tab active" onclick="setStkTab('up')">涨幅榜</button>
         <button class="tab" onclick="setStkTab('down')">跌幅榜</button>
@@ -76,6 +80,16 @@ th { color:var(--muted); font-weight:600; position:sticky; top:0; background:var
 let LD = null;
 let BLK_TAB = "concept";
 let STK_TAB = "up";
+let MEMBERS = {}; // 板块成分（从 concept_blocks.json 加载）
+
+function loadMembers() {
+  fetch("concept_blocks.json?v=" + new Date().getTime())
+    .then(r => r.json())
+    .then(j => {
+      j.forEach(b => { MEMBERS[b.name] = b.stocks; });
+    })
+    .catch(() => {});
+}
 
 function loadData() {
   fetch("live_data.json?v=" + new Date().getTime())
@@ -84,10 +98,58 @@ function loadData() {
       LD = j;
       document.getElementById("updTime").textContent = "更新 " + (j.updated_at || "");
       renderIndices();
+      renderBreadth();
       renderBlocks();
       renderStocks();
     })
     .catch(() => {});
+}
+
+function renderBreadth() {
+  if (!LD || !LD.breadth) return;
+  const b = LD.breadth;
+  const el = document.getElementById("breadth");
+  const tot = b.total || 1;
+  el.innerHTML =
+    `<span class="up">上涨 <b>${b.up}</b></span> ｜ ` +
+    `<span class="down">下跌 <b>${b.down}</b></span> ｜ ` +
+    `<span class="flat">平盘 ${b.flat}</span> ｜ ` +
+    `<span class="up">涨停 <b>${b.limit_up}</b></span> ｜ ` +
+    `<span class="down">跌停 <b>${b.limit_down}</b></span> ｜ ` +
+    `共 ${b.total} 只`;
+}
+
+function showBlockStocks(name) {
+  if (!LD) return;
+  const codes = new Set(MEMBERS[name] || []);
+  const stocks = (LD.stocks || []).filter(s => {
+    const raw = s.code;
+    const c = (raw.slice(0,2) === "sh" || raw.slice(0,2) === "sz" || raw.slice(0,2) === "bj") ? raw.slice(2) : raw;
+    return codes.has(c);
+  }).sort((a, b) => b.pct - a.pct);
+  const el = document.getElementById("stkList");
+  document.getElementById("blkDetail").textContent = `正在看：${name}（${stocks.length} 只）`;
+  if (!stocks.length) {
+    el.innerHTML = "<p style='color:var(--muted);'>该板块成分数据加载中或为空。</p>";
+    return;
+  }
+  let html = `<table><thead><tr><th>代码</th><th>名称</th><th>现价</th><th>涨跌幅</th><th>成交额(亿)</th><th>换手率</th></tr></thead><tbody>`;
+  stocks.slice(0, 100).forEach(s => {
+    const cls = s.pct >= 0 ? "up" : "down";
+    const sign = s.pct >= 0 ? "+" : "";
+    html += `<tr><td>${s.code}</td><td>${s.name}</td>
+      <td>${s.price.toFixed(2)}</td>
+      <td class="${cls}">${sign}${s.pct.toFixed(2)}%</td>
+      <td>${(s.amount/1e8).toFixed(1)}</td>
+      <td>${s.turnover.toFixed(2)}%</td></tr>`;
+  });
+  html += "</tbody></table>";
+  el.innerHTML = html;
+}
+
+function backToStkList() {
+  document.getElementById("blkDetail").textContent = "";
+  renderStocks();
 }
 
 function renderIndices() {
@@ -116,7 +178,7 @@ function renderBlocks() {
   rows.forEach(b => {
     const cls = b.pct >= 0 ? "up" : "down";
     const sign = b.pct >= 0 ? "+" : "";
-    html += `<tr><td>${b.name}</td><td>${b.code}</td>
+    html += `<tr style="cursor:pointer;" onclick="showBlockStocks('${b.name.replace(/'/g, "\\'")}')"><td>${b.name}</td><td>${b.code}</td>
       <td class="${cls}">${sign}${b.pct.toFixed(2)}%</td>
       <td>${(b.amount/1e8).toFixed(1)}</td><td>${b.n}/${b.total}</td></tr>`;
   });
@@ -167,6 +229,7 @@ function setStkTab(t) {
   renderStocks();
 }
 
+loadMembers();
 loadData();
 setInterval(loadData, 60000); // 每 60 秒自动刷新
 </script>
