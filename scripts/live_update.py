@@ -126,15 +126,27 @@ def main():
     indices = fetch_indices()
     stocks = fetch_spot()
     blocks = aggregate_blocks(stocks)
+    # 市场情绪：涨跌家数/涨跌停
+    ups = sum(1 for s in stocks if s["pct"] > 0)
+    downs = sum(1 for s in stocks if s["pct"] < 0)
+    flats = len(stocks) - ups - downs
+    limit_up = sum(1 for s in stocks if s["pct"] >= 9.9)
+    limit_down = sum(1 for s in stocks if s["pct"] <= -9.9)
+    breadth = {
+        "up": ups, "down": downs, "flat": flats,
+        "limit_up": limit_up, "limit_down": limit_down,
+        "total": len(stocks),
+    }
     payload = {
         "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         "indices": indices,
+        "breadth": breadth,
         "stocks": stocks,
         "blocks": blocks,
     }
     with open("live_data.json", "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False)
-    print(f"live: indices {len(indices)}, stocks {len(stocks)}, blocks {len(blocks)}")
+    print(f"live: indices {len(indices)}, stocks {len(stocks)}, blocks {len(blocks)}, breadth {breadth}")
     return 0
 
 
