@@ -548,7 +548,8 @@ function renderConceptBtns(secs) {
   secs.forEach(s => {
     const b = document.createElement("button");
     b.className = "sectorBtn";
-    b.textContent = `${s.name} ${s.amv_pct}%` + (s.pick_n ? `·拐${s.pick_n}` : "");
+    const pctTxt = s.pct == null ? "" : (s.pct >= 0 ? " ▲" : " ▼") + Math.abs(s.pct).toFixed(2) + "%";
+    b.innerHTML = `${s.name} <span style="color:${s.pct >= 0 ? "#d64545" : "#2fa36b"};">${pctTxt}</span> ${s.amv_pct}%` + (s.pick_n ? `·拐${s.pick_n}` : "");
     b.onclick = () => showConceptStocks(s.name);
     btnBox.appendChild(b);
   });
@@ -574,11 +575,15 @@ function showConceptStocks(name) {
   const fmt = (v, d = 1) =>
     v == null ? "—" : Number(v).toLocaleString("zh-CN", { maximumFractionDigits: d });
   let html = `<table><thead><tr>
-    <th>#</th><th>代码</th><th>名称</th><th>行业</th><th>活跃SZ(亿)</th><th>板块内占比</th>
+    <th>#</th><th>代码</th><th>名称</th><th>行业</th><th>涨跌幅</th><th>活跃SZ(亿)</th><th>板块内占比</th>
     <th>成交额(亿)</th><th>换手率</th></tr></thead><tbody>`;
   sorted.forEach((s, i) => {
+    const pct = s.pct == null ? null : Number(s.pct);
+    const pctCls = pct == null ? "" : (pct >= 0 ? "up" : "down");
+    const pctTxt = pct == null ? "—" : (pct >= 0 ? "+" : "") + fmt(pct, 2) + "%";
     html += `<tr>
       <td>${i + 1}</td><td>${s.code}</td><td>${s.name}</td><td>${s.industry || "—"}</td>
+      <td class="${pctCls}">${pctTxt}</td>
       <td>${fmt((s.amv || 0) / 1e8, 1)}</td>
       <td>${fmt((s.amv || 0) / total * 100, 2)}%</td>
       <td>${fmt((s.amount || 0) / 1e8, 1)}</td>
