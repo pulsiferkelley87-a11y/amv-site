@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>实盘监测 · 活跃市值</title>
+<style>
+:root { --bg:#f5f6f8; --card:#fff; --text:#1a1d24; --muted:#6b7280;
+        --red:#d64545; --green:#2fa36b; --blue:#3b6fe0; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:"Microsoft YaHei","PingFang SC",sans-serif; }
+header { padding:14px 24px; background:var(--card); border-bottom:1px solid #e5e7eb;
+         display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+header h1 { font-size:18px; }
+header .back { font-size:13px; color:var(--blue); text-decoration:none; }
+header .time { font-size:12px; color:var(--muted); margin-left:auto; }
+.wrap { max-width:1200px; margin:0 auto; padding:14px; }
+.indices { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:14px; }
+.idx { background:var(--card); border-radius:10px; padding:12px 16px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+.idx .n { font-size:13px; color:var(--muted); }
+.idx .p { font-size:22px; font-weight:700; margin:4px 0; }
+.idx .c { font-size:14px; font-weight:600; }
+.grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+@media (max-width:900px){ .grid{grid-template-columns:1fr;} .indices{grid-template-columns:1fr 1fr;} }
+.card { background:var(--card); border-radius:10px; padding:12px 14px; box-shadow:0 1px 3px rgba(0,0,0,.06); margin-bottom:14px; }
+.card h2 { font-size:14px; margin-bottom:8px; }
+.tabs { display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap; }
+.tab { padding:2px 12px; border:1px solid #d1d5db; border-radius:5px; background:#fff;
+       cursor:pointer; font-size:12px; color:#374151; }
+.tab.active { background:var(--blue); color:#fff; border-color:var(--blue); }
+table { width:100%; border-collapse:collapse; font-size:12.5px; }
+th,td { padding:4px 8px; text-align:right; border-bottom:1px solid #eef0f3; }
+th:first-child,td:first-child { text-align:left; }
+th { color:var(--muted); font-weight:600; position:sticky; top:0; background:var(--card); }
+.up { color:var(--red); } .down { color:var(--green); }
+.scroll { max-height:560px; overflow-y:auto; }
+.search { padding:4px 10px; border:1px solid #d1d5db; border-radius:5px; width:180px; font-size:13px; }
+.flat { color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>实盘监测</h1>
+  <a class="back" href="index.html">← 返回研究主页</a>
+  <span class="time" id="updTime">加载中…</span>
+</header>
+<div class="wrap">
+  <div class="indices" id="idxBox"></div>
+  <div class="grid">
+    <div class="card">
+      <h2>板块实时（通达信口径）</h2>
+      <div class="tabs">
+        <button class="tab active" onclick="setBlkTab('concept')">概念</button>
+        <button class="tab" onclick="setBlkTab('style')">风格</button>
+        <button class="tab" onclick="setBlkTab('up')">领涨</button>
+        <button class="tab" onclick="setBlkTab('down')">领跌</button>
+        <input class="search" id="blkSearch" placeholder="搜索板块…" oninput="renderBlocks()">
+      </div>
+      <div class="scroll" id="blkList"></div>
+    </div>
+    <div class="card">
+      <h2>个股实时</h2>
+      <div class="tabs">
+        <button class="tab active" onclick="setStkTab('up')">涨幅榜</button>
+        <button class="tab" onclick="setStkTab('down')">跌幅榜</button>
+        <button class="tab" onclick="setStkTab('amount')">成交额榜</button>
+        <button class="tab" onclick="setStkTab('turnover')">换手榜</button>
+        <input class="search" id="stkSearch" placeholder="代码/名称…" oninput="renderStocks()">
+      </div>
+      <div class="scroll" id="stkList"></div>
+    </div>
+  </div>
+</div>
+<script>
+let LD = null;
+let BLK_TAB = "concept";
+let STK_TAB = "up";
+
+function loadData() {
+  fetch("live_data.json?v=" + new Date().getTime())
+    .then(r => r.json())
+    .then(j => {
+      LD = j;
+      document.getElementById("updTime").textContent = "更新 " + (j.updated_at || "");
+      renderIndices();
+      renderBlocks();
+      renderStocks();
+    })
+    .catch(() => {});
+}
+
+function renderIndices() {
+  if (!LD) return;
+  const box = document.getElementById("idxBox");
+  box.innerHTML = (LD.indices || []).map(i => {
+    const cls = i.pct >= 0 ? "up" : "down";
+    const sign = i.pct >= 0 ? "+" : "";
+    return `<div class="idx"><div class="n">${i.name}</div>
+      <div class="p ${cls}">${i.price.toFixed(2)}</div>
+      <div class="c ${cls}">${sign}${i.pct.toFixed(2)}%</div></div>`;
+  }).join("");
+}
+
+function renderBlocks() {
+  if (!LD) return;
+  const kw = document.getElementById("blkSearch").value;
+  let list = (LD.blocks || []).filter(b => b.name.includes(kw));
+  if (BLK_TAB === "concept") list = list.filter(b => b.type === "概念");
+  else if (BLK_TAB === "style") list = list.filter(b => b.type === "风格");
+  else if (BLK_TAB === "up") list = list.slice().sort((a,b) => b.pct - a.pct).slice(0, 50);
+  else if (BLK_TAB === "down") list = list.slice().sort((a,b) => a.pct - b.pct).slice(0, 50);
+  if (BLK_TAB === "concept" || BLK_TAB === "style") list = list.slice().sort((a,b) => b.pct - a.pct);
+  const rows = list.slice(0, 80);
+  let html = `<table><thead><tr><th>板块</th><th>代码</th><th>涨跌幅</th><th>成交额(亿)</th><th>成分</th></tr></thead><tbody>`;
+  rows.forEach(b => {
+    const cls = b.pct >= 0 ? "up" : "down";
+    const sign = b.pct >= 0 ? "+" : "";
+    html += `<tr><td>${b.name}</td><td>${b.code}</td>
+      <td class="${cls}">${sign}${b.pct.toFixed(2)}%</td>
+      <td>${(b.amount/1e8).toFixed(1)}</td><td>${b.n}/${b.total}</td></tr>`;
+  });
+  html += "</tbody></table>";
+  document.getElementById("blkList").innerHTML = html;
+}
+
+function renderStocks() {
+  if (!LD) return;
+  const kw = document.getElementById("stkSearch").value.trim();
+  let list = (LD.stocks || []).filter(s =>
+    !kw || s.code.includes(kw) || s.name.includes(kw));
+  if (STK_TAB === "up") list = list.slice().sort((a,b) => b.pct - a.pct).slice(0, 80);
+  else if (STK_TAB === "down") list = list.slice().sort((a,b) => a.pct - b.pct).slice(0, 80);
+  else if (STK_TAB === "amount") list = list.slice().sort((a,b) => b.amount - a.amount).slice(0, 80);
+  else if (STK_TAB === "turnover") list = list.slice().sort((a,b) => b.turnover - a.turnover).slice(0, 80);
+  let html = `<table><thead><tr><th>代码</th><th>名称</th><th>现价</th><th>涨跌幅</th><th>成交额(亿)</th><th>换手率</th><th>流通市值(亿)</th></tr></thead><tbody>`;
+  list.forEach(s => {
+    const cls = s.pct >= 0 ? "up" : "down";
+    const sign = s.pct >= 0 ? "+" : "";
+    html += `<tr><td>${s.code}</td><td>${s.name}</td>
+      <td>${s.price.toFixed(2)}</td>
+      <td class="${cls}">${sign}${s.pct.toFixed(2)}%</td>
+      <td>${(s.amount/1e8).toFixed(1)}</td>
+      <td>${s.turnover.toFixed(2)}%</td>
+      <td>${(s.float_mv/1e4).toFixed(0)}</td></tr>`;
+  });
+  html += "</tbody></table>";
+  document.getElementById("stkList").innerHTML = html;
+}
+
+function setBlkTab(t) {
+  BLK_TAB = t;
+  document.querySelectorAll("#blkList").forEach(()=>{});
+  const btns = document.querySelectorAll(".card .tabs .tab");
+  renderBlocks();
+  // 高亮当前 tab（简单处理：全部重画）
+  const allTabs = document.querySelectorAll(".tab");
+  allTabs.forEach(b => b.classList.remove("active"));
+  event && event.target && event.target.classList.add("active");
+}
+
+function setStkTab(t) {
+  STK_TAB = t;
+  const allTabs = document.querySelectorAll(".tab");
+  allTabs.forEach(b => b.classList.remove("active"));
+  if (event && event.target) event.target.classList.add("active");
+  renderStocks();
+}
+
+loadData();
+setInterval(loadData, 60000); // 每 60 秒自动刷新
+</script>
+</body>
+</html>
