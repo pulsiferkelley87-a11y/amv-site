@@ -82,7 +82,7 @@ def fetch_spot():
         elif not got:
             time.sleep(1.5)
             continue
-        time.sleep(0.35)
+        time.sleep(0.15)
     out = []
     for x in rows:
         try:
