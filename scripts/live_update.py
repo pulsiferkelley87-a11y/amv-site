@@ -38,11 +38,16 @@ def fetch_indices():
                 continue
             name = parts[1]
             price = parts[3]
-            pct = parts[32] if len(parts) > 32 else "0"
+            # 腾讯指数接口已改 12 字段精简版：4=涨跌额，5=涨跌幅，9=成交额(万)
+            pct = parts[5] if len(parts) > 5 else "0"
+            chg = parts[4] if len(parts) > 4 else "0"
+            amt = float(parts[9]) * 10000 if len(parts) > 9 and parts[9] else 0
             out.append({
                 "name": name,
                 "price": float(price) if price else 0,
                 "pct": float(pct) if pct else 0,
+                "chg": float(chg) if chg else 0,
+                "amount": amt,
             })
     except Exception as e:
         print("indices err:", str(e)[:80])
