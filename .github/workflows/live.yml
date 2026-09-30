@@ -49,6 +49,15 @@ jobs:
                 sleep 4
               done
             fi
+            # 收盘后（UTC>=8h）若主页数据停留在昨天 → 触发 daily 全量
+            if [ "$(date -u +%H)" -ge "8" ] && ! python scripts/check_daily_stale.py; then
+              curl -s -X POST \
+                -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github+json" \
+                https://api.github.com/repos/${{ github.repository }}/actions/workflows/daily.yml/dispatches \
+                -d '{"ref":"main"}'
+              echo "daily stale -> dispatched"
+            fi
             # 每分钟 dispatch 部署（deploy.yml 用 cancel-in-progress 只留最新）
             curl -s -X POST \
               -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
