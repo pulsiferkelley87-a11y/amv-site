@@ -48,10 +48,18 @@ th { color:var(--muted); font-weight:600; position:sticky; top:0; background:var
 <div class="wrap">
   <div class="indices" id="idxBox"></div>
   <div class="card">
+    <h2>指数分时（当日）</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;" id="minBox"></div>
+  </div>
+  <div class="card">
     <h2>市场情绪</h2>
     <div id="breadth" style="font-size:13px;"></div>
   </div>
   <div class="grid">
+    <div class="card">
+      <h2>涨停池（今日）<span id="limitCnt" style="font-size:12px;color:var(--muted);"></span></h2>
+      <div class="scroll" id="limitList" style="max-height:420px;"></div>
+    </div>
     <div class="card">
       <h2>板块实时（通达信口径）<span id="blkDetail" style="font-size:12px;color:var(--muted);float:right;"></span></h2>
       <div class="tabs">
@@ -106,6 +114,8 @@ function loadData() {
       document.getElementById("updTime").innerHTML = t;
       renderIndices();
       renderBreadth();
+      renderMinutes();
+      renderLimits();
       renderBlocks();
       renderStocks();
     })
@@ -126,7 +136,63 @@ function renderBreadth() {
     `<span class="flat">平盘 ${b.flat}</span> ｜ ` +
     `<span class="up">涨停 <b>${b.limit_up}</b></span> ｜ ` +
     `<span class="down">跌停 <b>${b.limit_down}</b></span> ｜ ` +
+    `<span>总成交 <b>${((b.amount_sum || 0) / 1e4).toFixed(2)}</b> 万亿</span> ｜ ` +
     `共 ${b.total} 只`;
+}
+
+function minuteSVG(pts, color) {
+  if (!pts || pts.length < 2) return "";
+  const W = 240, H = 110, P = 4;
+  const px = pts.map(p => p[1]);
+  const mn = Math.min.apply(null, px), mx = Math.max.apply(null, px);
+  const rg = (mx - mn) || 1;
+  const step = (W - P * 2) / (pts.length - 1);
+  let d = "";
+  pts.forEach((p, i) => {
+    const x = P + i * step;
+    const y = P + (1 - (p[1] - mn) / rg) * (H - P * 2);
+    d += (i ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1);
+  });
+  const last = pts[pts.length - 1], first = pts[0];
+  return `<svg width="${W}" height="${H + 16}" style="background:#fafbfc;border:1px solid #e5e7eb;border-radius:8px;">
+    <path d="${d}" fill="none" stroke="${color}" stroke-width="1.4"/>
+    <text x="4" y="10" font-size="9" fill="#6b7280">${first[0]}</text>
+    <text x="${W - 30}" y="10" font-size="9" fill="#6b7280">${last[0]}</text>
+    <text x="4" y="${H + 14}" font-size="9" fill="#6b7280">${first[1]}</text>
+    <text x="${W - 60}" y="${H + 14}" font-size="9" fill="#6b7280">${last[1]}</text>
+  </svg>`;
+}
+
+function renderMinutes() {
+  if (!LD || !LD.minutes) return;
+  const names = { s_sh000001: "上证", s_sz399001: "深成", s_sz399006: "创业板", s_sh000688: "科创50" };
+  let html = "";
+  Object.keys(names).forEach(k => {
+    const pts = LD.minutes[k];
+    if (!pts || !pts.length) return;
+    const up = pts[pts.length - 1][1] >= pts[0][1];
+    const c = up ? "#d64545" : "#2fa36b";
+    const chg = ((pts[pts.length - 1][1] / pts[0][1] - 1) * 100).toFixed(2);
+    html += `<div style="min-width:240px;"><div style="font-size:12px;margin-bottom:2px;">${names[k]} <b style="color:${c};">${chg > 0 ? "+" : ""}${chg}%</b></div>${minuteSVG(pts, c)}</div>`;
+  });
+  document.getElementById("minBox").innerHTML = html;
+}
+
+function renderLimits() {
+  if (!LD || !LD.limit_up_list) return;
+  const arr = LD.limit_up_list || [];
+  document.getElementById("limitCnt").textContent = `（${arr.length} 只）`;
+  let html = `<table><thead><tr><th>代码</th><th>名称</th><th>现价</th><th>涨幅</th><th>成交额(亿)</th><th>换手</th><th>流通市值(亿)</th></tr></thead><tbody>`;
+  arr.forEach(s => {
+    html += `<tr><td>${s.code}</td><td>${s.name}</td>
+      <td>${s.price.toFixed(2)}</td>
+      <td class="up">+${s.pct.toFixed(2)}%</td>
+      <td>${s.amount}</td>
+      <td>${s.turnover.toFixed(2)}%</td>
+      <td>${s.float_mv}</td></tr>`;
+  });
+  html += "</tbody></table>";
+  document.getElementById("limitList").innerHTML = html;
 }
 
 function showBlockStocks(name) {
