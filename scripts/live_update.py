@@ -55,25 +55,34 @@ def fetch_indices():
 
 
 def fetch_spot():
-    """新浪全市场快照（实时）。"""
+    """新浪全市场快照（实时）。慢速分页 + 每页重试，避免限流截断。"""
     rows = []
     for page in range(1, 60):
-        try:
-            r = session.get(
-                "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData",
-                params={"page": page, "num": 100, "sort": "symbol", "asc": 1, "node": "hs_a"},
-                timeout=20)
-            if r.status_code != 200 or not r.text.startswith("["):
-                break
-            j = json.loads(r.text)
-            if not j:
-                break
-            rows.extend(j)
-            if len(j) < 100:
-                break
-            time.sleep(0.2)
-        except Exception:
-            break
+        got = False
+        for attempt in range(4):
+            try:
+                r = session.get(
+                    "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData",
+                    params={"page": page, "num": 100, "sort": "symbol", "asc": 1, "node": "hs_a"},
+                    timeout=20)
+                if r.status_code == 200 and r.text.startswith("["):
+                    j = json.loads(r.text)
+                    if j:
+                        rows.extend(j)
+                        got = True
+                        if len(j) < 100:
+                            break
+                        break
+            except Exception:
+                pass
+            time.sleep(0.6)
+        if not got and page <= 3:
+            # 首页拿不到直接报；后面页面若限流，休息更久再试
+            time.sleep(2)
+        elif not got:
+            time.sleep(1.5)
+            continue
+        time.sleep(0.35)
     out = []
     for x in rows:
         try:
