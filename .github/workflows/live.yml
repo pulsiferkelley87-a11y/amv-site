@@ -2,7 +2,7 @@ name: Live Snapshot (5min)
 
 on:
   schedule:
-    - cron: '*/5 * * * *'   # 每 5 分钟
+    - cron: '3,18,33,48 * * * *'   # 每 15 分钟（GitHub 对 */5 高频调度会降频）
   workflow_dispatch: {}
 
 permissions:
