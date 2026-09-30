@@ -49,15 +49,13 @@ jobs:
                 sleep 4
               done
             fi
-            # 每 3 分钟 dispatch 一次部署（部署 ~1.5min，不积压）
-            if [ $((i % 3)) -eq 0 ]; then
-              curl -s -X POST \
-                -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-                -H "Accept: application/vnd.github+json" \
-                https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy.yml/dispatches \
-                -d '{"ref":"main"}'
-              echo "deploy dispatched"
-            fi
+            # 每分钟 dispatch 部署（deploy.yml 用 cancel-in-progress 只留最新）
+            curl -s -X POST \
+              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy.yml/dispatches \
+              -d '{"ref":"main"}'
+            echo "deploy dispatched"
             sleep 26
           done
 
