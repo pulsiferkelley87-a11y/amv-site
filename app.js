@@ -277,7 +277,7 @@ function renderMeta() {
       ? "本地 CSV 底表（指南针运行时缓存被锁）"
       : "上次 JSON";
   document.getElementById("meta").innerHTML =
-    `数据更新：${D.updated_at} ｜ 官方序列来源：${src} ｜ 最新交易日 ${o.date[last]} ` +
+    `<span id="metaTime">数据更新：${D.updated_at}</span> ｜ 官方序列来源：${src} ｜ 最新交易日 ${o.date[last]} ` +
     `0AMV <b>${amv.toLocaleString("zh-CN", { maximumFractionDigits: 1 })}</b> ` +
     `(<span class="${cls}">${chg >= 0 ? "+" : ""}${chg}%</span>) ` +
     `活跃比例 <b>${(r * 100).toFixed(2)}%</b> ` +
@@ -285,6 +285,24 @@ function renderMeta() {
       ? `｜ 全市场成交额 ${(D.market_totals.amount / 1e12).toFixed(2)} 万亿`
       : "") +
     (D.errors.length ? ` ｜ <span class="down">${D.errors.join("；")}</span>` : "");
+  markStale(D.updated_at);
+}
+
+function markStale(updatedAt) {
+  const el = document.getElementById("metaTime");
+  if (!el || !updatedAt) return;
+  const t = new Date(String(updatedAt).replace(" ", "T")).getTime();
+  if (!isNaN(t)) {
+    const mins = Math.max(0, Math.round((Date.now() - t) / 60000));
+    if (mins > 90) {
+      el.style.color = "#c0392b";
+      el.style.fontWeight = "bold";
+      el.innerHTML = `数据更新：${updatedAt}（已滞后 ${Math.floor(mins / 60)} 小时${mins % 60} 分，云端任务可能未跑）`;
+    } else if (mins > 20) {
+      el.style.color = "#b9770e";
+      el.innerHTML = `数据更新：${updatedAt}（${mins} 分钟前）`;
+    }
+  }
 }
 
 function baseOption() {
