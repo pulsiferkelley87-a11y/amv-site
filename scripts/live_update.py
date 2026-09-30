@@ -136,6 +136,29 @@ def aggregate_blocks(stocks):
     return out
 
 
+def fetch_minutes(code):
+    """腾讯指数当日分时（1分钟）。"""
+    try:
+        s = requests.Session()
+        s.headers.update({"User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/"})
+        r = s.get(f"https://web.ifzq.gtimg.cn/appstock/app/minute/query?code={code}", timeout=15)
+        j = r.json()
+        node = j.get("data", {}).get(code, {})
+        rows = node.get("data", {}).get("data", []) or []
+        # 每行: "0930 3839.25 量 累计额"（空格分隔字符串）
+        pts = []
+        for row in rows:
+            if isinstance(row, str):
+                parts = row.split()
+                if len(parts) >= 2:
+                    pts.append([parts[0], round(float(parts[1]), 2)])
+            else:
+                pts.append([str(row[0]), round(float(row[1]), 2)])
+        return pts
+    except Exception:
+        return []
+
+
 def main():
     indices = fetch_indices()
     stocks = fetch_spot()
@@ -144,21 +167,38 @@ def main():
         print(f"live: 残缺数据 {len(stocks)} 只，丢弃本轮")
         return 1
     blocks = aggregate_blocks(stocks)
-    # 市场情绪：涨跌家数/涨跌停
+    # 市场情绪：涨跌家数/涨跌停/总成交额
     ups = sum(1 for s in stocks if s["pct"] > 0)
     downs = sum(1 for s in stocks if s["pct"] < 0)
     flats = len(stocks) - ups - downs
     limit_up = sum(1 for s in stocks if s["pct"] >= 9.9)
     limit_down = sum(1 for s in stocks if s["pct"] <= -9.9)
+    amount_sum = sum(s["amount"] for s in stocks)
     breadth = {
         "up": ups, "down": downs, "flat": flats,
         "limit_up": limit_up, "limit_down": limit_down,
-        "total": len(stocks),
+        "total": len(stocks), "amount_sum": round(amount_sum, 2),
     }
+    # 涨停池（涨幅 >= 9.9 排序）
+    limit_up_list = sorted(
+        [{"code": s["code"], "name": s["name"], "pct": s["pct"],
+          "price": s["price"], "amount": round(s["amount"] / 1e8, 1),
+          "turnover": s["turnover"], "float_mv": round(s["float_mv"] / 1e8, 1)}
+         for s in stocks if s["pct"] >= 9.9],
+        key=lambda x: -x["pct"])
+    # 指数分时（4 个）
+    minutes = {}
+    for code, _ in INDICES:
+        raw_code = code[2:] if code.startswith("s_") else code
+        pts = fetch_minutes(raw_code)
+        if pts:
+            minutes[code] = pts
     payload = {
         "updated_at": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(time.time() + 8 * 3600)),
         "indices": indices,
         "breadth": breadth,
+        "limit_up_list": limit_up_list,
+        "minutes": minutes,
         "stocks": stocks,
         "blocks": blocks,
     }
