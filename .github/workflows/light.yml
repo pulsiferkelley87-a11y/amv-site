@@ -3,6 +3,7 @@ name: Light Update (hourly)
 on:
   schedule:
     - cron: '30 * * * *'   # 每小时第 30 分（UTC），与整点快讯错开
+    - cron: '50 * * * *'   # 每小时第 50 分兑底（GitHub 调度常漏）
   workflow_dispatch: {}
 
 permissions:
