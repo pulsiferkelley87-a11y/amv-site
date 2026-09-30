@@ -139,6 +139,10 @@ def aggregate_blocks(stocks):
 def main():
     indices = fetch_indices()
     stocks = fetch_spot()
+    if len(stocks) < 3000:
+        # 新浪限流/残缺数据：丢弃本轮，不覆盖线上好数据
+        print(f"live: 残缺数据 {len(stocks)} 只，丢弃本轮")
+        return 1
     blocks = aggregate_blocks(stocks)
     # 市场情绪：涨跌家数/涨跌停
     ups = sum(1 for s in stocks if s["pct"] > 0)
@@ -152,7 +156,7 @@ def main():
         "total": len(stocks),
     }
     payload = {
-        "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "updated_at": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(time.time() + 8 * 3600)),
         "indices": indices,
         "breadth": breadth,
         "stocks": stocks,
