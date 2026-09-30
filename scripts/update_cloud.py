@@ -8,7 +8,7 @@
 import json
 import os
 import time
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 import requests
 
@@ -886,7 +886,9 @@ def compute_concept_boards(stocks_amv, picks):
 
 
 def main():
-    result = {"updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "errors": []}
+    # 北京时间（云端 runner 是 UTC，需 +8）
+    bj = datetime.utcnow() + timedelta(hours=8)
+    result = {"updated_at": bj.strftime("%Y-%m-%d %H:%M:%S"), "errors": []}
 
     # 1) 官方序列
     official = load_official()
