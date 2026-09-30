@@ -1,8 +1,8 @@
-name: Live Snapshot (1min loop)
+name: Live Snapshot (loop)
 
 on:
   schedule:
-    - cron: '4 * * * *'   # 每小时第4分触发，run 内循环 ~55 分钟
+    - cron: '2,17,32,47 * * * *'   # 每15分钟一个 cron 点，run 内循环 ~12 分钟；挂掉最多 15 分钟自动重启
   workflow_dispatch: {}
 
 permissions:
@@ -13,12 +13,12 @@ permissions:
 
 concurrency:
   group: live-loop
-  cancel-in-progress: false
+  cancel-in-progress: true   # 新 run 立即接管，不排队积压
 
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 14
     steps:
       - uses: actions/checkout@v4
 
@@ -33,16 +33,16 @@ jobs:
         run: |
           git config user.name "amv-bot"
           git config user.email "bot@users.noreply.github.com"
-          for i in $(seq 1 50); do
+          for i in $(seq 1 11); do
             echo "--- round $i $(date -u +%H:%M:%S) ---"
-            python scripts/live_update.py || echo "fetch fail (round $i)"
+            python scripts/live_update.py || echo "fetch fail or partial (round $i)"
             git add live_data.json
             if git diff --cached --quiet; then
               echo "no changes"
             else
               git commit -m "live update $(date -u +%F-%H%M%S)"
-              for t in 1 2 3 4 5; do
-                if git pull --rebase -X ours --no-edit origin main && git push; then
+              for t in 1 2 3; do
+                if timeout 60 git pull --rebase -X ours --no-edit origin main && timeout 60 git push; then
                   echo "pushed"
                   break
                 fi
@@ -56,17 +56,5 @@ jobs:
               https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy.yml/dispatches \
               -d '{"ref":"main"}'
             echo "deploy dispatched"
-            sleep 26
+            sleep 42
           done
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: '.'
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
