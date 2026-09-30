@@ -1,8 +1,8 @@
-name: Live Snapshot (5min)
+name: Live Snapshot (1min loop)
 
 on:
   schedule:
-    - cron: '3,18,33,48 * * * *'   # 每 15 分钟（GitHub 对 */5 高频调度会降频）
+    - cron: '4 * * * *'   # 每小时第4分触发，run 内循环 ~55 分钟
   workflow_dispatch: {}
 
 permissions:
@@ -10,9 +10,14 @@ permissions:
   pages: write
   id-token: write
 
+concurrency:
+  group: live-loop
+  cancel-in-progress: false
+
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
 
@@ -23,27 +28,28 @@ jobs:
       - name: Install deps
         run: pip install requests
 
-      - name: Fetch live snapshot
-        run: python scripts/live_update.py
-        timeout-minutes: 8
-
-      - name: Commit live data
+      - name: Loop fetch & push (per minute)
         run: |
           git config user.name "amv-bot"
           git config user.email "bot@users.noreply.github.com"
-          git add live_data.json
-          if git diff --cached --quiet; then
-            echo "no changes"
-          else
-            git commit -m "live update $(date -u +%F-%H%M)"
-            for i in 1 2 3 4 5; do
-              if git pull --rebase -X ours --no-edit origin main && git push; then
-                echo "pushed"
-                break
-              fi
-              sleep 5
-            done
-          fi
+          for i in $(seq 1 50); do
+            echo "--- round $i $(date -u +%H:%M:%S) ---"
+            python scripts/live_update.py || echo "fetch fail (round $i)"
+            git add live_data.json
+            if git diff --cached --quiet; then
+              echo "no changes"
+            else
+              git commit -m "live update $(date -u +%F-%H%M%S)"
+              for t in 1 2 3 4 5; do
+                if git pull --rebase -X ours --no-edit origin main && git push; then
+                  echo "pushed"
+                  break
+                fi
+                sleep 4
+              done
+            fi
+            sleep 26
+          done
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
