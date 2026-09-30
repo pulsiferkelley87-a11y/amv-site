@@ -92,7 +92,8 @@ function loadMembers() {
 }
 
 function loadData() {
-  fetch("live_data.json?v=" + new Date().getTime())
+  // 直读 GitHub raw：commit 即生效（1 分钟级），不走 Pages 部署
+  fetch("https://raw.githubusercontent.com/pulsiferkelley87-a11y/amv-site/main/live_data.json?t=" + new Date().getTime())
     .then(r => r.json())
     .then(j => {
       LD = j;
