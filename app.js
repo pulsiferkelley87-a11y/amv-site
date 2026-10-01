@@ -292,16 +292,29 @@ function markStale(updatedAt) {
   const el = document.getElementById("metaTime");
   if (!el || !updatedAt) return;
   const t = new Date(String(updatedAt).replace(" ", "T")).getTime();
-  if (!isNaN(t)) {
-    const mins = Math.max(0, Math.round((Date.now() - t) / 60000));
-    if (mins > 90) {
-      el.style.color = "#c0392b";
-      el.style.fontWeight = "bold";
-      el.innerHTML = `数据更新：${updatedAt}（已滞后 ${Math.floor(mins / 60)} 小时${mins % 60} 分，云端任务可能未跑）`;
-    } else if (mins > 20) {
-      el.style.color = "#b9770e";
-      el.innerHTML = `数据更新：${updatedAt}（${mins} 分钟前）`;
+  if (isNaN(t)) return;
+  // 数据已覆盖最新交易日 → 不是过期（休市期间数据不更新属正常）
+  const lastTrade = (D && D.official && D.official.date && D.official.date.length)
+    ? D.official.date[D.official.date.length - 1] : "";
+  const updDay = String(updatedAt).slice(0, 10);
+  if (lastTrade && updDay >= lastTrade) {
+    const now = new Date();
+    const todayLocal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    el.style.color = "";
+    el.style.fontWeight = "";
+    if (todayLocal > lastTrade) {
+      el.innerHTML = `数据更新：${updatedAt}（已含最新交易日 ${lastTrade}，休市中数据不会变）`;
     }
+    return;
+  }
+  const mins = Math.max(0, Math.round((Date.now() - t) / 60000));
+  if (mins > 90) {
+    el.style.color = "#c0392b";
+    el.style.fontWeight = "bold";
+    el.innerHTML = `数据更新：${updatedAt}（已滞后 ${Math.floor(mins / 60)} 小时${mins % 60} 分，云端任务可能未跑）`;
+  } else if (mins > 20) {
+    el.style.color = "#b9770e";
+    el.innerHTML = `数据更新：${updatedAt}（${mins} 分钟前）`;
   }
 }
 
