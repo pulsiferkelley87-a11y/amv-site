@@ -24,9 +24,9 @@ jobs:
       - name: Install deps
         run: pip install requests
 
-      - name: Light update (snapshot + top100 kline + recompute)
+      - name: Light update (snapshot + top300 kline + recompute)
         env:
-          TOP_N: '100'
+          TOP_N: '300'
         run: python scripts/update_cloud.py
         timeout-minutes: 30
 
