@@ -791,8 +791,9 @@ function renderNewsList(news, updatedAt) {
   }
   const t = document.getElementById("newsTime");
   if (t) t.textContent = "更新 " + (updatedAt || news[0].time || "");
-  const GOOD = ["利好", "获批", "中标", "涨价", "预增", "超预期", "增长", "突破", "签约", "回购", "增持", "创新高", "提价", "政策"];
-  const BAD = ["利空", "处罚", "立案", "亏损", "下滑", "减持", "退市", "违规", "爆雷", "风险", "终止", "下调"];
+  loadGoodNews();
+  const GOOD = ["利好", "获批", "中标", "预增", "超预期", "回购", "增持", "涨价", "创新高", "签约", "净流入"];
+  const BAD = ["利空", "处罚", "立案", "亏损", "下滑", "减持", "退市", "违规", "爆雷", "下调", "净流出"];
   let html = "";
   news.forEach(n => {
     let txt = n.text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -804,6 +805,30 @@ function renderNewsList(news, updatedAt) {
     </div>`;
   });
   el.innerHTML = html;
+}
+
+function loadGoodNews() {
+  const box = document.getElementById("goodNewsBox");
+  if (!box) return;
+  fetch("good_news.json?v=" + new Date().getTime())
+    .then(r => r.json())
+    .then(j => {
+      const items = j.items || [];
+      if (!items.length) {
+        box.innerHTML = "";
+        return;
+      }
+      let html = `<div style="border:1px solid #f0c9c0;background:#fdf3f1;border-radius:8px;padding:8px 10px;margin-bottom:8px;">
+        <b style="font-size:13px;">📌 今日利好速览（${j.date || ""}，${items.length} 条）</b>
+        <div style="max-height:220px;overflow-y:auto;margin-top:4px;">`;
+      items.slice(0, 30).forEach(n => {
+        html += `<div style="padding:2px 0;font-size:12.5px;">
+          <span style="color:#999;">${(n.time || "").slice(11)}</span> ${n.text.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`;
+      });
+      html += "</div></div>";
+      box.innerHTML = html;
+    })
+    .catch(() => { box.innerHTML = ""; });
 }
 
 function renderStocks() {
