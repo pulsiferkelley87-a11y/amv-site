@@ -61,6 +61,10 @@ def fetch_em_news():
         return []
 
 
+GOOD_WORDS = ["利好", "获批", "中标", "预增", "超预期", "回购", "增持", "涨价", "创新高", "签约", "中标", "净流入"]
+BAD_WORDS = ["利空", "处罚", "立案", "亏损", "下滑", "减持", "退市", "违规", "爆雷", "下调", "净流出"]
+
+
 def main():
     news = fetch_sina_news()
     em = fetch_em_news()
@@ -78,13 +82,23 @@ def main():
     if not merged:
         print("no news fetched")
         return 1
+    bj_today = time.strftime("%Y-%m-%d", time.gmtime(time.time() + 8 * 3600))
+    bj_now = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(time.time() + 8 * 3600))
     payload = {
-        "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "updated_at": bj_now,
         "news": merged,
     }
     with open("news.json", "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False)
-    print(f"news: sina {len(news)} + em {len(em)} -> {len(merged)} items")
+    # 今日利好速览（只存当天，每天覆盖）
+    good = [n for n in merged
+            if n["time"].startswith(bj_today)
+            and any(k in n["text"] for k in GOOD_WORDS)
+            and not any(k in n["text"] for k in BAD_WORDS)]
+    with open("good_news.json", "w", encoding="utf-8") as f:
+        json.dump({"date": bj_today, "updated_at": bj_now, "items": good},
+                  f, ensure_ascii=False)
+    print(f"news: sina {len(news)} + em {len(em)} -> {len(merged)} items, 今日利好 {len(good)} 条")
     return 0
 
 
