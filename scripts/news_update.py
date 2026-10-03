@@ -140,7 +140,7 @@ def main():
     with open("good_news.json", "w", encoding="utf-8") as f:
         json.dump({"date": bj_today, "updated_at": bj_now, "items": good},
                   f, ensure_ascii=False)
-    print(f"news: sina {len(news)} + em {len(em)} + jin10 {len(j10)} -> {len(merged)} items, 今日利好 {len(good)} 条")
+    print(f"news: sina {len(news)} (最新 {news[0]['time'] if news else '-'}) + em {len(em)} (最新 {em[0]['time'] if em else '-'}) + jin10 {len(j10)} (最新 {j10[0]['time'] if j10 else '-'}) -> {len(merged)} items, 今日利好 {len(good)} 条")
     return 0
 
 
