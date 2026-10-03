@@ -89,6 +89,8 @@ def fetch_jin10():
             content = _re.sub(r"<[^>]+>", "", (d.get("content") or "").strip())
             if not content:
                 continue
+            # 去掉"金十数据X月X日讯，"前缀，便于跨源去重
+            content = _re.sub(r"^金十数据\d+月\d+日讯[，,]\s*", "", content)
             rid = it.get("id") or ""
             t = (f"{rid[0:4]}-{rid[4:6]}-{rid[6:8]} {rid[8:10]}:{rid[10:12]}"
                  if len(rid) >= 12 else "")
