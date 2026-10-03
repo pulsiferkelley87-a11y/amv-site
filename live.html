@@ -43,6 +43,7 @@ th { color:var(--muted); font-weight:600; position:sticky; top:0; background:var
 <header>
   <h1>实盘监测</h1>
   <a class="back" href="index.html">← 返回研究主页</a>
+  <button id="btnNow" onclick="refreshNow()" style="padding:3px 14px;border:1px solid #d1d5db;border-radius:5px;background:#fff;cursor:pointer;font-size:13px;">🔄 立即刷新</button>
   <span class="time" id="updTime">加载中…</span>
 </header>
 <div class="wrap">
@@ -97,6 +98,39 @@ function loadMembers() {
       j.forEach(b => { MEMBERS[b.name] = b.stocks; });
     })
     .catch(() => {});
+}
+
+function refreshNow() {
+  const btn = document.getElementById("btnNow");
+  if (!btn) return;
+  btn.textContent = "⏳ 刷新中…";
+  btn.disabled = true;
+  fetch("live_data.json?v=" + new Date().getTime())
+    .then(r => r.json())
+    .then(j => {
+      LD = j;
+      const up = (j.updated_at || "").replace(" ", "T");
+      const lag = up ? Math.max(0, Math.round((Date.now() - new Date(up).getTime()) / 60000)) : -1;
+      let t = "更新 " + (j.updated_at || "");
+      if (lag >= 0) {
+        t = lag <= 4 ? t + "（最新）" : `<span style="color:#c0392b;font-weight:bold;">更新 ${j.updated_at}（已滞后 ${lag} 分钟）</span>`;
+      }
+      document.getElementById("updTime").innerHTML = t;
+      renderIndices();
+      renderBreadth();
+      renderMinutes();
+      renderLimits();
+      renderBlocks();
+      renderStocks();
+      btn.textContent = "✅ 已刷新";
+      setTimeout(() => { btn.textContent = "🔄 立即刷新"; btn.disabled = false; }, 1500);
+    })
+    .catch(() => {
+      btn.textContent = "❌ 失败，重试";
+      btn.disabled = false;
+      document.getElementById("updTime").innerHTML =
+        '<span style="color:#c0392b;">数据拉取失败，请稍后再试</span>';
+    });
 }
 
 function loadData() {
