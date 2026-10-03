@@ -34,31 +34,37 @@ def fetch_sina_news():
 
 
 def fetch_em_news():
-    """东财 7x24 快讯（A 股个股公告/期货/政策）。"""
+    """东财 7x24 快讯（主域被风控时轮换备用域名）。"""
     s = requests.Session()
     s.headers.update({
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0",
         "Referer": "https://kuaixun.eastmoney.com/",
     })
-    try:
-        r = s.get("https://np-listapi.eastmoney.com/comm/web/getFastNewsList",
-                  params={"client": "web", "biz": "web_724", "fastColumn": "102",
-                          "sortEnd": "", "pageSize": 30, "req_trace": "1"},
-                  timeout=20)
-        j = r.json()
-        items = (j.get("data") or {}).get("fastNewsList") or []
-        out = []
-        for it in items:
-            text = (it.get("title") or it.get("summary") or "").strip()
-            if not text:
+    hosts = ["np-listapi.eastmoney.com", "np-weblist.eastmoney.com",
+             "np-anotice-stock.eastmoney.com"]
+    for host in hosts:
+        try:
+            r = s.get(f"https://{host}/comm/web/getFastNewsList",
+                      params={"client": "web", "biz": "web_724", "fastColumn": "102",
+                              "sortEnd": "", "pageSize": 30, "req_trace": "1"},
+                      timeout=20)
+            j = r.json()
+            items = (j.get("data") or {}).get("fastNewsList") or []
+            if not items:
                 continue
-            out.append({
-                "time": (it.get("showTime") or "")[:16],
-                "text": text,
-            })
-        return out
-    except Exception:
-        return []
+            out = []
+            for it in items:
+                text = (it.get("title") or it.get("summary") or "").strip()
+                if not text:
+                    continue
+                out.append({
+                    "time": (it.get("showTime") or "")[:16],
+                    "text": text,
+                })
+            return out
+        except Exception:
+            continue
+    return []
 
 
 GOOD_WORDS = ["利好", "获批", "中标", "预增", "超预期", "回购", "增持", "涨价", "创新高",
