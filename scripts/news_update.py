@@ -68,20 +68,51 @@ BAD_WORDS = ["利空", "处罚", "立案", "亏损", "下滑", "减持", "退市
              "净流出", "加息", "升温", "萎缩", "疲软", "大跌", "暴跌", "违约"]
 
 
+def fetch_jin10():
+    """金十数据快讯（带 app header 可用）。时间从 id 前 14 位解析（北京时间）。"""
+    import re as _re
+    s = requests.Session()
+    s.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0",
+        "x-app-id": "bVBF4FyRTn5NJF5n",
+        "x-version": "1.0.0",
+        "Referer": "https://www.jin10.com/",
+    })
+    try:
+        r = s.get("https://flash-api.jin10.com/get_flash_list",
+                  params={"channel": "-8200", "vip": "1", "max_time": ""},
+                  timeout=20)
+        j = r.json()
+        out = []
+        for it in (j.get("data") or []):
+            d = it.get("data") or {}
+            content = _re.sub(r"<[^>]+>", "", (d.get("content") or "").strip())
+            if not content:
+                continue
+            rid = it.get("id") or ""
+            t = (f"{rid[0:4]}-{rid[4:6]}-{rid[6:8]} {rid[8:10]}:{rid[10:12]}"
+                 if len(rid) >= 12 else "")
+            out.append({"time": t, "text": content})
+        return out
+    except Exception:
+        return []
+
+
 def main():
     news = fetch_sina_news()
     em = fetch_em_news()
-    # 合并去重（按文本），按时间倒序，各取前 20
+    j10 = fetch_jin10()
+    # 合并去重（按文本），按时间倒序，取前 45
     seen = set()
     merged = []
-    for n in news + em:
+    for n in news + em + j10:
         key = n["text"][:30]
         if key in seen:
             continue
         seen.add(key)
         merged.append(n)
     merged.sort(key=lambda x: x["time"], reverse=True)
-    merged = merged[:40]
+    merged = merged[:45]
     if not merged:
         print("no news fetched")
         return 1
@@ -101,7 +132,7 @@ def main():
     with open("good_news.json", "w", encoding="utf-8") as f:
         json.dump({"date": bj_today, "updated_at": bj_now, "items": good},
                   f, ensure_ascii=False)
-    print(f"news: sina {len(news)} + em {len(em)} -> {len(merged)} items, 今日利好 {len(good)} 条")
+    print(f"news: sina {len(news)} + em {len(em)} + jin10 {len(j10)} -> {len(merged)} items, 今日利好 {len(good)} 条")
     return 0
 
 
