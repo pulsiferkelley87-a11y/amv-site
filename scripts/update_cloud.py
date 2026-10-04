@@ -491,6 +491,29 @@ def pct_rank(values):
     return [round(bisect.bisect_left(srt, v) / n * 100, 1) if v is not None else None for v in values]
 
 
+def compute_signals(series):
+    """基于活跃SZ序列算：MA10 偏离（1AMVR 同款）、250 日分位（1AMVK 同款）、拐头方向。"""
+    vals = [v for v in series if v is not None and v > 0]
+    if len(vals) < 15:
+        return {}
+    n = len(vals)
+    cur = vals[-1]
+    ma10 = sum(vals[-10:]) / 10.0
+    gap = round((cur / ma10 - 1) * 100, 2) if ma10 else None
+    cross = "hold"
+    if n >= 12:
+        prev = vals[-2]
+        prev_ma10 = sum(vals[-11:-1]) / 10.0
+        if prev < prev_ma10 and cur >= ma10:
+            cross = "up"
+        elif prev > prev_ma10 and cur <= ma10:
+            cross = "down"
+    win = vals[-250:]
+    pctile = round(sum(1 for v in win if v < cur) / len(win) * 100, 1)
+    # 活跃占比 = 活跃SZ / 流通市值（近似换手活跃比例）
+    return {"ma10": round(ma10, 2), "gap": gap, "pctile": pctile, "cross": cross}
+
+
 def load_official():
     """从仓库 CSV 读官方序列。"""
     import csv as _csv
@@ -1063,11 +1086,14 @@ def main():
             if kl:
                 amv_r, kdates_r, kseries_r = compute_stock_amv_reg(kl, s.get("float_mv"))
                 if amv_r:
+                    sig = compute_signals(kseries_r or [])
                     row = {
                         "code": s["code"], "name": s["name"], "industry": s.get("industry"),
                         "amount": s.get("amount"), "float_mv": s.get("float_mv"),
                         "turnover": s.get("turnover"), "pct": s.get("pct"),
                         "amount_pct": s.get("amount_pct"), "amv": amv_r,
+                        "ma10": sig.get("ma10"), "gap": sig.get("gap"),
+                        "pctile": sig.get("pctile"), "cross": sig.get("cross", "hold"),
                     }
                     amv_rows.append(row)
                     amv_total += amv_r
