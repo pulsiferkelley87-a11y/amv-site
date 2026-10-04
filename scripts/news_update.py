@@ -15,7 +15,7 @@ session.headers.update({
 def fetch_sina_news():
     r = session.get(
         "https://zhibo.sina.com.cn/api/zhibo/feed",
-        params={"page": 1, "page_size": 30, "zhibo_id": 152,
+        params={"page": 1, "page_size": 100, "zhibo_id": 152,
                 "tag_id": 0, "dire": "f", "dpc": 1},
         timeout=20)
     j = r.json()
@@ -46,7 +46,7 @@ def fetch_em_news():
         try:
             r = s.get(f"https://{host}/comm/web/getFastNewsList",
                       params={"client": "web", "biz": "web_724", "fastColumn": "102",
-                              "sortEnd": "", "pageSize": 30, "req_trace": "1"},
+                              "sortEnd": "", "pageSize": 100, "req_trace": "1"},
                       timeout=20)
             j = r.json()
             items = (j.get("data") or {}).get("fastNewsList") or []
@@ -75,7 +75,7 @@ BAD_WORDS = ["利空", "处罚", "立案", "亏损", "下滑", "减持", "退市
 
 
 def fetch_jin10():
-    """金十数据快讯（带 app header 可用）。时间从 id 前 14 位解析（北京时间）。"""
+    """金十数据快讯（带 app header 可用），拉 2 页凑更多。时间从 id 前 14 位解析。"""
     import re as _re
     s = requests.Session()
     s.headers.update({
@@ -84,26 +84,32 @@ def fetch_jin10():
         "x-version": "1.0.0",
         "Referer": "https://www.jin10.com/",
     })
-    try:
-        r = s.get("https://flash-api.jin10.com/get_flash_list",
-                  params={"channel": "-8200", "vip": "1", "max_time": ""},
-                  timeout=20)
-        j = r.json()
-        out = []
-        for it in (j.get("data") or []):
-            d = it.get("data") or {}
-            content = _re.sub(r"<[^>]+>", "", (d.get("content") or "").strip())
-            if not content:
-                continue
-            # 去掉"金十数据X月X日讯，"前缀，便于跨源去重
-            content = _re.sub(r"^金十数据\d+月\d+日讯[，,]\s*", "", content)
-            rid = it.get("id") or ""
-            t = (f"{rid[0:4]}-{rid[4:6]}-{rid[6:8]} {rid[8:10]}:{rid[10:12]}"
-                 if len(rid) >= 12 else "")
-            out.append({"time": t, "text": content})
-        return out
-    except Exception:
-        return []
+    out = []
+    max_time = ""
+    for _page in range(3):
+        try:
+            r = s.get("https://flash-api.jin10.com/get_flash_list",
+                      params={"channel": "-8200", "vip": "1", "max_time": max_time},
+                      timeout=20)
+            j = r.json()
+            items = (j.get("data") or [])
+            if not items:
+                break
+            for it in items:
+                d = it.get("data") or {}
+                content = _re.sub(r"<[^>]+>", "", (d.get("content") or "").strip())
+                if not content:
+                    continue
+                # 去掉"金十数据X月X日讯，"前缀，便于跨源去重
+                content = _re.sub(r"^金十数据\d+月\d+日讯[，,]\s*", "", content)
+                rid = it.get("id") or ""
+                t = (f"{rid[0:4]}-{rid[4:6]}-{rid[6:8]} {rid[8:10]}:{rid[10:12]}"
+                     if len(rid) >= 12 else "")
+                out.append({"time": t, "text": content})
+            max_time = items[-1].get("id") or ""
+        except Exception:
+            break
+    return out
 
 
 def main():
@@ -120,7 +126,8 @@ def main():
         seen.add(key)
         merged.append(n)
     merged.sort(key=lambda x: x["time"], reverse=True)
-    merged = merged[:45]
+    all_news = merged[:250]           # 全天候筛利好用（保留更多）
+    merged = merged[:45]              # 页面显示 45 条
     if not merged:
         print("no news fetched")
         return 1
@@ -143,8 +150,8 @@ def main():
     }
     with open("news.json", "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False)
-    # 今日利好速览（只存当天，每天覆盖）
-    good = [n for n in merged
+    # 今日利好速览：从全天候列表里筛当天利好（只存当天，每天覆盖）
+    good = [n for n in all_news
             if n["time"].startswith(bj_today)
             and any(k in n["text"] for k in GOOD_WORDS)
             and not any(k in n["text"] for k in BAD_WORDS)]
