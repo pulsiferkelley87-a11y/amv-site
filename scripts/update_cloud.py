@@ -19,6 +19,7 @@ OFF_AMV_CSV = os.path.join(DATA_DIR, "official_0amv.csv")
 OFF_ZNZ_CSV = os.path.join(DATA_DIR, "official_znz0.csv")
 OUT_JSON = os.path.join(DATA_DIR, "data.json")
 APP_JS = os.path.join(BASE, "app-data.js")
+SIG_JSON = os.path.join(BASE, "signals.json")
 
 EM_CLIST = "https://push2.eastmoney.com/api/qt/clist/get"
 EM_HOSTS = [
@@ -1210,6 +1211,17 @@ def main():
         json.dump(result, f, ensure_ascii=False)
     with open(APP_JS, "w", encoding="utf-8") as f:
         f.write("var DATA = " + json.dumps(result, ensure_ascii=False) + ";\n")
+    # 轻量信号文件（供云函数/实盘页拉取）
+    sig_map = {}
+    for s in result.get("stocks_amv", []):
+        sig_map[s["code"]] = {
+            "name": s.get("name"), "industry": s.get("industry"),
+            "amv": s.get("amv"), "ma10": s.get("ma10"),
+            "gap": s.get("gap"), "pctile": s.get("pctile"),
+            "cross": s.get("cross", "hold"),
+        }
+    with open(SIG_JSON, "w", encoding="utf-8") as f:
+        json.dump({"updated_at": result["updated_at"], "signals": sig_map}, f, ensure_ascii=False)
     print("OK", result["updated_at"], "spot:", len(spot), "sectors:", len(sectors),
           "official:", len(official) if official else 0, "amv:", len(amv_rows))
 
