@@ -124,6 +124,17 @@ def main():
     if not merged:
         print("no news fetched")
         return 1
+    # 新鲜度保护：抓到的数据比现有旧则跳过覆盖（云端被风控时会抓到旧数据，防回退）
+    try:
+        with open("news.json", encoding="utf-8") as f:
+            old = json.load(f)
+        old_t = (old.get("news") or [{}])[0].get("time", "")
+        new_t = merged[0].get("time", "")
+        if old_t and new_t and new_t < old_t:
+            print(f"news: 抓到的数据({new_t})旧于现有({old_t})，跳过覆盖")
+            return 0
+    except (OSError, ValueError):
+        pass
     bj_today = time.strftime("%Y-%m-%d", time.gmtime(time.time() + 8 * 3600))
     bj_now = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(time.time() + 8 * 3600))
     payload = {
