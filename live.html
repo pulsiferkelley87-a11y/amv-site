@@ -334,7 +334,6 @@ function renderLadder(arr) {
     groups[d].push(s);
   });
   const tiers = Object.keys(groups).map(Number).filter(d => d >= 1).sort((a, b) => b - a);
-  const first = groups[0] || [];
   let html = "";
   tiers.forEach(d => {
     const list = groups[d];
@@ -346,13 +345,8 @@ function renderLadder(arr) {
       <span style="color:var(--muted);font-size:11.5px;">(${list.length}只)</span> ${names}
     </div>`;
   });
-  if (first.length) {
-    const names = first.slice(0, 40).map(s =>
-      `<span style="display:inline-block;background:#f2f3f5;border:1px solid #e5e7eb;border-radius:4px;padding:1px 7px;margin:2px 3px;font-size:12px;white-space:nowrap;">${s.name}<span style="color:#999;">(${s.code.slice(2)})</span></span>`).join("");
-    html += `<div style="padding:3px 0;">
-      <span style="display:inline-block;min-width:52px;color:var(--muted);font-weight:bold;">首板</span>
-      <span style="color:var(--muted);font-size:11.5px;">(${first.length}只)</span> ${names}${first.length > 40 ? "…" : ""}
-    </div>`;
+  if (!html) {
+    html = "<div style='font-size:12.5px;color:var(--muted);padding:4px 0;'>当前无连板股（无 1 板及以上）。</div>";
   }
   box.innerHTML = html;
 }
