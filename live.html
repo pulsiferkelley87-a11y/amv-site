@@ -184,6 +184,23 @@ function renderAll(j) {
   renderLimits();
   renderBlocks();
   renderStocks();
+  loadSignalsFromPages();
+}
+
+function loadSignalsFromPages() {
+  // 信号文件大，从 Pages 直拉（浏览器访问网站快），替换云函数里可能残缺的信号
+  fetch("signals.json?v=" + new Date().getTime())
+    .then(r => r.json())
+    .then(j => {
+      const sigs = (j && j.signals) || {};
+      const cur = (LD && LD.signals) ? Object.keys(LD.signals).length : 0;
+      if (Object.keys(sigs).length > cur) {
+        LD.signals = sigs;
+        renderSignals();
+        renderLimits();
+      }
+    })
+    .catch(() => {});
 }
 
 let SIG_TAB = "up";
