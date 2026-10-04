@@ -134,29 +134,38 @@ function refreshNow() {
 }
 
 function loadData() {
-  // 读 Pages 上的 live_data.json（国内可访问）；云端每分钟部署刷新
-  fetch("live_data.json?v=" + new Date().getTime())
+  // 主数据源：腾讯云 COS（每分钟更新）；失败回退 Pages
+  fetch("https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com/live_data.json?t=" + new Date().getTime())
     .then(r => r.json())
     .then(j => {
-      LD = j;
-      const up = (j.updated_at || "").replace(" ", "T");
-      const lag = up ? Math.max(0, Math.round((Date.now() - new Date(up).getTime()) / 60000)) : -1;
-      let t = "更新 " + (j.updated_at || "");
-      if (lag >= 0) {
-        t = lag <= 4 ? t + "（最新）" : `<span style="color:#c0392b;font-weight:bold;">更新 ${j.updated_at}（已滞后 ${lag} 分钟）</span>`;
-      }
-      document.getElementById("updTime").innerHTML = t;
-      renderIndices();
-      renderBreadth();
-      renderMinutes();
-      renderLimits();
-      renderBlocks();
-      renderStocks();
+      renderAll(j);
     })
     .catch(() => {
-      document.getElementById("updTime").innerHTML =
-        '<span style="color:#c0392b;">数据拉取失败，稍后自动重试</span>';
+      fetch("live_data.json?v=" + new Date().getTime())
+        .then(r => r.json())
+        .then(j => renderAll(j))
+        .catch(() => {
+          document.getElementById("updTime").innerHTML =
+            '<span style="color:#c0392b;">数据拉取失败，稍后自动重试</span>';
+        });
     });
+}
+
+function renderAll(j) {
+  LD = j;
+  const up = (j.updated_at || "").replace(" ", "T");
+  const lag = up ? Math.max(0, Math.round((Date.now() - new Date(up).getTime()) / 60000)) : -1;
+  let t = "更新 " + (j.updated_at || "");
+  if (lag >= 0) {
+    t = lag <= 4 ? t + "（最新）" : `<span style="color:#c0392b;font-weight:bold;">更新 ${j.updated_at}（已滞后 ${lag} 分钟）</span>`;
+  }
+  document.getElementById("updTime").innerHTML = t;
+  renderIndices();
+  renderBreadth();
+  renderMinutes();
+  renderLimits();
+  renderBlocks();
+  renderStocks();
 }
 
 function renderBreadth() {
