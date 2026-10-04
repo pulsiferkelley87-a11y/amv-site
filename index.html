@@ -98,7 +98,7 @@
   </div>
   <div class="card full">
     <h2>今日选股 · 活跃度拐头（方向A）
-      <button id="btnRefresh" onclick="refreshAll()" style="float:right;padding:3px 12px;border:1px solid #d1d5db;border-radius:5px;background:#fff;cursor:pointer;font-size:12px;">刷新数据</button>
+      <button id="btnRefresh" onclick="refreshAll()" style="float:right;padding:3px 14px;border:1px solid #d1d5db;border-radius:5px;background:#fff;cursor:pointer;font-size:13px;">🔄 立即刷新</button>
     </h2>
     <div class="note" id="pickNote">活跃度 A 上穿自身 10 日均线（昨日在均线下、今日站上），捕捉资金重新激活。按活跃SZ从大到小排列。</div>
     <div style="margin:6px 0;font-size:12px;">
@@ -117,6 +117,26 @@
     </div>
     <div id="refreshMsg" style="font-size:12px;color:var(--muted);margin:4px 0 8px;"></div>
     <div class="scroll" id="pickTable"></div>
+  </div>
+  <div class="card full">
+    <h2>个股信号面板 · 逐股递推实测公式
+      <span style="float:right;font-size:12px;color:var(--muted);font-weight:normal;">基于自研递推模型（与官方相关 0.9983）：活跃SZ 相对自身 MA10 偏离 + 250 日分位 + 拐头方向</span>
+    </h2>
+    <div style="margin:6px 0;font-size:12px;">
+      查个股：<input id="sigSearch" placeholder="代码或名称，如 300308 / 宁德时代" style="padding:4px 10px;border:1px solid #d1d5db;border-radius:5px;width:220px;font-size:13px;">
+      <button onclick="showSignal()" style="padding:3px 12px;border:1px solid #d1d5db;border-radius:5px;background:#fff;cursor:pointer;">查看信号</button>
+      <span id="sigResult" style="margin-left:10px;font-size:13px;"></span>
+    </div>
+    <div class="grid" style="margin-top:8px;">
+      <div>
+        <b style="font-size:13px;">🔼 拐头向上（今日上穿 MA10，资金重新激活）</b>
+        <div class="scroll" id="sigUpList" style="max-height:360px;"></div>
+      </div>
+      <div>
+        <b style="font-size:13px;">🔽 拐头向下（今日下穿 MA10，活跃度降温）</b>
+        <div class="scroll" id="sigDownList" style="max-height:360px;"></div>
+      </div>
+    </div>
   </div>
   <div class="grid">
     <div class="card">
