@@ -792,8 +792,8 @@ function renderNewsList(news, updatedAt) {
   const t = document.getElementById("newsTime");
   if (t) t.textContent = "更新 " + (updatedAt || news[0].time || "");
   loadGoodNews();
-  const GOOD = ["利好", "获批", "中标", "预增", "超预期", "回购", "增持", "涨价", "创新高", "签约", "净流入"];
-  const BAD = ["利空", "处罚", "立案", "亏损", "下滑", "减持", "退市", "违规", "爆雷", "下调", "净流出"];
+  const GOOD = ["利好", "获批", "中标", "预增", "超预期", "回购", "增持", "涨价", "创新高", "签约", "净流入", "降息", "降温", "提振", "上调", "回暖", "强劲", "突破", "加速", "翻红", "大涨", "新高"];
+  const BAD = ["利空", "处罚", "立案", "亏损", "下滑", "减持", "退市", "违规", "爆雷", "下调", "净流出", "加息", "升温", "萎缩", "疲软", "大跌", "暴跌", "违约"];
   let html = "";
   news.forEach(n => {
     let txt = n.text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -815,7 +815,7 @@ function loadGoodNews() {
     .then(j => {
       const items = j.items || [];
       if (!items.length) {
-        box.innerHTML = "";
+        box.innerHTML = "<div style='font-size:12.5px;color:var(--muted);padding:6px 0;'>📌 今日利好速览：暂无可收录的利好消息。</div>";
         return;
       }
       let html = `<div style="border:1px solid #f0c9c0;background:#fdf3f1;border-radius:8px;padding:8px 10px;margin-bottom:8px;">
@@ -835,6 +835,49 @@ function renderStocks() {
   showMarketStocks();
   renderPicks();
   renderNews();
+  renderSignals();
+}
+
+function renderSignals() {
+  const sa = D.stocks_amv || [];
+  const upEl = document.getElementById("sigUpList");
+  const downEl = document.getElementById("sigDownList");
+  if (!upEl || !downEl) return;
+  const ups = sa.filter(s => s.cross === "up").sort((a, b) => (b.gap || 0) - (a.gap || 0));
+  const downs = sa.filter(s => s.cross === "down").sort((a, b) => (a.gap || 0) - (b.gap || 0));
+  const rowHtml = s => `<tr><td>${s.code}</td><td>${s.name}</td><td>${s.industry || "—"}</td>
+    <td class="${(s.gap || 0) >= 0 ? "up" : "down"}">${(s.gap || 0) >= 0 ? "+" : ""}${s.gap}%</td>
+    <td>${s.pctile != null ? s.pctile + "%" : "—"}</td>
+    <td>${s.turnover != null ? s.turnover.toFixed(2) + "%" : "—"}</td></tr>`;
+  upEl.innerHTML = `<table><thead><tr><th>代码</th><th>名称</th><th>行业</th><th>MA10偏离</th><th>250日分位</th><th>换手</th></tr></thead><tbody>`
+    + ups.slice(0, 80).map(rowHtml).join("") + "</tbody></table>";
+  downEl.innerHTML = `<table><thead><tr><th>代码</th><th>名称</th><th>行业</th><th>MA10偏离</th><th>250日分位</th><th>换手</th></tr></thead><tbody>`
+    + downs.slice(0, 80).map(rowHtml).join("") + "</tbody></table>";
+}
+
+function showSignal() {
+  const kw = (document.getElementById("sigSearch") || {}).value || "";
+  const el = document.getElementById("sigResult");
+  if (!el) return;
+  if (!kw) {
+    el.innerHTML = "";
+    return;
+  }
+  const sa = D.stocks_amv || [];
+  const s = sa.find(x => x.code === kw || x.name === kw || x.code.slice(2) === kw);
+  if (!s) {
+    el.innerHTML = "<span style='color:#c0392b;'>未找到该股（或递推数据未覆盖）</span>";
+    return;
+  }
+  const gap = s.gap != null ? s.gap : 0;
+  const crossTxt = s.cross === "up" ? "🔼 拐头向上（激活）" : s.cross === "down" ? "🔽 拐头向下（降温）" : "➡ 均线附近（保持）";
+  const gapCls = gap >= 0 ? "up" : "down";
+  el.innerHTML =
+    `<b>${s.code} ${s.name}</b>（${s.industry || "—"}） ` +
+    `活跃SZ <b>${(s.amv / 1e8).toFixed(1)}</b>亿 ｜ MA10 <b>${(s.ma10 / 1e8).toFixed(1)}</b>亿 ｜ ` +
+    `偏离 <span class="${gapCls}"><b>${gap >= 0 ? "+" : ""}${gap}%</b></span> ｜ ` +
+    `250日分位 <b>${s.pctile != null ? s.pctile + "%" : "—"}</b> ｜ ${crossTxt} ｜ ` +
+    `换手 ${s.turnover != null ? s.turnover.toFixed(2) + "%" : "—"} ｜ 涨跌 ${s.pct != null ? (s.pct >= 0 ? "+" : "") + s.pct.toFixed(2) + "%" : "—"}`;
 }
 
 function renderPicks() {
@@ -983,9 +1026,14 @@ function renderAll() {
 }
 
 function refreshAll() {
+  const btn = document.getElementById("btnRefresh");
   const msg = document.getElementById("refreshMsg");
   if (msg) {
-    msg.innerHTML = "正在重新拉取最新数据…（数据每小时自动更新，点此立即拉最新）";
+    msg.innerHTML = "⏳ 正在重新拉取最新数据…";
+  }
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "⏳ 刷新中…";
   }
   const ts = new Date().getTime();
   const script = document.createElement("script");
@@ -994,12 +1042,20 @@ function refreshAll() {
     D = window.DATA;
     renderAll();
     if (msg) {
-      msg.innerHTML = "数据已刷新（更新时间：" + (D.updated_at || "—") + "）";
+      msg.innerHTML = "✅ 已刷新（更新时间：" + (D.updated_at || "—") + "）";
+    }
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "🔄 立即刷新";
     }
     queryCloudStatus(msg);
   };
   script.onerror = () => {
-    if (msg) msg.innerHTML = "刷新失败，请稍后重试或按 Ctrl+F5 强制刷新。";
+    if (msg) msg.innerHTML = "❌ 刷新失败，请稍后重试或按 Ctrl+F5 强制刷新。";
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "🔄 立即刷新";
+    }
   };
   document.body.appendChild(script);
 }
