@@ -215,15 +215,16 @@ function setSigTab(t) {
 function renderSignals() {
   const el = document.getElementById("sigList");
   if (!el) return;
-  const sigs = LD && LD.signals ? Object.values(LD.signals) : [];
-  if (!sigs.length) {
+  const sigs = LD && LD.signals ? LD.signals : {};
+  let all = Object.entries(sigs).map(([code, s]) => ({ code: code, ...s }));
+  if (!all.length) {
     el.innerHTML = "<p style='color:var(--muted);'>信号数据加载中…</p>";
     return;
   }
   let arr;
-  if (SIG_TAB === "up") arr = sigs.filter(s => s.cross === "up").sort((a, b) => (b.gap || 0) - (a.gap || 0));
-  else if (SIG_TAB === "down") arr = sigs.filter(s => s.cross === "down").sort((a, b) => (a.gap || 0) - (b.gap || 0));
-  else arr = sigs.filter(s => (s.gap || 0) > 5).sort((a, b) => (b.gap || 0) - (a.gap || 0));
+  if (SIG_TAB === "up") arr = all.filter(s => s.cross === "up").sort((a, b) => (b.gap || 0) - (a.gap || 0));
+  else if (SIG_TAB === "down") arr = all.filter(s => s.cross === "down").sort((a, b) => (a.gap || 0) - (b.gap || 0));
+  else arr = all.filter(s => (s.gap || 0) > 5).sort((a, b) => (b.gap || 0) - (a.gap || 0));
   let html = `<table><thead><tr><th>代码</th><th>名称</th><th>行业</th><th>MA10偏离</th><th>250日分位</th><th>5日趋势</th><th>量能比</th></tr></thead><tbody>`;
   arr.slice(0, 100).forEach(s => {
     const g = s.gap || 0;
