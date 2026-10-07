@@ -492,6 +492,15 @@ def pct_rank(values):
     return [round(bisect.bisect_left(srt, v) / n * 100, 1) if v is not None else None for v in values]
 
 
+def limit_pct(code):
+    """涨停涨幅阈值：北交 29.5%、创业板/科创 19.5%、主板（含ST，2026-07新规后10%） 9.5%。"""
+    if code.startswith("bj"):
+        return 29.5
+    if code.startswith("sh68") or code.startswith("sz30"):
+        return 19.5
+    return 9.5
+
+
 def compute_signals(series, rows=None):
     """基于活跃SZ序列算：MA10 偏离（1AMVR 同款）、250 日分位（1AMVK 同款）、拐头方向、
     连板数、量能比、5 日活跃趋势。rows 为原始日线（含 close/amount）。"""
@@ -516,10 +525,12 @@ def compute_signals(series, rows=None):
     if rows:
         closes = [r.get("close") or 0.0 for r in rows]
         amounts = [r.get("amount") or 0.0 for r in rows]
-        # 连板：从最近往前连续 pct>=9.5 的天数
+        # 连板：从最近往前连续涨停的天数（按板块阈值）
+        code = rows[-1].get("code") or ""
+        thr = limit_pct(code)
         ld = 0
         for i in range(len(closes) - 1, 0, -1):
-            if closes[i] > 0 and closes[i - 1] > 0 and (closes[i] / closes[i - 1] - 1) * 100 >= 9.5:
+            if closes[i] > 0 and closes[i - 1] > 0 and (closes[i] / closes[i - 1] - 1) * 100 >= thr:
                 ld += 1
             else:
                 break
