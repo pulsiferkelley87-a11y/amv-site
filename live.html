@@ -412,10 +412,11 @@ function backToStkList() {
 function renderIndices() {
   if (!LD) return;
   const box = document.getElementById("idxBox");
-  box.innerHTML = (LD.indices || []).map(i => {
+  const names = ["上证指数", "深证成指", "创业板指", "科创50"];
+  box.innerHTML = (LD.indices || []).map((i, idx) => {
     const cls = i.pct >= 0 ? "up" : "down";
     const sign = i.pct >= 0 ? "+" : "";
-    return `<div class="idx"><div class="n">${i.name}</div>
+    return `<div class="idx"><div class="n">${names[idx] || i.name}</div>
       <div class="p ${cls}">${i.price.toFixed(2)}</div>
       <div class="c ${cls}">${sign}${i.pct.toFixed(2)}%</div></div>`;
   }).join("");
