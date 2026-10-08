@@ -244,7 +244,7 @@ function setSigTab(t) {
 function renderFlow() {
   const el = document.getElementById("flowBox");
   if (!el || !LD || !LD.board_flow || !LD.board_flow.length) {
-    if (el) el.innerHTML = "<span style='color:var(--muted);'>资金流数据加载中…</span>";
+    if (el) el.innerHTML = "<span style='color:var(--muted);'>盘前/休市暂无资金流数据，开盘后（9:15 起）自动更新。</span>";
     return;
   }
   const arr = LD.board_flow.slice(0, 12);
