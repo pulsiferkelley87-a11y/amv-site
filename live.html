@@ -248,19 +248,25 @@ function renderFlow() {
     return;
   }
   const arr = LD.board_flow.slice(0, 12);
-  const mainLine = arr.filter(x => (x.flow || 0) > 3 && (x.pct || 0) > 0).slice(0, 3);
+  const solid = arr.filter(x => (x.flow || 0) > 1 && (x.flow5 || 0) > 0 && (x.flow10 || 0) > 0 && (x.pct || 0) > 0).slice(0, 3);
+  const pulse = arr.filter(x => (x.flow || 0) > 3 && (x.flow5 || 0) <= 0).slice(0, 3);
   let html = "";
-  if (mainLine.length) {
-    html += `<div style="padding:4px 0 6px;">主线候选：${mainLine.map(x => `<b style="color:#c0392b;">${x.name}</b>`).join("、")} <span style="color:var(--muted);">（资金流入+板块上涨双确认）</span></div>`;
+  if (solid.length) {
+    html += `<div style="padding:4px 0 6px;">🎯 主线（多日持续流入+上涨）：${solid.map(x => `<b style="color:#c0392b;">${x.name}</b>`).join("、")}</div>`;
   } else {
-    html += "<div style='padding:4px 0 6px;color:var(--muted);'>今日无明显资金主线（流入板块未形成上涨共振）。</div>";
+    html += "<div style='padding:4px 0 6px;color:var(--muted);'>暂无多日持续流入的主线板块。</div>";
   }
-  html += `<table><thead><tr><th>板块</th><th>主力净流入(亿)</th><th>涨跌幅</th></tr></thead><tbody>`;
+  if (pulse.length) {
+    html += `<div style="padding:0 0 6px;font-size:12px;">⚡ 单日脉冲（今日流入但5日未持续）：${pulse.map(x => `<span>${x.name}</span>`).join("、")} <span style="color:var(--muted);">（待观察，防止一日游）</span></div>`;
+  }
+  html += `<table><thead><tr><th>板块</th><th>今日流入(亿)</th><th>5日(亿)</th><th>10日(亿)</th><th>涨跌</th></tr></thead><tbody>`;
   arr.forEach(x => {
-    const f = x.flow || 0;
+    const f = x.flow || 0, f5 = x.flow5 || 0, f10 = x.flow10 || 0;
     const p = x.pct != null ? x.pct : 0;
     html += `<tr><td>${x.name}</td>
       <td class="${f >= 0 ? "up" : "down"}">${f >= 0 ? "+" : ""}${f.toFixed(2)}</td>
+      <td class="${f5 >= 0 ? "up" : "down"}">${f5 >= 0 ? "+" : ""}${f5.toFixed(2)}</td>
+      <td class="${f10 >= 0 ? "up" : "down"}">${f10 >= 0 ? "+" : ""}${f10.toFixed(2)}</td>
       <td class="${p >= 0 ? "up" : "down"}">${p >= 0 ? "+" : ""}${p}%</td></tr>`;
   });
   html += "</tbody></table>";
