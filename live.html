@@ -174,7 +174,9 @@ function renderAll(j) {
   const lag = up ? Math.max(0, Math.round((Date.now() - new Date(up).getTime()) / 60000)) : -1;
   let t = "更新 " + (j.updated_at || "");
   if (lag >= 0) {
-    t = lag <= 4 ? t + "（最新）" : `<span style="color:#c0392b;font-weight:bold;">更新 ${j.updated_at}（已滞后 ${lag} 分钟）</span>`;
+    if (lag <= 4) t += "（最新）";
+    else if (lag <= 240) t = `<span style="color:#c0392b;font-weight:bold;">更新 ${j.updated_at}（已滞后 ${lag} 分钟）</span>`;
+    else t += "（盘后/休市数据，盘中自动更新）";
   }
   document.getElementById("updTime").innerHTML = t;
   renderIndices();
