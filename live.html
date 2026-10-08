@@ -121,8 +121,7 @@ function refreshNow() {
   if (!btn) return;
   btn.textContent = "⏳ 刷新中…";
   btn.disabled = true;
-  fetch("live_data.json?v=" + new Date().getTime())
-    .then(r => r.json())
+  fetchGz("https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com/live_data.json.gz")
     .then(j => {
       LD = j;
       const up = (j.updated_at || "").replace(" ", "T");
@@ -150,13 +149,27 @@ function refreshNow() {
     });
 }
 
+async function fetchGz(url) {
+  // 优先拉 gzip 压缩版（体积小 85%，手机快）；浏览器不支持则回退原文件
+  if (typeof DecompressionStream !== "undefined") {
+    try {
+      const r = await fetch(url);
+      if (r.ok) {
+        const buf = await r.arrayBuffer();
+        const ds = new DecompressionStream("gzip");
+        const stream = new Blob([buf]).stream().pipeThrough(ds);
+        return await new Response(stream).json();
+      }
+    } catch (e) {}
+  }
+  const r2 = await fetch(url.replace(".json.gz", ".json") + "?t=" + new Date().getTime());
+  return r2.json();
+}
+
 function loadData() {
   // 主数据源：腾讯云 COS（每分钟更新）；失败回退 Pages
-  fetch("https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com/live_data.json?t=" + new Date().getTime())
-    .then(r => r.json())
-    .then(j => {
-      renderAll(j);
-    })
+  fetchGz("https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com/live_data.json.gz")
+    .then(j => renderAll(j))
     .catch(() => {
       fetch("live_data.json?v=" + new Date().getTime())
         .then(r => r.json())
