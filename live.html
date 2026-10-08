@@ -182,6 +182,12 @@ function loadData() {
 }
 
 function renderAll(j) {
+  // 信号数据保留更好的那份（避免自动刷新被云函数旧信号短暂覆盖）
+  const curCnt = (LD && LD.signals) ? Object.keys(LD.signals).length : 0;
+  const newCnt = (j.signals) ? Object.keys(j.signals).length : 0;
+  if (curCnt > newCnt) {
+    j.signals = LD.signals;
+  }
   LD = j;
   const up = (j.updated_at || "").replace(" ", "T");
   const lag = up ? Math.max(0, Math.round((Date.now() - new Date(up).getTime()) / 60000)) : -1;
