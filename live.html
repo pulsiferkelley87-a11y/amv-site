@@ -57,6 +57,10 @@ th { color:var(--muted); font-weight:600; position:sticky; top:0; background:var
     <div id="breadth" style="font-size:13px;"></div>
   </div>
   <div class="card">
+    <h2>💰 资金主线雷达 <span style="font-size:12px;color:var(--muted);font-weight:normal;">主力净流入板块（东财口径）→ 推理主线</span></h2>
+    <div id="flowBox" style="font-size:13px;"></div>
+  </div>
+  <div class="card">
     <h2>个股信号（逐股递推·日频）
       <span style="font-size:12px;color:var(--muted);font-weight:normal;">查个股：
         <input id="sigSearch" placeholder="代码或名称" style="padding:3px 8px;border:1px solid #d1d5db;border-radius:5px;width:150px;font-size:12.5px;">
@@ -204,6 +208,7 @@ function renderAll(j) {
   document.getElementById("updTime").innerHTML = t;
   renderIndices();
   renderBreadth();
+  renderFlow();
   renderSignals();
   renderMinutes();
   renderLimits();
@@ -234,6 +239,32 @@ function setSigTab(t) {
   document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
   event.target.classList.add("active");
   renderSignals();
+}
+
+function renderFlow() {
+  const el = document.getElementById("flowBox");
+  if (!el || !LD || !LD.board_flow || !LD.board_flow.length) {
+    if (el) el.innerHTML = "<span style='color:var(--muted);'>资金流数据加载中…</span>";
+    return;
+  }
+  const arr = LD.board_flow.slice(0, 12);
+  const mainLine = arr.filter(x => (x.flow || 0) > 3 && (x.pct || 0) > 0).slice(0, 3);
+  let html = "";
+  if (mainLine.length) {
+    html += `<div style="padding:4px 0 6px;">主线候选：${mainLine.map(x => `<b style="color:#c0392b;">${x.name}</b>`).join("、")} <span style="color:var(--muted);">（资金流入+板块上涨双确认）</span></div>`;
+  } else {
+    html += "<div style='padding:4px 0 6px;color:var(--muted);'>今日无明显资金主线（流入板块未形成上涨共振）。</div>";
+  }
+  html += `<table><thead><tr><th>板块</th><th>主力净流入(亿)</th><th>涨跌幅</th></tr></thead><tbody>`;
+  arr.forEach(x => {
+    const f = x.flow || 0;
+    const p = x.pct != null ? x.pct : 0;
+    html += `<tr><td>${x.name}</td>
+      <td class="${f >= 0 ? "up" : "down"}">${f >= 0 ? "+" : ""}${f.toFixed(2)}</td>
+      <td class="${p >= 0 ? "up" : "down"}">${p >= 0 ? "+" : ""}${p}%</td></tr>`;
+  });
+  html += "</tbody></table>";
+  el.innerHTML = html;
 }
 
 function renderSignals() {
