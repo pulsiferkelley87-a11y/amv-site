@@ -182,6 +182,10 @@ function loadData() {
 }
 
 function renderAll(j) {
+  // 数据没变（updated_at 相同）就跳过重绘，消除自动刷新闪烁
+  if (LD && LD.updated_at === j.updated_at) {
+    return;
+  }
   // 信号数据保留更好的那份（避免自动刷新被云函数旧信号短暂覆盖）
   const curCnt = (LD && LD.signals) ? Object.keys(LD.signals).length : 0;
   const newCnt = (j.signals) ? Object.keys(j.signals).length : 0;
