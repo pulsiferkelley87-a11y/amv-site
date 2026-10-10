@@ -1243,6 +1243,13 @@ def main():
         json.dump(result, f, ensure_ascii=False)
     with open(APP_JS, "w", encoding="utf-8") as f:
         f.write("var DATA = " + json.dumps(result, ensure_ascii=False) + ";\n")
+    # gzip 压缩版（手机/浏览器加载快）
+    try:
+        import gzip as _gzip
+        with open(APP_JS + ".gz", "wb") as f:
+            f.write(_gzip.compress(open(APP_JS, "rb").read(), 6))
+    except Exception:
+        pass
     # 轻量信号文件（供云函数/实盘页拉取）
     sig_map = {}
     for s in result.get("stocks_amv", []):
