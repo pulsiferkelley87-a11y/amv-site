@@ -22,7 +22,6 @@ let SHOW_DROP = true;    // −2.3% 事件标记开关
 
 async function load() {
   // 优先拉 gzip 压缩版（手机快 3 倍+）；不支持或失败回退 window.DATA
-  let got = false;
   if (typeof DecompressionStream !== "undefined") {
     try {
       const r = await fetch("app-data.js.gz?v=" + new Date().getTime());
@@ -31,18 +30,12 @@ async function load() {
         const ds = new DecompressionStream("gzip");
         const stream = new Blob([buf]).stream().pipeThrough(ds);
         const txt = await new Response(stream).text();
-        D = JSON.parse(txt.slice(txt.indexOf("{")));
-        got = true;
+        D = JSON.parse(txt.slice(txt.indexOf("{")).replace(/;\s*$/, ""));
       }
     } catch (e) { }
   }
-  if (!got) {
-    D = window.DATA;
-  }
-  if (!D) {
-    document.getElementById("meta").innerHTML = "<span style='color:#c0392b;'>数据加载失败，请刷新重试。</span>";
-    return;
-  }
+  if (!D) D = window.DATA;
+  if (!D) return;
   const snaps = D.history_snaps || {};
   const days = Object.keys(snaps).sort();
   if (days.length) {
@@ -1056,7 +1049,7 @@ async function fetchDataGz() {
     const ds = new DecompressionStream("gzip");
     const stream = new Blob([buf]).stream().pipeThrough(ds);
     const txt = await new Response(stream).text();
-    return JSON.parse(txt.slice(txt.indexOf("{")));
+    return JSON.parse(txt.slice(txt.indexOf("{")).replace(/;\s*$/, ""));
   } catch (e) {
     return null;
   }
