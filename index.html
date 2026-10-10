@@ -166,11 +166,13 @@
   </div>
 </div>
 <script>
-// 时间戳动态加载，彻底绕过浏览器缓存
+// 时间戳动态加载，彻底绕过浏览器缓存；支持 gzip 解压的浏览器走压缩版（快）
 (function () {
   var ts = new Date().getTime();
-  document.write('<script src="app-data.js?v=' + ts + '"><\/script>');
   document.write('<script src="app.js?v=' + ts + '"><\/script>');
+  if (typeof DecompressionStream === "undefined") {
+    document.write('<script src="app-data.js?v=' + ts + '"><\/script>');
+  }
 })();
 </script>
 </body>
