@@ -21,7 +21,28 @@ let SEC_TAB = "industry"; // industry = 行业榜；style = 风格榜
 let SHOW_DROP = true;    // −2.3% 事件标记开关
 
 async function load() {
-  D = window.DATA;
+  // 优先拉 gzip 压缩版（手机快 3 倍+）；不支持或失败回退 window.DATA
+  let got = false;
+  if (typeof DecompressionStream !== "undefined") {
+    try {
+      const r = await fetch("app-data.js.gz?v=" + new Date().getTime());
+      if (r.ok) {
+        const buf = await r.arrayBuffer();
+        const ds = new DecompressionStream("gzip");
+        const stream = new Blob([buf]).stream().pipeThrough(ds);
+        const txt = await new Response(stream).text();
+        D = JSON.parse(txt.slice(txt.indexOf("{")));
+        got = true;
+      }
+    } catch (e) { }
+  }
+  if (!got) {
+    D = window.DATA;
+  }
+  if (!D) {
+    document.getElementById("meta").innerHTML = "<span style='color:#c0392b;'>数据加载失败，请刷新重试。</span>";
+    return;
+  }
   const snaps = D.history_snaps || {};
   const days = Object.keys(snaps).sort();
   if (days.length) {
@@ -1025,6 +1046,31 @@ function renderAll() {
   renderStocks();
 }
 
+async function fetchDataGz() {
+  // 拉 gzip 版数据；失败返回 null
+  if (typeof DecompressionStream === "undefined") return null;
+  try {
+    const r = await fetch("app-data.js.gz?v=" + new Date().getTime());
+    if (!r.ok) return null;
+    const buf = await r.arrayBuffer();
+    const ds = new DecompressionStream("gzip");
+    const stream = new Blob([buf]).stream().pipeThrough(ds);
+    const txt = await new Response(stream).text();
+    return JSON.parse(txt.slice(txt.indexOf("{")));
+  } catch (e) {
+    return null;
+  }
+}
+
+function loadDataScript(onload, onerror) {
+  const ts = new Date().getTime();
+  const script = document.createElement("script");
+  script.src = "app-data.js?v=" + ts;
+  script.onload = onload;
+  script.onerror = onerror;
+  document.body.appendChild(script);
+}
+
 function refreshAll() {
   const btn = document.getElementById("btnRefresh");
   const msg = document.getElementById("refreshMsg");
@@ -1035,11 +1081,7 @@ function refreshAll() {
     btn.disabled = true;
     btn.textContent = "⏳ 刷新中…";
   }
-  const ts = new Date().getTime();
-  const script = document.createElement("script");
-  script.src = "app-data.js?v=" + ts;
-  script.onload = () => {
-    D = window.DATA;
+  const done = () => {
     renderAll();
     if (msg) {
       msg.innerHTML = "✅ 已刷新（更新时间：" + (D.updated_at || "—") + "）";
@@ -1050,28 +1092,38 @@ function refreshAll() {
     }
     queryCloudStatus(msg);
   };
-  script.onerror = () => {
+  const fail = () => {
     if (msg) msg.innerHTML = "❌ 刷新失败，请稍后重试或按 Ctrl+F5 强制刷新。";
     if (btn) {
       btn.disabled = false;
       btn.textContent = "🔄 立即刷新";
     }
   };
-  document.body.appendChild(script);
+  fetchDataGz().then(d => {
+    if (d) {
+      D = d;
+      done();
+    } else {
+      loadDataScript(() => { D = window.DATA; done(); }, fail);
+    }
+  }).catch(() => loadDataScript(() => { D = window.DATA; done(); }, fail));
 }
 
 function autoRefreshData() {
   // 静默自动刷新：每 10 分钟拉最新数据重渲染（板块/个股/选股）
-  const ts = new Date().getTime();
-  const script = document.createElement("script");
-  script.src = "app-data.js?v=" + ts;
-  script.onload = () => {
-    if (window.DATA) {
-      D = window.DATA;
+  fetchDataGz().then(d => {
+    if (d) {
+      D = d;
       renderAll();
+    } else {
+      loadDataScript(() => {
+        if (window.DATA) {
+          D = window.DATA;
+          renderAll();
+        }
+      }, () => {});
     }
-  };
-  document.body.appendChild(script);
+  }).catch(() => {});
 }
 
 function autoRefreshNews() {
