@@ -1094,8 +1094,12 @@ def main():
         except ValueError:
             top_n = 500
         top500 = sorted(spot, key=lambda x: -(x.get("amount") or 0))[:top_n]
+        # 涨停股优先拉取（保持连板数据最新）
+        limit_stocks = [s for s in spot if s.get("pct") is not None and s["pct"] >= 9.5]
+        limit_codes = {s["code"] for s in limit_stocks}
+        fetch_list = limit_stocks + [s for s in top500 if s["code"] not in limit_codes]
         fetched = 0
-        for idx, s in enumerate(top500):
+        for idx, s in enumerate(fetch_list):
             if time.time() - t_fetch_start > 2400:
                 print("  fetch time budget reached", flush=True)
                 break
