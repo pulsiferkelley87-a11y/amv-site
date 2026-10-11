@@ -1030,6 +1030,7 @@ function renderStockRows(rows) {
 }
 
 function renderAll() {
+  renderBullBear();
   renderMeta();
   renderMain();
   renderTrio();
@@ -1037,6 +1038,53 @@ function renderAll() {
   renderWeekly();
   renderSectors();
   renderStocks();
+}
+
+function renderBullBear() {
+  const el = document.getElementById("bullBearBox");
+  if (!el) return;
+  const bb = D && D.bull_bear;
+  if (!bb || !bb.scores) {
+    el.innerHTML = "<span style='color:var(--muted);'>牛熊评分计算中…</span>";
+    return;
+  }
+  const s = bb.scores;
+  const total = bb.total;
+  const tCls = total >= 15 ? "up" : total <= -15 ? "down" : "flat";
+  const mods = [
+    ["价格趋势", s.trend, "25%"],
+    ["市场广度", s.breadth, "20%"],
+    ["成交量能", s.volume, "15%"],
+    ["宏观盈利", s.macro, "15%"],
+    ["市场估值", s.valuation, "10%"],
+    ["情绪杠杆", s.sentiment, "15%"],
+  ];
+  const bar = v => {
+    const p = Math.max(0, Math.min(100, (v + 100) / 2));
+    const c = v >= 20 ? "#2fa36b" : v <= -20 ? "#d64545" : "#b8860b";
+    return `<div style="height:8px;background:#eef0f3;border-radius:4px;margin:2px 0;"><div style="width:${p}%;height:8px;background:${c};border-radius:4px;"></div></div>`;
+  };
+  let html = `<div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start;">
+    <div style="min-width:150px;text-align:center;">
+      <div style="font-size:38px;font-weight:800;color:${total >= 15 ? "#d64545" : total <= -15 ? "#2fa36b" : "#6b7280"};">${total > 0 ? "+" : ""}${total}</div>
+      <div style="font-size:14px;font-weight:600;">${bb.state}</div>
+      <div style="font-size:11px;color:var(--muted);">更新 ${bb.updated_at || ""}</div>
+    </div>
+    <div style="flex:1;min-width:320px;">`;
+  mods.forEach(([name, v, w]) => {
+    const vv = v != null ? v : 0;
+    html += `<div style="font-size:12px;">${name}（${w}）<span style="float:right;font-weight:600;" class="${vv >= 15 ? "up" : vv <= -15 ? "down" : "flat"}">${vv > 0 ? "+" : ""}${vv}</span>${bar(vv)}</div>`;
+  });
+  html += "</div></div>";
+  // 明细
+  const d = bb.details || {};
+  if (d.volume && d.volume.cur_yi) {
+    html += `<div style="font-size:11.5px;color:var(--muted);margin-top:6px;">量能：今日成交 ${d.volume.cur_yi}亿（20日均 ${d.volume.ma20_yi}亿，比值 ${d.volume.ratio20}）｜广度：站上60日线 ${d.breadth.above_pct ? d.breadth.above_pct[60] : "—"}%、250日线 ${d.breadth.above_pct ? d.breadth.above_pct[250] : "—"}%｜情绪：上涨占比 ${d.sentiment.up_ratio}%、涨停 ${d.sentiment.limit_up}、最高 ${d.sentiment.max_board} 板</div>`;
+  }
+  if (d.macro_note) {
+    html += `<div style="font-size:11.5px;color:var(--muted);margin-top:4px;">📋 宏观/估值（手动维护，截止 ${d.macro_asof || "—"}）：${d.macro_note}</div>`;
+  }
+  el.innerHTML = html;
 }
 
 async function fetchDataGz() {
