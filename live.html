@@ -127,6 +127,12 @@ function refreshNow() {
   btn.disabled = true;
   fetchGz("https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com/live_data.json.gz")
     .then(j => {
+      // 信号保留更好的那份（与 renderAll 一致）
+      const curCnt = (LD && LD.signals) ? Object.keys(LD.signals).length : 0;
+      const newCnt = (j.signals) ? Object.keys(j.signals).length : 0;
+      if (curCnt > newCnt) {
+        j.signals = LD.signals;
+      }
       LD = j;
       const up = (j.updated_at || "").replace(" ", "T");
       const lag = up ? Math.max(0, Math.round((Date.now() - new Date(up).getTime()) / 60000)) : -1;
@@ -142,6 +148,7 @@ function refreshNow() {
       renderLimits();
       renderBlocks();
       renderStocks();
+      loadSignalsFromPages();
       btn.textContent = "✅ 已刷新";
       setTimeout(() => { btn.textContent = "🔄 立即刷新"; btn.disabled = false; }, 1500);
     })
