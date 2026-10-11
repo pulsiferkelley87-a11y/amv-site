@@ -46,6 +46,12 @@ async function load() {
         const stream = new Blob([buf]).stream().pipeThrough(ds);
         const txt = await new Response(stream).text();
         D = JSON.parse(txt.slice(txt.indexOf("{")).replace(/;\s*$/, ""));
+        if (!D.bull_bear) {
+          try {
+            const r2 = await fetch("bull_bear.json?v=" + new Date().getTime());
+            D.bull_bear = await r2.json();
+          } catch (e2) { }
+        }
         checkDataFreshness();
       }
     } catch (e) { }
