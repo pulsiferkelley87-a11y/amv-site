@@ -1292,6 +1292,18 @@ def main():
         }
     with open(SIG_JSON, "w", encoding="utf-8") as f:
         json.dump({"updated_at": result["updated_at"], "signals": sig_map}, f, ensure_ascii=False)
+    # signals 压缩版（实盘页用）
+    try:
+        import gzip as _gzip
+        _sig_raw = json.dumps({"updated_at": result["updated_at"], "signals": sig_map},
+                               ensure_ascii=False).encode("utf-8")
+        _sig_gz = _gzip.compress(_sig_raw, 6)
+        with open(SIG_JSON + ".gz", "wb") as f:
+            f.write(_sig_gz)
+        with open(os.path.join(BASE, "signals2.json.gz"), "wb") as f:
+            f.write(_sig_gz)
+    except Exception:
+        pass
     print("OK", result["updated_at"], "spot:", len(spot), "sectors:", len(sectors),
           "official:", len(official) if official else 0, "amv:", len(amv_rows))
 
