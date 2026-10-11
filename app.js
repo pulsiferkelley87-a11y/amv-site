@@ -1040,14 +1040,34 @@ function renderAll() {
   renderStocks();
 }
 
+let BB_DATA = null;
+
 function renderBullBear() {
   const el = document.getElementById("bullBearBox");
   if (!el) return;
-  const bb = D && D.bull_bear;
+  const bb = BB_DATA || (D && D.bull_bear);
   if (!bb || !bb.scores) {
     el.innerHTML = "<span style='color:var(--muted);'>牛熊评分计算中…</span>";
+    loadBullBear();
     return;
   }
+  renderBullBearBox(el, bb);
+}
+
+function loadBullBear() {
+  fetch("bull_bear.json?v=" + new Date().getTime())
+    .then(r => r.json())
+    .then(j => {
+      if (j && j.scores) {
+        BB_DATA = j;
+        const el = document.getElementById("bullBearBox");
+        if (el) renderBullBearBox(el, j);
+      }
+    })
+    .catch(() => {});
+}
+
+function renderBullBearBox(el, bb) {
   const s = bb.scores;
   const total = bb.total;
   const tCls = total >= 15 ? "up" : total <= -15 ? "down" : "flat";
