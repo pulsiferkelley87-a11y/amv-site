@@ -270,7 +270,35 @@ function renderFlow() {
       <td class="${p >= 0 ? "up" : "down"}">${p >= 0 ? "+" : ""}${p}%</td></tr>`;
   });
   html += "</tbody></table>";
+  html += `<div style="margin-top:8px;"><button onclick="toggleFlowHistory()" style="padding:2px 10px;border:1px solid #d1d5db;border-radius:5px;background:#fff;cursor:pointer;font-size:12px;">📅 近 10 日主线回看</button><div id="flowHistBox" style="margin-top:4px;"></div></div>`;
   el.innerHTML = html;
+}
+
+function toggleFlowHistory() {
+  const box = document.getElementById("flowHistBox");
+  if (!box) return;
+  if (box.innerHTML) {
+    box.innerHTML = "";
+    return;
+  }
+  box.innerHTML = "<span style='color:var(--muted);'>加载中…</span>";
+  fetch("https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com/flow_history/index.json?t=" + new Date().getTime())
+    .then(r => r.json())
+    .then(j => {
+      const days = Object.keys(j.days || {}).sort().slice(-10).reverse();
+      if (!days.length) {
+        box.innerHTML = "<span style='color:var(--muted);'>暂无历史（从今天收盘开始存档）。</span>";
+        return;
+      }
+      let html = "";
+      days.forEach(d => {
+        const info = (j.days || {})[d] || {};
+        const mains = (info.main || []).map(x => `<b style="color:#c0392b;">${x.name}</b>`).join("、") || "无";
+        html += `<div style="padding:3px 0;border-bottom:1px dashed #eee;font-size:12.5px;"><b>${d}</b> 主线：${mains}</div>`;
+      });
+      box.innerHTML = html;
+    })
+    .catch(() => { box.innerHTML = "<span style='color:var(--muted);'>加载失败。</span>"; });
 }
 
 function renderSignals() {
