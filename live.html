@@ -148,7 +148,6 @@ function refreshNow() {
       renderLimits();
       renderBlocks();
       renderStocks();
-      loadSignalsFromPages();
       btn.textContent = "✅ 已刷新";
       setTimeout(() => { btn.textContent = "🔄 立即刷新"; btn.disabled = false; }, 1500);
     })
@@ -221,7 +220,6 @@ function renderAll(j) {
   renderLimits();
   renderBlocks();
   renderStocks();
-  loadSignalsFromPages();
 }
 
 function loadSignalsFromPages() {
