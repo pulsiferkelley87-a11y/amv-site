@@ -1251,6 +1251,7 @@ function line(data, name, color, width) {
 }
 
 load();
+loadBullBear();  // 牛熊卡片独立立即加载（2KB 小文件，不等主数据）
 
 // 自动刷新：数据每 10 分钟、快讯每 5 分钟（静默，无需手动操作）
 setInterval(autoRefreshData, 600000);
