@@ -1271,8 +1271,12 @@ def main():
     # gzip 压缩版（手机/浏览器加载快）
     try:
         import gzip as _gzip
+        _raw = open(APP_JS, "rb").read()
+        _gz = _gzip.compress(_raw, 6)
         with open(APP_JS + ".gz", "wb") as f:
-            f.write(_gzip.compress(open(APP_JS, "rb").read(), 6))
+            f.write(_gz)
+        with open(os.path.join(BASE, "d2.js.gz"), "wb") as f:
+            f.write(_gz)
     except Exception:
         pass
     # 轻量信号文件（供云函数/实盘页拉取）
