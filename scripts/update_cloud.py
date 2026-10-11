@@ -943,6 +943,7 @@ def main():
     # 北京时间（云端 runner 是 UTC，需 +8）
     bj = datetime.utcnow() + timedelta(hours=8)
     result = {"updated_at": bj.strftime("%Y-%m-%d %H:%M:%S"), "errors": []}
+    stocks_closes = {}  # 牛熊广度模块用：{code: [closes]}
 
     # 1) 官方序列
     official = load_official()
@@ -1116,6 +1117,7 @@ def main():
                 kl = augment_rows(s["code"], kl, snap_map, snap_date)
             if kl:
                 amv_r, kdates_r, kseries_r = compute_stock_amv_reg(kl, s.get("float_mv"))
+                stocks_closes[s["code"]] = [r.get("close") or 0.0 for r in kl]
                 if amv_r:
                     sig = compute_signals(kseries_r or [], kl)
                     row = {
@@ -1263,6 +1265,24 @@ def main():
         }
     with open(SIG_JSON, "w", encoding="utf-8") as f:
         json.dump({"updated_at": result["updated_at"], "signals": sig_map}, f, ensure_ascii=False)
+    # A股牛熊识别系统（六大模块）
+    try:
+        from bull_bear import compute_bull_bear
+        up_n = sum(1 for x in spot if x.get("pct") and x["pct"] > 0)
+        down_n = sum(1 for x in spot if x.get("pct") and x["pct"] < 0)
+        lu_n = sum(1 for x in spot if x.get("pct") and x["pct"] >= 9.5)
+        ld_n = sum(1 for x in spot if x.get("pct") and x["pct"] <= -9.5)
+        max_board = max((s.get("limit_days", 0) for s in amv_rows), default=0)
+        amt_series = result.get("official", {}).get("amount") or []
+        bb = compute_bull_bear(stocks_closes, amt_series,
+                               (up_n, down_n, lu_n, ld_n, max_board))
+        bb["updated_at"] = result["updated_at"]
+        result["bull_bear"] = bb
+        with open(os.path.join(BASE, "bull_bear.json"), "w", encoding="utf-8") as f:
+            json.dump(bb, f, ensure_ascii=False)
+        print("bull_bear:", bb["total"], bb["state"])
+    except Exception as e:
+        print("bull_bear err:", str(e)[:120])
     print("OK", result["updated_at"], "spot:", len(spot), "sectors:", len(sectors),
           "official:", len(official) if official else 0, "amv:", len(amv_rows))
 
