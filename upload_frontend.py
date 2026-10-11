@@ -91,7 +91,7 @@ def upload(rel):
 def main():
     open(LOG, "w", encoding="utf-8").close()
     log("API 上传开始")
-    targets = ["app.js", "index.html", "app-data.js", "app-data.js.gz", "echarts.min.js",
+    targets = ["app.js", "index.html", "app-data.js", "app-data.js.gz", "d2.js.gz", "echarts.min.js",
                "live.html", "live_data.json",
                "scripts/update_cloud.py", "scripts/news_update.py",
                "scripts/live_update.py",
