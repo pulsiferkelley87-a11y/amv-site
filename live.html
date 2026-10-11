@@ -218,8 +218,8 @@ function renderAll(j) {
 }
 
 function loadSignalsFromPages() {
-  // 信号文件大，用 gzip 版从 Pages 直拉；失败回退原文件
-  fetchGz("signals.json.gz")
+  // 信号文件大，用 gzip 版直拉；失败回退原文件
+  fetchGz("signals2.json.gz")
     .then(j => {
       const sigs = (j && j.signals) || {};
       const cur = (LD && LD.signals) ? Object.keys(LD.signals).length : 0;
