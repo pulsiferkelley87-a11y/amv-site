@@ -225,8 +225,9 @@ function renderAll(j) {
 }
 
 function loadSignalsFromPages() {
-  // 信号文件大，用 gzip 版直拉；失败回退原文件
-  fetchGz("signals2.json.gz")
+  // 信号优先读腾讯云缓存（与主数据同源，快）；失败回退 Pages 压缩版
+  fetch("https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com/signals_cache.json?t=" + new Date().getTime())
+    .then(r => r.json())
     .then(j => {
       const sigs = (j && j.signals) || {};
       const cur = (LD && LD.signals) ? Object.keys(LD.signals).length : 0;
@@ -236,7 +237,19 @@ function loadSignalsFromPages() {
         renderLimits();
       }
     })
-    .catch(() => {});
+    .catch(() => {
+      fetchGz("signals2.json.gz")
+        .then(j => {
+          const sigs = (j && j.signals) || {};
+          const cur = (LD && LD.signals) ? Object.keys(LD.signals).length : 0;
+          if (Object.keys(sigs).length > cur) {
+            LD.signals = sigs;
+            renderSignals();
+            renderLimits();
+          }
+        })
+        .catch(() => {});
+    });
 }
 
 let SIG_TAB = "up";
