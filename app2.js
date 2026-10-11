@@ -20,6 +20,21 @@ let RANGE_SORT = "amount"; // amount = 区间累计成交额；drag = 拖后腿�
 let SEC_TAB = "industry"; // industry = 行业榜；style = 风格榜
 let SHOW_DROP = true;    // −2.3% 事件标记开关
 
+function checkDataFreshness() {
+  // 数据比昨天旧 → 提示可能是网络缓存了旧数据
+  try {
+    const up = String(D.updated_at || "").slice(0, 10);
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    if (up && up < today) {
+      const m = document.getElementById("meta");
+      if (m) {
+        m.innerHTML = `<span style="color:#b9770e;font-weight:bold;">⚠️ 你加载到的是 ${up} 的旧数据（当前 ${today}）——网络/运营商缓存了旧文件。请尝试：手机切换流量、清除浏览器缓存、或换浏览器打开。</span>`;
+      }
+    }
+  } catch (e) { }
+}
+
 async function load() {
   // 优先拉 gzip 压缩版（手机快 3 倍+）；不支持或失败回退 window.DATA
   if (typeof DecompressionStream !== "undefined") {
@@ -31,6 +46,7 @@ async function load() {
         const stream = new Blob([buf]).stream().pipeThrough(ds);
         const txt = await new Response(stream).text();
         D = JSON.parse(txt.slice(txt.indexOf("{")).replace(/;\s*$/, ""));
+        checkDataFreshness();
       }
     } catch (e) { }
   }
@@ -1111,7 +1127,7 @@ async function fetchDataGz() {
   // 拉 gzip 版数据；失败返回 null
   if (typeof DecompressionStream === "undefined") return null;
   try {
-    const r = await fetch("d2.js.gz?v=" + new Date().getTime());
+    const r = await fetch("app-data.js.gz?v=" + new Date().getTime());
     if (!r.ok) return null;
     const buf = await r.arrayBuffer();
     const ds = new DecompressionStream("gzip");
