@@ -1194,6 +1194,7 @@ function refreshAll() {
 
 function autoRefreshData() {
   // 静默自动刷新：每 10 分钟拉最新数据重渲染（板块/个股/选股）
+  loadBullBear();  // 牛熊数据同步刷新（时间戳跟着变）
   fetchDataGz().then(d => {
     if (d) {
       D = d;
