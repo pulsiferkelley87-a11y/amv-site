@@ -1245,24 +1245,26 @@ def main():
         except (OSError, ValueError):
             pass
 
-    # A股牛熊识别系统（六大模块）——在写 app-data.js 之前计算，随主数据一起上线
-    try:
-        from bull_bear import compute_bull_bear
-        up_n = sum(1 for x in spot if x.get("pct") and x["pct"] > 0)
-        down_n = sum(1 for x in spot if x.get("pct") and x["pct"] < 0)
-        lu_n = sum(1 for x in spot if x.get("pct") and x["pct"] >= 9.5)
-        ld_n = sum(1 for x in spot if x.get("pct") and x["pct"] <= -9.5)
-        max_board = max((s.get("limit_days", 0) for s in amv_rows), default=0)
-        amt_series = result.get("official", {}).get("amount") or []
-        bb = compute_bull_bear(stocks_closes, amt_series,
-                               (up_n, down_n, lu_n, ld_n, max_board))
-        bb["updated_at"] = result["updated_at"]
-        result["bull_bear"] = bb
-        with open(os.path.join(BASE, "bull_bear.json"), "w", encoding="utf-8") as f:
-            json.dump(bb, f, ensure_ascii=False)
-        print("bull_bear:", bb["total"], bb["state"])
-    except Exception as e:
-        print("bull_bear err:", str(e)[:120])
+    # A股牛熊识别系统（六大模块）——只在全量更新（daily，TOP_N>=500）时计算；轻量任务保持旧值
+    _bb_top_n = int(os.environ.get("TOP_N", "500"))
+    if _bb_top_n >= 500:
+        try:
+            from bull_bear import compute_bull_bear
+            up_n = sum(1 for x in spot if x.get("pct") and x["pct"] > 0)
+            down_n = sum(1 for x in spot if x.get("pct") and x["pct"] < 0)
+            lu_n = sum(1 for x in spot if x.get("pct") and x["pct"] >= 9.5)
+            ld_n = sum(1 for x in spot if x.get("pct") and x["pct"] <= -9.5)
+            max_board = max((s.get("limit_days", 0) for s in amv_rows), default=0)
+            amt_series = result.get("official", {}).get("amount") or []
+            bb = compute_bull_bear(stocks_closes, amt_series,
+                                   (up_n, down_n, lu_n, ld_n, max_board))
+            bb["updated_at"] = result["updated_at"]
+            result["bull_bear"] = bb
+            with open(os.path.join(BASE, "bull_bear.json"), "w", encoding="utf-8") as f:
+                json.dump(bb, f, ensure_ascii=False)
+            print("bull_bear:", bb["total"], bb["state"])
+        except Exception as e:
+            print("bull_bear err:", str(e)[:120])
 
     with open(OUT_JSON, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False)
