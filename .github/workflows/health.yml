@@ -43,6 +43,21 @@ jobs:
             timeout 60 git push || true
           fi
 
+      - name: Prepare publish directory (root-level files only)
+        run: |
+          mkdir -p _site
+          find . -maxdepth 1 -type f -exec cp {} _site/ \;
+          ls _site | wc -l
+
+      - name: Publish to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          projectName: amv-site
+          directory: _site
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
