@@ -67,15 +67,28 @@ async function load() {
     document.getElementById("histRange").textContent =
       "个股/板块历史快照采集中（每日自动补充）";
   }
+  // 首屏先渲染不依赖 echarts 的内容（文字 + 表格 + 健康面板）
   renderMeta();
   renderHealth();
   setInterval(renderHealth, 5 * 60 * 1000); // 健康面板每 5 分钟自动刷新
-  renderMain();
-  renderTrio();
-  renderRatio();
-  renderWeekly();
-  renderSectors();
   renderStocks();
+  // echarts（1MB）动态加载，就绪后再画图；手机首屏不用等图表
+  loadEcharts(function () {
+    renderMain();
+    renderTrio();
+    renderRatio();
+    renderWeekly();
+    renderSectors();
+  });
+}
+
+function loadEcharts(cb) {
+  if (window.echarts) { cb(); return; }
+  const s = document.createElement("script");
+  s.src = "echarts.min.js?v=3";
+  s.onload = cb;
+  s.onerror = cb; // 加载失败也继续，图表区留空不阻塞页面
+  document.head.appendChild(s);
 }
 
 async function renderHealth() {

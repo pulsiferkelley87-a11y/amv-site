@@ -1380,7 +1380,7 @@ def main():
     try:
         import gzip as _gzip
         _raw = open(APP_JS, "rb").read()
-        _gz = _gzip.compress(_raw, 6)
+        _gz = _gzip.compress(_raw, 9)
         with open(APP_JS + ".gz", "wb") as f:
             f.write(_gz)
         with open(os.path.join(BASE, "d2.js.gz"), "wb") as f:
