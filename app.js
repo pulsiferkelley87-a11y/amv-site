@@ -69,6 +69,7 @@ async function load() {
   }
   renderMeta();
   renderHealth();
+  setInterval(renderHealth, 5 * 60 * 1000); // 健康面板每 5 分钟自动刷新
   renderMain();
   renderTrio();
   renderRatio();
@@ -77,32 +78,50 @@ async function load() {
   renderStocks();
 }
 
-function renderHealth() {
+async function renderHealth() {
   const card = document.getElementById("healthCard");
   if (!card) return;
-  const h = D.source_health;
-  if (!h) return;
+  let src = D.source_health || null;  // 旧结构（daily 生成，ok/fail 计数）
+  let cc = D.cross_check || null;
+  try {
+    // 优先读独立健康数据（每 15 分钟云端更新）
+    const r = await fetch("health.json?t=" + new Date().getTime(), { cache: "no-store" });
+    if (r.ok) {
+      const h = await r.json();
+      if (h && h.sources) src = h.sources;
+      if (h && h.cross_check) cc = h.cross_check;
+    }
+  } catch (e) { }
+  if (!src && !cc) return;
   card.style.display = "";
   const names = { em: "东方财富", tdx: "通达信 TQLEX", tx: "腾讯" };
   let html = "";
   for (const k in names) {
-    const s = h[k] || { ok: 0, fail: 0 };
-    const total = (s.ok || 0) + (s.fail || 0);
-    const rate = total ? Math.round(s.ok / total * 100) : null;
-    const color = rate === null ? "var(--muted)"
-      : rate >= 90 ? "var(--green)"
-      : rate > 0 ? "var(--amber)" : "var(--red)";
+    const s = (src && src[k]) || {};
+    let stat;
+    if (typeof s.ok === "number") {
+      // 旧结构：ok/fail 计数
+      const total = (s.ok || 0) + (s.fail || 0);
+      const rate = total ? Math.round(s.ok / total * 100) : null;
+      const color = rate === null ? "var(--muted)"
+        : rate >= 90 ? "var(--green)"
+        : rate > 0 ? "var(--amber)" : "var(--red)";
+      stat = '成功 <b style="color:' + color + ';">' + (s.ok || 0)
+        + '</b> / 失败 ' + (s.fail || 0)
+        + (rate !== null ? '（成功率 ' + rate + '%）' : '（今日无调用）');
+    } else {
+      // 新结构：ok bool + 延迟
+      const color = s.ok ? "var(--green)" : "var(--red)";
+      stat = s.ok
+        ? '<span style="color:' + color + ';">✅ 正常</span>（' + (s.latency_ms != null ? s.latency_ms + "ms" : "-") + '）'
+        : '<span style="color:' + color + ';">❌ 失败</span>' + (s.note ? '（' + s.note + '）' : '');
+    }
     html += '<div style="padding:8px 14px;border:1px solid #e5e7eb;border-radius:8px;">'
-      + '<b>' + names[k] + '</b>：成功 <b style="color:' + color + ';">' + (s.ok || 0)
-      + '</b> / 失败 ' + (s.fail || 0)
-      + (rate !== null ? '（成功率 <b style="color:' + color + ';">' + rate + '%</b>）'
-                       : '（今日无调用）')
-      + '</div>';
+      + '<b>' + names[k] + '</b>：' + stat + '</div>';
   }
   document.getElementById("healthBox").innerHTML = html;
-  const cc = D.cross_check;
   if (!cc) return;
-  let ch = '交叉验证（通达信 TQLEX vs 东财快照）：抽查 <b>' + cc.checked + '</b> 只，一致 <b>' + cc.matched + '</b> 只';
+  let ch = '交叉验证（通达信 TQLEX vs 东财）：抽查 <b>' + cc.checked + '</b> 只，一致 <b>' + cc.matched + '</b> 只';
   if (cc.note) ch += '（' + cc.note + '）';
   if (cc.mismatches && cc.mismatches.length) {
     ch += '，<span style="color:var(--red);"><b>' + cc.mismatches.length + '</b> 只偏差超阈值</span>';
