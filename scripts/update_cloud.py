@@ -7,10 +7,33 @@
 """
 import json
 import os
+import sys
 import time
 from datetime import datetime, date, timedelta
 
 import requests
+
+# tdxhub 备选源（通达信 TQLEX，东财风控时兜底；不可用时优雅降级）
+TDX_AVAILABLE = False
+try:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import tdxhub as _tdxhub
+    TDX_AVAILABLE = True
+except Exception:
+    _tdxhub = None
+
+# 数据源健康统计（埋点：每次拉取尝试计入）
+SOURCE_STATS = {
+    "em": {"ok": 0, "fail": 0},    # 东财
+    "tdx": {"ok": 0, "fail": 0},   # 通达信 TQLEX
+    "tx": {"ok": 0, "fail": 0},    # 腾讯
+}
+
+
+def _stat(src, ok):
+    key = "ok" if ok else "fail"
+    if src in SOURCE_STATS:
+        SOURCE_STATS[src][key] += 1
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE, "data")
@@ -94,7 +117,9 @@ def fetch_spot():
         except KeyError:
             continue
     if len(out) >= 500:
+        _stat("em", True)
         return out
+    _stat("em", False)  # 东财快照不完整，下方走新浪兜底
     # 东财风控兜底：用新浪股票列表构造快照（成交额/流通市值/换手率齐全）
     ind_map = {}
     for p in (os.path.join(DATA_DIR, "industry_map.json"),
@@ -225,10 +250,28 @@ def fetch_kline_em(code, lmt=500):
                     "turnover": float(p[10]) if p[10] not in ("", "-") else None,
                 })
             if out:
+                _stat("em", True)
                 return out
         except Exception:
             continue
+    _stat("em", False)
     return None
+
+
+def fetch_kline_tdx(code, lmt=500):
+    """通达信 TQLEX 日线（精确 OHLCV + amount，量纲与东财一致）。"""
+    if not TDX_AVAILABLE:
+        return None
+    setcode = _tdxhub.setcode_of(code)
+    if not setcode:
+        return None
+    try:
+        rows = _tdxhub.kline_daily(code, setcode, want_num=lmt)
+        _stat("tdx", bool(rows))
+        return rows if rows else None
+    except Exception:
+        _stat("tdx", False)
+        return None
 
 
 def fetch_kline_tx(code, lmt=500):
@@ -251,15 +294,28 @@ def fetch_kline_tx(code, lmt=500):
             avg = (o + h + l + c) / 4
             out.append({"date": row[0], "close": c, "amount": v * 100 * avg,
                         "volume": v * 100, "turnover": None})
+        _stat("tx", bool(out))
         return out if out else None
     except Exception:
+        _stat("tx", False)
         return None
 
 
 def fetch_kline(code, spot_amount=None, float_mv=None):
+    """三级兜底：东财 -> tdxhub（精确） -> 腾讯（近似）。带量纲校验 + 换手率近似。"""
     kl = fetch_kline_em(code)
     if kl:
         return kl, "em"
+    kl = fetch_kline_tdx(code)
+    if kl and spot_amount:
+        ratio = (kl[-1]["amount"] or 0) / (spot_amount or 1)
+        if not (0.1 <= ratio <= 10.0):
+            return None, "tdx_rejected"
+        if float_mv:
+            for k in kl:
+                k["turnover"] = (k["amount"] / float_mv * 100) if float_mv else None
+    if kl:
+        return kl, "tdx"
     kl = fetch_kline_tx(code)
     if kl and spot_amount:
         # 量纲校验放宽（腾讯数据股本变化时量纲漂移，0.1~10 倍均可接受）
@@ -270,6 +326,48 @@ def fetch_kline(code, spot_amount=None, float_mv=None):
             for k in kl:
                 k["turnover"] = (k["amount"] / float_mv * 100) if float_mv else None
     return kl, "tx" if kl else None
+
+
+def cross_check_spot(stocks, n=12):
+    """用 tdxhub 行情抽查东财快照 top N（交叉验证）。
+    价格偏差 >1.5% 或成交额偏差 >25% 记入 mismatches（可能是快照时间差或数据异常）。"""
+    if not TDX_AVAILABLE:
+        return {"checked": 0, "matched": 0, "mismatches": [],
+                "note": "tdxhub unavailable"}
+    out = {"checked": 0, "matched": 0, "mismatches": []}
+    for s in stocks[:n]:
+        code = s.get("code")
+        if not code:
+            continue
+        setcode = _tdxhub.setcode_of(code)
+        if not setcode:
+            continue
+        try:
+            q = _tdxhub.quotes(code, setcode)
+            hq = q.get("HQInfo") or {}
+            now = hq.get("Now")
+            amt = hq.get("Amount")
+            if not now or not amt:
+                continue
+            out["checked"] += 1
+            em_price = s.get("price")
+            em_amt = s.get("amount")
+            dev_p = abs(float(now) / float(em_price) - 1) * 100 if em_price else None
+            dev_a = abs(float(amt) / float(em_amt) - 1) * 100 if em_amt else None
+            bad = (dev_p is not None and dev_p > 1.5) or (dev_a is not None and dev_a > 25)
+            if bad:
+                out["mismatches"].append({
+                    "code": code, "name": s.get("name"),
+                    "em_price": em_price, "tdx_price": float(now),
+                    "dev_pct": round(dev_p or 0, 2),
+                    "em_amount": em_amt, "tdx_amount": float(amt),
+                    "dev_amt_pct": round(dev_a or 0, 2),
+                })
+            else:
+                out["matched"] += 1
+        except Exception:
+            continue
+    return out
 
 
 def load_cache(code):
@@ -1008,6 +1106,9 @@ def main():
         ]
         result["all_stocks"] = all_stocks
         result["market_totals"] = {"amount": tot_amt, "float_mv": tot_mv, "count": len(valid)}
+        # 交叉验证：tdxhub 抽查东财快照 top12（数据链核对）
+        result["cross_check"] = cross_check_spot(
+            sorted(valid, key=lambda x: -(x.get("amount") or 0)))
 
     if sectors:
         for s in sectors:
@@ -1263,6 +1364,13 @@ def main():
         print("bull_bear:", bb["total"], bb["state"])
     except Exception as e:
         print("bull_bear err:", str(e)[:120])
+
+    # 数据源健康度（今日各源拉取成功率）
+    result["source_health"] = {
+        "em": dict(SOURCE_STATS["em"]),
+        "tdx": dict(SOURCE_STATS["tdx"]),
+        "tx": dict(SOURCE_STATS["tx"]),
+    }
 
     with open(OUT_JSON, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False)

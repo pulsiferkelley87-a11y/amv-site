@@ -7,7 +7,27 @@
 """
 import json
 import os
+import sys
 import urllib.request
+
+# tdxhub 备选源（通达信 TQLEX 指数日线）；导入失败则仅用腾讯
+TDX_AVAILABLE = False
+try:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import tdxhub as _tdxhub
+    TDX_AVAILABLE = True
+except Exception:
+    pass
+
+# 腾讯指数代码 -> (tdxhub 数字代码, setcode)
+TDX_INDEX_MAP = {
+    "sh000001": ("000001", "1"),  # 上证指数
+    "sh000300": ("000300", "1"),  # 沪深300
+    "sz399001": ("399001", "0"),  # 深证成指
+    "sz399006": ("399006", "0"),  # 创业板指
+    "sh000905": ("000905", "1"),  # 中证500
+    "sh000852": ("000852", "1"),  # 中证1000
+}
 
 INDICES_BB = [
     ("sh000001", "上证指数"),
@@ -29,7 +49,16 @@ def http_get(url, timeout=30):
 
 
 def fetch_index_daily(code):
-    """腾讯指数日线（约 320 根）。返回 [(date, close)]。"""
+    """指数日线（约 320 根），返回 [(date, close)]。
+    腾讯优先；失败或空则 tdxhub（通达信 TQLEX）备选。"""
+    rows = _fetch_index_tx(code)
+    if not rows and TDX_AVAILABLE:
+        rows = _fetch_index_tdx(code)
+    return rows
+
+
+def _fetch_index_tx(code):
+    """腾讯指数日线。"""
     url = (f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
            f"?param={code},day,,,320,qfq")
     st, txt = http_get(url)
@@ -40,6 +69,26 @@ def fetch_index_daily(code):
         node = j["data"][code]
         rows = node.get("qfqday") or node.get("day") or []
         return [(r[0], float(r[2])) for r in rows if len(r) >= 3]
+    except Exception:
+        return []
+
+
+def _fetch_index_tdx(code):
+    """tdxhub 指数日线（通达信 TQLEX），返回 [(date, close)]。"""
+    t = TDX_INDEX_MAP.get(code)
+    if not t:
+        return []
+    try:
+        rows = _tdxhub.kline_daily(t[0], t[1], want_num=320)
+        out = []
+        for r in rows:
+            if not r.get("close"):
+                continue
+            d = r["date"]
+            if len(d) == 8 and d.isdigit():  # 20261012 -> 2026-10-12，与腾讯格式对齐
+                d = "%s-%s-%s" % (d[:4], d[4:6], d[6:8])
+            out.append((d, r["close"]))
+        return out
     except Exception:
         return []
 

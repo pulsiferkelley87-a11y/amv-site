@@ -20,17 +20,39 @@ let RANGE_SORT = "amount"; // amount = 区间累计成交额；drag = 拖后腿�
 let SEC_TAB = "industry"; // industry = 行业榜；style = 风格榜
 let SHOW_DROP = true;    // −2.3% 事件标记开关
 
+function checkDataFreshness() {
+  // 数据比昨天旧 → 提示可能是网络缓存了旧数据
+  try {
+    const up = String(D.updated_at || "").slice(0, 10);
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    if (up && up < today) {
+      const m = document.getElementById("meta");
+      if (m) {
+        m.innerHTML = `<span style="color:#b9770e;font-weight:bold;">⚠️ 你加载到的是 ${up} 的旧数据（当前 ${today}）——网络/运营商缓存了旧文件。请尝试：手机切换流量、清除浏览器缓存、或换浏览器打开。</span>`;
+      }
+    }
+  } catch (e) { }
+}
+
 async function load() {
   // 优先拉 gzip 压缩版（手机快 3 倍+）；不支持或失败回退 window.DATA
   if (typeof DecompressionStream !== "undefined") {
     try {
-      const r = await fetch("app-data.js.gz?v=" + new Date().getTime());
+      const r = await fetch("d2.js.gz?v=" + new Date().getTime());
       if (r.ok) {
         const buf = await r.arrayBuffer();
         const ds = new DecompressionStream("gzip");
         const stream = new Blob([buf]).stream().pipeThrough(ds);
         const txt = await new Response(stream).text();
         D = JSON.parse(txt.slice(txt.indexOf("{")).replace(/;\s*$/, ""));
+        if (!D.bull_bear) {
+          try {
+            const r2 = await fetch("bull_bear.json?v=" + new Date().getTime());
+            D.bull_bear = await r2.json();
+          } catch (e2) { }
+        }
+        checkDataFreshness();
       }
     } catch (e) { }
   }
@@ -46,12 +68,56 @@ async function load() {
       "个股/板块历史快照采集中（每日自动补充）";
   }
   renderMeta();
+  renderHealth();
   renderMain();
   renderTrio();
   renderRatio();
   renderWeekly();
   renderSectors();
   renderStocks();
+}
+
+function renderHealth() {
+  const card = document.getElementById("healthCard");
+  if (!card) return;
+  const h = D.source_health;
+  if (!h) return;
+  card.style.display = "";
+  const names = { em: "东方财富", tdx: "通达信 TQLEX", tx: "腾讯" };
+  let html = "";
+  for (const k in names) {
+    const s = h[k] || { ok: 0, fail: 0 };
+    const total = (s.ok || 0) + (s.fail || 0);
+    const rate = total ? Math.round(s.ok / total * 100) : null;
+    const color = rate === null ? "var(--muted)"
+      : rate >= 90 ? "var(--green)"
+      : rate > 0 ? "var(--amber)" : "var(--red)";
+    html += '<div style="padding:8px 14px;border:1px solid #e5e7eb;border-radius:8px;">'
+      + '<b>' + names[k] + '</b>：成功 <b style="color:' + color + ';">' + (s.ok || 0)
+      + '</b> / 失败 ' + (s.fail || 0)
+      + (rate !== null ? '（成功率 <b style="color:' + color + ';">' + rate + '%</b>）'
+                       : '（今日无调用）')
+      + '</div>';
+  }
+  document.getElementById("healthBox").innerHTML = html;
+  const cc = D.cross_check;
+  if (!cc) return;
+  let ch = '交叉验证（通达信 TQLEX vs 东财快照）：抽查 <b>' + cc.checked + '</b> 只，一致 <b>' + cc.matched + '</b> 只';
+  if (cc.note) ch += '（' + cc.note + '）';
+  if (cc.mismatches && cc.mismatches.length) {
+    ch += '，<span style="color:var(--red);"><b>' + cc.mismatches.length + '</b> 只偏差超阈值</span>';
+    ch += '<table style="margin-top:6px;width:100%;"><tr><th>代码</th><th>名称</th><th>东财价</th><th>TDX价</th><th>价偏</th><th>东财额</th><th>TDX额</th><th>额偏</th></tr>';
+    for (const m of cc.mismatches) {
+      ch += '<tr><td>' + m.code + '</td><td>' + m.name + '</td><td>' + m.em_price
+        + '</td><td>' + m.tdx_price + '</td><td>' + m.dev_pct + '%</td><td>'
+        + (m.em_amount / 1e8).toFixed(2) + '亿</td><td>' + (m.tdx_amount / 1e8).toFixed(2)
+        + '亿</td><td>' + m.dev_amt_pct + '%</td></tr>';
+    }
+    ch += '</table>';
+  } else {
+    ch += '，<span style="color:var(--green);">无异常</span>';
+  }
+  document.getElementById("crossBox").innerHTML = ch;
 }
 
 function applyRange() {
@@ -1172,6 +1238,7 @@ function refreshAll() {
 
 function autoRefreshData() {
   // 静默自动刷新：每 10 分钟拉最新数据重渲染（板块/个股/选股）
+  loadBullBear();  // 牛熊数据同步刷新（时间戳跟着变）
   fetchDataGz().then(d => {
     if (d) {
       D = d;
@@ -1229,6 +1296,7 @@ function line(data, name, color, width) {
 }
 
 load();
+loadBullBear();  // 牛熊卡片独立立即加载（2KB 小文件，不等主数据）
 
 // 自动刷新：数据每 10 分钟、快讯每 5 分钟（静默，无需手动操作）
 setInterval(autoRefreshData, 600000);

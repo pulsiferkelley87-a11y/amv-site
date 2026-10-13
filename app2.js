@@ -68,12 +68,56 @@ async function load() {
       "个股/板块历史快照采集中（每日自动补充）";
   }
   renderMeta();
+  renderHealth();
   renderMain();
   renderTrio();
   renderRatio();
   renderWeekly();
   renderSectors();
   renderStocks();
+}
+
+function renderHealth() {
+  const card = document.getElementById("healthCard");
+  if (!card) return;
+  const h = D.source_health;
+  if (!h) return;
+  card.style.display = "";
+  const names = { em: "东方财富", tdx: "通达信 TQLEX", tx: "腾讯" };
+  let html = "";
+  for (const k in names) {
+    const s = h[k] || { ok: 0, fail: 0 };
+    const total = (s.ok || 0) + (s.fail || 0);
+    const rate = total ? Math.round(s.ok / total * 100) : null;
+    const color = rate === null ? "var(--muted)"
+      : rate >= 90 ? "var(--green)"
+      : rate > 0 ? "var(--amber)" : "var(--red)";
+    html += '<div style="padding:8px 14px;border:1px solid #e5e7eb;border-radius:8px;">'
+      + '<b>' + names[k] + '</b>：成功 <b style="color:' + color + ';">' + (s.ok || 0)
+      + '</b> / 失败 ' + (s.fail || 0)
+      + (rate !== null ? '（成功率 <b style="color:' + color + ';">' + rate + '%</b>）'
+                       : '（今日无调用）')
+      + '</div>';
+  }
+  document.getElementById("healthBox").innerHTML = html;
+  const cc = D.cross_check;
+  if (!cc) return;
+  let ch = '交叉验证（通达信 TQLEX vs 东财快照）：抽查 <b>' + cc.checked + '</b> 只，一致 <b>' + cc.matched + '</b> 只';
+  if (cc.note) ch += '（' + cc.note + '）';
+  if (cc.mismatches && cc.mismatches.length) {
+    ch += '，<span style="color:var(--red);"><b>' + cc.mismatches.length + '</b> 只偏差超阈值</span>';
+    ch += '<table style="margin-top:6px;width:100%;"><tr><th>代码</th><th>名称</th><th>东财价</th><th>TDX价</th><th>价偏</th><th>东财额</th><th>TDX额</th><th>额偏</th></tr>';
+    for (const m of cc.mismatches) {
+      ch += '<tr><td>' + m.code + '</td><td>' + m.name + '</td><td>' + m.em_price
+        + '</td><td>' + m.tdx_price + '</td><td>' + m.dev_pct + '%</td><td>'
+        + (m.em_amount / 1e8).toFixed(2) + '亿</td><td>' + (m.tdx_amount / 1e8).toFixed(2)
+        + '亿</td><td>' + m.dev_amt_pct + '%</td></tr>';
+    }
+    ch += '</table>';
+  } else {
+    ch += '，<span style="color:var(--green);">无异常</span>';
+  }
+  document.getElementById("crossBox").innerHTML = ch;
 }
 
 function applyRange() {
