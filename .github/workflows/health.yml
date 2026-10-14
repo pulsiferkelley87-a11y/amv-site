@@ -11,8 +11,8 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages-live
-  cancel-in-progress: false   # 与 Pages Deploy 共用队列，不互相取消
+  group: health-check   # 独立队列：不被 Pages Deploy 的 cancel-in-progress 取消
+  cancel-in-progress: false
 
 jobs:
   health:
