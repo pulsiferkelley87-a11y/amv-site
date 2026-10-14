@@ -18,6 +18,24 @@ REGION = os.environ.get("COS_REGION", "ap-guangzhou")
 
 EXCLUDE = {"live_data.json"}  # 实盘云函数每分钟更新，静态同步不得覆盖
 
+CONTENT_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "application/javascript",
+    ".css": "text/css",
+    ".json": "application/json",
+    ".gz": "application/gzip",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".ico": "image/x-icon",
+    ".txt": "text/plain; charset=utf-8",
+}
+
+
+def content_type_of(name):
+    ext = os.path.splitext(name)[1].lower()
+    return CONTENT_TYPES.get(ext, "application/octet-stream")
+
 if not SECRET_ID or not SECRET_KEY or not BUCKET:
     print("missing COS env vars, skip upload")
     sys.exit(0)
@@ -33,13 +51,27 @@ for path in files:
         skipped += 1
         continue
     try:
-        client.upload_file(
-            Bucket=BUCKET,
-            LocalFilePath=path,
-            Key=name,
-            EnableMD5=False,
-        )
-        uploaded += 1
+        uploaded_file = False
+        last_err = ""
+        for attempt in range(3):
+            try:
+                client.upload_file(
+                    Bucket=BUCKET,
+                    LocalFilePath=path,
+                    Key=name,
+                    ContentType=content_type_of(name),
+                    EnableMD5=False,
+                )
+                uploaded_file = True
+                break
+            except Exception as e:
+                last_err = str(e)[:120]
+                import time as _t
+                _t.sleep(2)
+        if uploaded_file:
+            uploaded += 1
+        else:
+            print("upload failed %s: %s" % (name, last_err))
     except Exception as e:
         print("upload failed %s: %s" % (name, str(e)[:120]))
 
