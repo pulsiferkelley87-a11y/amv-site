@@ -55,13 +55,15 @@ for path in files:
         last_err = ""
         for attempt in range(3):
             try:
-                client.upload_file(
-                    Bucket=BUCKET,
-                    LocalFilePath=path,
-                    Key=name,
-                    ContentType=content_type_of(name),
-                    EnableMD5=False,
-                )
+                # 用 put_object 简单直传（避免 upload_file 对 .gz 的 Content-Encoding 特殊处理）
+                with open(path, "rb") as fp:
+                    client.put_object(
+                        Bucket=BUCKET,
+                        Key=name,
+                        Body=fp,
+                        ContentType=content_type_of(name),
+                        EnableMD5=False,
+                    )
                 uploaded_file = True
                 break
             except Exception as e:
