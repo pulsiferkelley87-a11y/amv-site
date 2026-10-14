@@ -40,8 +40,30 @@ if not SECRET_ID or not SECRET_KEY or not BUCKET:
     print("missing COS env vars, skip upload")
     sys.exit(0)
 
-config = CosConfig(Region=REGION, SecretId=SECRET_ID, SecretKey=SECRET_KEY)
+config = CosConfig(Region=REGION, SecretId=SECRET_ID, SecretKey=SECRET_KEY, Timeout=300)
 client = CosS3Client(config)
+
+def safe_upload(path, name):
+    """上传单个文件。大文件用分片（upload_file），.gz 临时改名避开 SDK 特殊处理。"""
+    import shutil
+    tmp = None
+    local_path = path
+    try:
+        if name.endswith(".gz"):
+            tmp = path + ".uploadtmp"
+            shutil.copy(path, tmp)
+            local_path = tmp
+        client.upload_file(
+            Bucket=BUCKET,
+            LocalFilePath=local_path,
+            Key=name,
+            ContentType=content_type_of(name),
+            EnableMD5=False,
+        )
+    finally:
+        if tmp and os.path.exists(tmp):
+            os.remove(tmp)
+
 
 files = sorted(glob.glob("_site/*"))
 uploaded, skipped = 0, 0
@@ -55,26 +77,18 @@ for path in files:
         last_err = ""
         for attempt in range(3):
             try:
-                # 用 put_object 简单直传（避免 upload_file 对 .gz 的 Content-Encoding 特殊处理）
-                with open(path, "rb") as fp:
-                    client.put_object(
-                        Bucket=BUCKET,
-                        Key=name,
-                        Body=fp,
-                        ContentType=content_type_of(name),
-                        EnableMD5=False,
-                    )
+                safe_upload(path, name)
                 uploaded_file = True
                 break
             except Exception as e:
-                last_err = str(e)[:120]
+                last_err = str(e)[:150]
                 import time as _t
-                _t.sleep(2)
+                _t.sleep(3)
         if uploaded_file:
             uploaded += 1
         else:
             print("upload failed %s: %s" % (name, last_err))
     except Exception as e:
-        print("upload failed %s: %s" % (name, str(e)[:120]))
+        print("upload failed %s: %s" % (name, str(e)[:150]))
 
 print("COS upload done: %d uploaded, %d skipped (live_data.json)" % (uploaded, skipped))
