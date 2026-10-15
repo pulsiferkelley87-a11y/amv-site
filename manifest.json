@@ -1,0 +1,15 @@
+{
+  "name": "活跃市值 0AMV 监测台",
+  "short_name": "0AMV",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f5f6f8",
+  "theme_color": "#3b6fe0",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}

@@ -35,17 +35,29 @@ function checkDataFreshness() {
   } catch (e) { }
 }
 
+function dataCacheKey() {
+  // 主数据按天缓存：一天内只下载一次，跨天自动刷新
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    const saved = localStorage.getItem("amv_data_date");
+    if (saved === today) return saved;
+  } catch (e) { }
+  return today;
+}
+
 async function load() {
   // 优先拉 gzip 压缩版（手机快 3 倍+）；不支持或失败回退 window.DATA
   if (typeof DecompressionStream !== "undefined") {
     try {
-      const r = await fetch("d2.js.gz?v=" + new Date().getTime());
+      const key = dataCacheKey();
+      const r = await fetch("d2.js.gz?v=" + key);
       if (r.ok) {
         const buf = await r.arrayBuffer();
         const ds = new DecompressionStream("gzip");
         const stream = new Blob([buf]).stream().pipeThrough(ds);
         const txt = await new Response(stream).text();
         D = JSON.parse(txt.slice(txt.indexOf("{")).replace(/;\s*$/, ""));
+        try { localStorage.setItem("amv_data_date", new Date().toISOString().slice(0, 10)); } catch (e) { }
         if (!D.bull_bear) {
           try {
             const r2 = await fetch("bull_bear.json?v=" + new Date().getTime());
@@ -424,10 +436,34 @@ function markStale(updatedAt) {
     el.style.color = "#c0392b";
     el.style.fontWeight = "bold";
     el.innerHTML = `数据更新：${updatedAt}（已滞后 ${Math.floor(mins / 60)} 小时${mins % 60} 分，云端任务可能未跑）`;
+    // 页面顶部黄色警示条
+    let bar = document.getElementById("staleBar");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "staleBar";
+      bar.style.cssText = "background:#fde68a;color:#78350f;padding:10px 24px;font-size:14px;text-align:center;font-weight:bold;";
+      const header = document.querySelector("header");
+      if (header) header.parentNode.insertBefore(bar, header);
+    }
+    bar.textContent = `⚠️ 数据已停更 ${Math.floor(mins / 60)} 小时 ${mins % 60} 分（${updatedAt}）——云端更新任务可能异常`;
   } else if (mins > 20) {
     el.style.color = "#b9770e";
     el.innerHTML = `数据更新：${updatedAt}（${mins} 分钟前）`;
   }
+}
+
+function thinData(o, s, max) {
+  // 窄屏降采样：手机只渲染约 max 个点，大幅降低渲染压力
+  if (window.innerWidth >= 768 || !o || o.date.length <= max) return [o, s];
+  const step = Math.ceil(o.date.length / max);
+  const idx = [];
+  for (let i = 0; i < o.date.length; i += step) idx.push(i);
+  const pick = a => (a && a.length ? idx.map(i => a[i]) : a);
+  const o2 = {};
+  for (const k in o) o2[k] = pick(o[k]);
+  const s2 = {};
+  for (const k in s) s2[k] = pick(s[k]);
+  return [o2, s2];
 }
 
 function baseOption() {
@@ -440,7 +476,8 @@ function baseOption() {
 }
 
 function renderMain() {
-  const o = D.official, s = D.self;
+  let o = D.official, s = D.self;
+  [o, s] = thinData(o, s, 800);
   const dom = document.getElementById("chartMain");
   const ch = echarts.getInstanceByDom(dom) || echarts.init(dom);
   const opt = baseOption();
@@ -499,7 +536,8 @@ function renderMain() {
 }
 
 function renderTrio() {
-  const o = D.official;
+  let o = D.official;
+  [o] = thinData(o, {}, 800);
   const dom = document.getElementById("chartTrio");
   const ch = echarts.getInstanceByDom(dom) || echarts.init(dom);
   const opt = baseOption();
@@ -526,7 +564,8 @@ function renderTrio() {
 }
 
 function renderRatio() {
-  const o = D.official;
+  let o = D.official;
+  [o] = thinData(o, {}, 800);
   const dom = document.getElementById("chartRatio");
   const ch = echarts.getInstanceByDom(dom) || echarts.init(dom);
   const opt = baseOption();
@@ -557,7 +596,8 @@ function renderRatio() {
 }
 
 function renderWeekly() {
-  const w = D.official_weekly;
+  let w = D.official_weekly;
+  [w] = thinData(w, {}, 2500);
   const ch = echarts.init(document.getElementById("chartWeekly"));
   const opt = baseOption();
   opt.legend = { top: 0, data: ["0AMV(左)", "活跃比例(右)"] };
