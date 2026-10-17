@@ -1042,6 +1042,7 @@ def main():
     bj = datetime.utcnow() + timedelta(hours=8)
     result = {"updated_at": bj.strftime("%Y-%m-%d %H:%M:%S"), "errors": []}
     stocks_closes = {}  # 牛熊广度模块用：{code: [closes]}
+    sig_history = {}    # 个股近 60 日活跃SZ序列（查个股走势图用）
 
     # 1) 官方序列
     official = load_official()
@@ -1223,6 +1224,10 @@ def main():
             if kl:
                 amv_r, kdates_r, kseries_r = compute_stock_amv_reg(kl, s.get("float_mv"))
                 stocks_closes[s["code"]] = [r.get("close") or 0.0 for r in kl]
+                if kseries_r:
+                    _valid = [round(v, 1) for v in kseries_r[-60:] if v is not None and v > 0]
+                    if len(_valid) >= 10:
+                        sig_history[s["code"]] = _valid
                 if amv_r:
                     sig = compute_signals(kseries_r or [], kl)
                     row = {
@@ -1400,6 +1405,19 @@ def main():
         }
     with open(SIG_JSON, "w", encoding="utf-8") as f:
         json.dump({"updated_at": result["updated_at"], "signals": sig_map}, f, ensure_ascii=False)
+    # 个股近 60 日活跃SZ序列（查个股走势图）
+    try:
+        with open(os.path.join(BASE, "sig_history.json"), "w", encoding="utf-8") as f:
+            json.dump({"updated_at": result["updated_at"], "history": sig_history}, f,
+                      ensure_ascii=False, separators=(",", ":"))
+        import gzip as _gzip
+        _h = json.dumps({"updated_at": result["updated_at"], "history": sig_history},
+                         ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        with open(os.path.join(BASE, "sig_history.json.gz"), "wb") as f:
+            f.write(_gzip.compress(_h, 6))
+        print(f"sig_history: {len(sig_history)} 只")
+    except Exception:
+        pass
     # signals 压缩版（实盘页用）
     try:
         import gzip as _gzip
