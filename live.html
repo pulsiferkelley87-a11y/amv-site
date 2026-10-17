@@ -564,19 +564,32 @@ function klineSVG(rows) {
   </svg>`;
 }
 
+let KLINE_RANGE = 250;
+let LAST_KLINE_CODE = "";
+
+function setKlineRange(n) {
+  KLINE_RANGE = n;
+  if (LAST_KLINE_CODE) loadKline(LAST_KLINE_CODE);
+}
+
 function loadKline(code) {
   const box = document.getElementById("klineBox");
   if (!box) return;
+  LAST_KLINE_CODE = code;
   const raw = code.startsWith("sh") || code.startsWith("sz") || code.startsWith("bj") ? code
     : (code.startsWith("92") || code.startsWith("4") || code.startsWith("8") ? "bj" + code
        : code.startsWith("6") ? "sh" + code
        : "sz" + code);
-  fetch(`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${raw},day,,,120,qfq`)
+  const btns = [60, 120, 250, 500].map(n =>
+    `<button onclick="setKlineRange(${n})" style="padding:1px 10px;border:1px solid ${n === KLINE_RANGE ? '#3b6fe0' : '#d1d5db'};border-radius:4px;background:${n === KLINE_RANGE ? '#3b6fe0' : '#fff'};color:${n === KLINE_RANGE ? '#fff' : '#374151'};cursor:pointer;font-size:11.5px;margin-right:4px;">${n}日</button>`).join("");
+  fetch(`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${raw},day,,,${KLINE_RANGE},qfq`)
     .then(r => r.json())
     .then(j => {
       const node = (j.data || {})[raw] || {};
       const rows = node.qfqday || node.day || [];
-      box.innerHTML = rows.length ? klineSVG(rows) : "<span style='font-size:12px;color:var(--muted);'>K线数据暂不可用。</span>";
+      box.innerHTML = rows.length
+        ? `<div style="margin-bottom:4px;">${btns}</div>` + klineSVG(rows)
+        : "<span style='font-size:12px;color:var(--muted);'>K线数据暂不可用。</span>";
     })
     .catch(() => { box.innerHTML = "<span style='font-size:12px;color:var(--muted);'>K线加载失败。</span>"; });
 }
