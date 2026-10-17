@@ -596,8 +596,21 @@ function loadKline(code) {
       const node = (j.data || {})[raw] || {};
       const rows = node.qfqday || node.qfqweek || node.qfqmonth || node.day || node.week || node.month || [];
       box.innerHTML = rows.length
-        ? `<div style="margin-bottom:4px;">${perBtns}${rangeBtns}</div>` + klineSVG(rows)
+        ? `<div style="margin-bottom:4px;">${perBtns}${rangeBtns} <span style="font-size:11px;color:var(--muted);">（鼠标滚轮可缩放）</span></div>` + klineSVG(rows)
         : "<span style='font-size:12px;color:var(--muted);'>K线数据暂不可用。</span>";
+      const svg = box.querySelector("svg");
+      if (svg) {
+        let wTimer = null;
+        svg.addEventListener("wheel", e => {
+          e.preventDefault();
+          if (wTimer) return;
+          wTimer = setTimeout(() => { wTimer = null; }, 350);
+          const steps = [60, 120, 250, 500, 1000];
+          const idx = steps.indexOf(KLINE_RANGE);
+          const ni = Math.max(0, Math.min(steps.length - 1, idx + (e.deltaY > 0 ? 1 : -1)));
+          if (steps[ni] !== KLINE_RANGE) setKlineRange(steps[ni]);
+        }, { passive: false });
+      }
     })
     .catch(() => { box.innerHTML = "<span style='font-size:12px;color:var(--muted);'>K线加载失败。</span>"; });
 }
