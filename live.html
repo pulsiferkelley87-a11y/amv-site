@@ -87,6 +87,14 @@ th { color:var(--muted); font-weight:600; position:sticky; top:0; background:var
   </div>
   <div class="grid">
     <div class="card">
+      <h2>🎯 龙头 · 补涨识别 <span style="font-size:12px;color:var(--muted);font-weight:normal;">每板块最强股（连板最高）→ 点击看同板块补涨候选</span></h2>
+      <div id="leaderBox" style="font-size:13px;"></div>
+    </div>
+    <div class="card">
+      <h2>🔄 高切低监测 <span style="font-size:12px;color:var(--muted);font-weight:normal;">炸板退潮 vs 低位首板接力</span></h2>
+      <div id="switchBox" style="font-size:13px;"></div>
+    </div>
+    <div class="card">
       <h2>📋 龙虎榜（最新一期）<span id="lhbDate" style="font-size:12px;color:var(--muted);"></span></h2>
       <div class="scroll" id="lhbList" style="max-height:420px;"></div>
     </div>
@@ -232,6 +240,8 @@ function renderAll(j) {
   renderFlow();
   renderSignals();
   renderLHB();
+  renderLeader();
+  renderSwitch();
   renderMinutes();
   renderLimits();
   renderBlocks();
@@ -732,6 +742,76 @@ function loadPromo() {
       el.innerHTML = `｜ 晋级率（${p.date.slice(5)}）：1进2 ${fmt(p.one_to_two)} ｜ 2进3 ${fmt(p.two_to_three)} ｜ 3板+晋级 ${fmt(p.three_plus)}`;
     })
     .catch(() => {});
+}
+
+function renderLeader() {
+  const el = document.getElementById("leaderBox");
+  if (!el || !LD || !LD.signals) return;
+  const sigs = LD.signals;
+  const leaders = [];
+  Object.keys(MEMBERS).forEach(blk => {
+    const codes = MEMBERS[blk] || [];
+    let best = null;
+    codes.forEach(c => {
+      const sig = sigs[c] || sigs[c.slice(2)];
+      if (!sig) return;
+      if (!best || (sig.limit_days || 0) > (best.limit_days || 0)) {
+        best = Object.assign({ code: c }, sig);
+      }
+    });
+    if (best && (best.limit_days || 0) >= 2) {
+      leaders.push({ blk: blk, code: best.code, name: best.name,
+                     ld: best.limit_days || 0, pct: best.gap || 0 });
+    }
+  });
+  leaders.sort((a, b) => b.ld - a.ld);
+  if (!leaders.length) {
+    el.innerHTML = "<span style='color:var(--muted);'>当前无 2 板以上龙头。</span>";
+    return;
+  }
+  let html = `<table><thead><tr><th>板块</th><th>龙头</th><th>连板</th><th>MA10偏离</th><th>补涨候选</th></tr></thead><tbody>`;
+  leaders.slice(0, 30).forEach(l => {
+    const candidates = (MEMBERS[l.blk] || []).map(c => {
+      const sig = sigs[c] || sigs[c.slice(2)];
+      const stk = (LD.stocks || []).find(x => x.code.slice(2) === c);
+      return { code: c, name: sig ? sig.name : (stk ? stk.name : c),
+               pct: stk ? stk.pct : (sig ? (sig.trend5 || 0) : 0),
+               isLimit: stk ? stk.pct >= 9.5 : false };
+    }).filter(x => !x.isLimit && x.pct != null && x.pct < 9.5)
+      .sort((a, b) => (a.pct || 0) - (b.pct || 0)).slice(0, 3);
+    const candHtml = candidates.length
+      ? candidates.map(c => `<span style="cursor:pointer;border:1px solid #e5e7eb;border-radius:3px;padding:0 5px;margin-right:3px;font-size:11.5px;" onclick="showSignal('${c.code}')">${c.name} <span class="${(c.pct||0) >= 0 ? 'up' : 'down'}">${(c.pct||0) >= 0 ? '+' : ''}${(c.pct||0).toFixed(1)}%</span></span>`).join("")
+      : "<span style='color:var(--muted);font-size:11.5px;'>无</span>";
+    html += `<tr><td>${l.blk}</td><td style="cursor:pointer;" onclick="showSignal('${l.code}')"><b>${l.name}</b></td>
+      <td class="up"><b>${l.ld}板</b></td>
+      <td class="${(l.pct || 0) >= 0 ? 'up' : 'down'}">${(l.pct || 0) >= 0 ? '+' : ''}${(l.pct || 0).toFixed(1)}%</td>
+      <td>${candHtml}</td></tr>`;
+  });
+  html += "</tbody></table>";
+  el.innerHTML = html;
+}
+
+function renderSwitch() {
+  const el = document.getElementById("switchBox");
+  if (!el || !LD) return;
+  const broke = LD.broke_list || [];
+  const sigs = LD.signals || {};
+  const firsts = (LD.limit_up_list || []).filter(s => (((sigs[s.code] || sigs[s.code.slice(2)]) || {}).limit_days || s.limit_days || 0) === 1);
+  let html = `<div style="padding:4px 0;"><b style="color:#2fa36b;">🔻 高位退潮（炸板 ${broke.length} 只）</b>：`;
+  if (broke.length) {
+    html += broke.slice(0, 10).map(s => `<span style="cursor:pointer;" onclick="showSignal('${s.code}')">${s.name}(${s.pct.toFixed(1)}%)</span>`).join("、");
+  } else {
+    html += "<span style='color:var(--muted);'>无炸板</span>";
+  }
+  html += `</div><div style="padding:4px 0;"><b style="color:#c0392b;">🔺 低位接力候选（今日首板 ${firsts.length} 只）</b>：`;
+  if (firsts.length) {
+    html += firsts.slice(0, 12).map(s => `<span style="cursor:pointer;" onclick="showSignal('${s.code}')">${s.name}(${s.code.slice(2)})</span>`).join("、");
+  } else {
+    html += "<span style='color:var(--muted);'>无首板</span>";
+  }
+  html += "</div>";
+  html += "<div style='font-size:11.5px;color:var(--muted);'>逻辑：高位连板炸板退潮时，关注低位首板的接力方向（高切低）。</div>";
+  el.innerHTML = html;
 }
 
 function renderLHB() {
