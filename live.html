@@ -284,22 +284,24 @@ function renderTemp() {
       }
       const W = 660, H = 170, P = 8;
       const bw = (W - P * 2) / h.length;
+      const base = H / 2;
+      const half = H / 2 - 12;
       let bars = "";
       let maxV = 1;
       h.forEach(x => { maxV = Math.max(maxV, x.up, x.down); });
       h.forEach((x, i) => {
         const cx = P + i * bw + bw / 2;
-        const uh = (x.up / maxV) * (H - 20);
-        const dh = (x.down / maxV) * (H - 20);
-        bars += `<rect x="${(cx - bw * 0.35).toFixed(1)}" y="${(H - 10 - uh).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${uh.toFixed(1)}" fill="#d64545" opacity="0.75"/>`;
-        bars += `<rect x="${(cx - bw * 0.35).toFixed(1)}" y="${(H - 10).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${dh.toFixed(1)}" fill="#2fa36b" opacity="0.75"/>`;
+        const uh = (x.up / maxV) * half;
+        const dh = (x.down / maxV) * half;
+        bars += `<rect x="${(cx - bw * 0.35).toFixed(1)}" y="${(base - uh).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${uh.toFixed(1)}" fill="#d64545" opacity="0.8"/>`;
+        bars += `<rect x="${(cx - bw * 0.35).toFixed(1)}" y="${base.toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${dh.toFixed(1)}" fill="#2fa36b" opacity="0.8"/>`;
       });
       const first = h[0], last = h[h.length - 1];
       el.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" style="background:#fcfcfd;border:1px solid #e5e7eb;border-radius:6px;">
-        <line x1="${P}" y1="${H - 10}" x2="${W - P}" y2="${H - 10}" stroke="#d8dbe0" stroke-width="1"/>
+        <line x1="${P}" y1="${base}" x2="${W - P}" y2="${base}" stroke="#d8dbe0" stroke-width="1"/>
         ${bars}
-        <text x="${P}" y="${H - 2}" font-size="9" fill="#8a8f98">${first.date}</text>
-        <text x="${W - P}" y="${H - 2}" font-size="9" fill="#8a8f98" text-anchor="end">${last.date}</text>
+        <text x="${P}" y="10" font-size="9" fill="#8a8f98">上：上涨家数（红）</text>
+        <text x="${P}" y="${H - 4}" font-size="9" fill="#8a8f98">下：下跌家数（绿）｜ ${first.date} ~ ${last.date}</text>
       </svg>`;
     })
     .catch(() => { el.innerHTML = "<span style='color:var(--muted);'>加载失败。</span>"; });
