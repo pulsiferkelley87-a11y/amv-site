@@ -35,29 +35,17 @@ function checkDataFreshness() {
   } catch (e) { }
 }
 
-function dataCacheKey() {
-  // 主数据按天缓存：一天内只下载一次，跨天自动刷新
-  const today = new Date().toISOString().slice(0, 10);
-  try {
-    const saved = localStorage.getItem("amv_data_date");
-    if (saved === today) return saved;
-  } catch (e) { }
-  return today;
-}
-
 async function load() {
   // 优先拉 gzip 压缩版（手机快 3 倍+）；不支持或失败回退 window.DATA
   if (typeof DecompressionStream !== "undefined") {
     try {
-      const key = dataCacheKey();
-      const r = await fetch("d2.js.gz?v=" + key);
+      const r = await fetch("d2.js.gz?v=" + new Date().getTime());
       if (r.ok) {
         const buf = await r.arrayBuffer();
         const ds = new DecompressionStream("gzip");
         const stream = new Blob([buf]).stream().pipeThrough(ds);
         const txt = await new Response(stream).text();
         D = JSON.parse(txt.slice(txt.indexOf("{")).replace(/;\s*$/, ""));
-        try { localStorage.setItem("amv_data_date", new Date().toISOString().slice(0, 10)); } catch (e) { }
         if (!D.bull_bear) {
           try {
             const r2 = await fetch("bull_bear.json?v=" + new Date().getTime());
@@ -79,89 +67,13 @@ async function load() {
     document.getElementById("histRange").textContent =
       "个股/板块历史快照采集中（每日自动补充）";
   }
-  // 首屏先渲染不依赖 echarts 的内容（文字 + 表格 + 健康面板）
   renderMeta();
-  renderHealth();
-  setInterval(renderHealth, 5 * 60 * 1000); // 健康面板每 5 分钟自动刷新
+  renderMain();
+  renderTrio();
+  renderRatio();
+  renderWeekly();
+  renderSectors();
   renderStocks();
-  // echarts（1MB）动态加载，就绪后再画图；手机首屏不用等图表
-  loadEcharts(function () {
-    renderMain();
-    renderTrio();
-    renderRatio();
-    renderWeekly();
-    renderSectors();
-  });
-}
-
-function loadEcharts(cb) {
-  if (window.echarts) { cb(); return; }
-  const s = document.createElement("script");
-  s.src = "echarts.min.js?v=3";
-  s.onload = cb;
-  s.onerror = cb; // 加载失败也继续，图表区留空不阻塞页面
-  document.head.appendChild(s);
-}
-
-async function renderHealth() {
-  const card = document.getElementById("healthCard");
-  if (!card) return;
-  let src = D.source_health || null;  // 旧结构（daily 生成，ok/fail 计数）
-  let cc = D.cross_check || null;
-  try {
-    // 优先读独立健康数据（每 15 分钟云端更新）
-    const r = await fetch("health.json?t=" + new Date().getTime(), { cache: "no-store" });
-    if (r.ok) {
-      const h = await r.json();
-      if (h && h.sources) src = h.sources;
-      if (h && h.cross_check) cc = h.cross_check;
-    }
-  } catch (e) { }
-  if (!src && !cc) return;
-  card.style.display = "";
-  const names = { em: "东方财富", tdx: "通达信 TQLEX", tx: "腾讯" };
-  let html = "";
-  for (const k in names) {
-    const s = (src && src[k]) || {};
-    let stat;
-    if (typeof s.ok === "number") {
-      // 旧结构：ok/fail 计数
-      const total = (s.ok || 0) + (s.fail || 0);
-      const rate = total ? Math.round(s.ok / total * 100) : null;
-      const color = rate === null ? "var(--muted)"
-        : rate >= 90 ? "var(--green)"
-        : rate > 0 ? "var(--amber)" : "var(--red)";
-      stat = '成功 <b style="color:' + color + ';">' + (s.ok || 0)
-        + '</b> / 失败 ' + (s.fail || 0)
-        + (rate !== null ? '（成功率 ' + rate + '%）' : '（今日无调用）');
-    } else {
-      // 新结构：ok bool + 延迟
-      const color = s.ok ? "var(--green)" : "var(--red)";
-      stat = s.ok
-        ? '<span style="color:' + color + ';">✅ 正常</span>（' + (s.latency_ms != null ? s.latency_ms + "ms" : "-") + '）'
-        : '<span style="color:' + color + ';">❌ 失败</span>' + (s.note ? '（' + s.note + '）' : '');
-    }
-    html += '<div style="padding:8px 14px;border:1px solid #e5e7eb;border-radius:8px;">'
-      + '<b>' + names[k] + '</b>：' + stat + '</div>';
-  }
-  document.getElementById("healthBox").innerHTML = html;
-  if (!cc) return;
-  let ch = '交叉验证（通达信 TQLEX vs 东财）：抽查 <b>' + cc.checked + '</b> 只，一致 <b>' + cc.matched + '</b> 只';
-  if (cc.note) ch += '（' + cc.note + '）';
-  if (cc.mismatches && cc.mismatches.length) {
-    ch += '，<span style="color:var(--red);"><b>' + cc.mismatches.length + '</b> 只偏差超阈值</span>';
-    ch += '<table style="margin-top:6px;width:100%;"><tr><th>代码</th><th>名称</th><th>东财价</th><th>TDX价</th><th>价偏</th><th>东财额</th><th>TDX额</th><th>额偏</th></tr>';
-    for (const m of cc.mismatches) {
-      ch += '<tr><td>' + m.code + '</td><td>' + m.name + '</td><td>' + m.em_price
-        + '</td><td>' + m.tdx_price + '</td><td>' + m.dev_pct + '%</td><td>'
-        + (m.em_amount / 1e8).toFixed(2) + '亿</td><td>' + (m.tdx_amount / 1e8).toFixed(2)
-        + '亿</td><td>' + m.dev_amt_pct + '%</td></tr>';
-    }
-    ch += '</table>';
-  } else {
-    ch += '，<span style="color:var(--green);">无异常</span>';
-  }
-  document.getElementById("crossBox").innerHTML = ch;
 }
 
 function applyRange() {
@@ -436,34 +348,10 @@ function markStale(updatedAt) {
     el.style.color = "#c0392b";
     el.style.fontWeight = "bold";
     el.innerHTML = `数据更新：${updatedAt}（已滞后 ${Math.floor(mins / 60)} 小时${mins % 60} 分，云端任务可能未跑）`;
-    // 页面顶部黄色警示条
-    let bar = document.getElementById("staleBar");
-    if (!bar) {
-      bar = document.createElement("div");
-      bar.id = "staleBar";
-      bar.style.cssText = "background:#fde68a;color:#78350f;padding:10px 24px;font-size:14px;text-align:center;font-weight:bold;";
-      const header = document.querySelector("header");
-      if (header) header.parentNode.insertBefore(bar, header);
-    }
-    bar.textContent = `⚠️ 数据已停更 ${Math.floor(mins / 60)} 小时 ${mins % 60} 分（${updatedAt}）——云端更新任务可能异常`;
   } else if (mins > 20) {
     el.style.color = "#b9770e";
     el.innerHTML = `数据更新：${updatedAt}（${mins} 分钟前）`;
   }
-}
-
-function thinData(o, s, max) {
-  // 窄屏降采样：手机只渲染约 max 个点，大幅降低渲染压力
-  if (window.innerWidth >= 768 || !o || o.date.length <= max) return [o, s];
-  const step = Math.ceil(o.date.length / max);
-  const idx = [];
-  for (let i = 0; i < o.date.length; i += step) idx.push(i);
-  const pick = a => (a && a.length ? idx.map(i => a[i]) : a);
-  const o2 = {};
-  for (const k in o) o2[k] = pick(o[k]);
-  const s2 = {};
-  for (const k in s) s2[k] = pick(s[k]);
-  return [o2, s2];
 }
 
 function baseOption() {
@@ -476,8 +364,7 @@ function baseOption() {
 }
 
 function renderMain() {
-  let o = D.official, s = D.self;
-  [o, s] = thinData(o, s, 800);
+  const o = D.official, s = D.self;
   const dom = document.getElementById("chartMain");
   const ch = echarts.getInstanceByDom(dom) || echarts.init(dom);
   const opt = baseOption();
@@ -536,8 +423,7 @@ function renderMain() {
 }
 
 function renderTrio() {
-  let o = D.official;
-  [o] = thinData(o, {}, 800);
+  const o = D.official;
   const dom = document.getElementById("chartTrio");
   const ch = echarts.getInstanceByDom(dom) || echarts.init(dom);
   const opt = baseOption();
@@ -564,8 +450,7 @@ function renderTrio() {
 }
 
 function renderRatio() {
-  let o = D.official;
-  [o] = thinData(o, {}, 800);
+  const o = D.official;
   const dom = document.getElementById("chartRatio");
   const ch = echarts.getInstanceByDom(dom) || echarts.init(dom);
   const opt = baseOption();
@@ -596,8 +481,7 @@ function renderRatio() {
 }
 
 function renderWeekly() {
-  let w = D.official_weekly;
-  [w] = thinData(w, {}, 2500);
+  const w = D.official_weekly;
   const ch = echarts.init(document.getElementById("chartWeekly"));
   const opt = baseOption();
   opt.legend = { top: 0, data: ["0AMV(左)", "活跃比例(右)"] };
@@ -1242,7 +1126,46 @@ function renderBullBearBox(el, bb) {
   if (d.macro_note) {
     html += `<div style="font-size:11.5px;color:var(--muted);margin-top:4px;">📋 宏观/估值（手动维护，截止 ${d.macro_asof || "—"}）：${d.macro_note}</div>`;
   }
+  html += `<div id="bbHistBox" style="margin-top:6px;"><span style="font-size:11px;color:var(--muted);">历史趋势分数加载中…</span></div>`;
   el.innerHTML = html;
+  loadBBHistory();
+}
+
+function loadBBHistory() {
+  const box = document.getElementById("bbHistBox");
+  if (!box) return;
+  fetch("bb_history.json?v=" + new Date().getTime())
+    .then(r => r.json())
+    .then(j => {
+      const h = j.history || [];
+      if (!h.length) {
+        box.innerHTML = "";
+        return;
+      }
+      const W = 660, H = 140, PL = 40, PR = 8, PT = 8, PB = 18;
+      const iw = W - PL - PR, ih = H - PT - PB;
+      const x = i => PL + (i / (h.length - 1)) * iw;
+      const y = v => PT + (1 - (v + 100) / 200) * ih;
+      let d = "";
+      h.forEach((p, i) => { d += (i ? "L" : "M") + x(i).toFixed(1) + " " + y(p.score).toFixed(1); });
+      let labels = "";
+      h.forEach((p, i) => {
+        if (i % 200 === 0 || i === h.length - 1) {
+          labels += `<text x="${x(i).toFixed(1)}" y="${H - 4}" font-size="9" fill="#8a8f98" text-anchor="middle">${p.date.slice(0, 4)}</text>`;
+        }
+      });
+      box.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" style="background:#fcfcfd;border:1px solid #e5e7eb;border-radius:6px;">
+        <line x1="${PL}" y1="${y(35)}" x2="${W - PR}" y2="${y(35)}" stroke="#e0c9c9" stroke-width="1" stroke-dasharray="3,3"/>
+        <line x1="${PL}" y1="${y(-35)}" x2="${W - PR}" y2="${y(-35)}" stroke="#c9e0cf" stroke-width="1" stroke-dasharray="3,3"/>
+        <line x1="${PL}" y1="${y(0)}" x2="${W - PR}" y2="${y(0)}" stroke="#d8dbe0" stroke-width="1"/>
+        <path d="${d}" fill="none" stroke="#3b6fe0" stroke-width="1.4"/>
+        <text x="${PL - 4}" y="${y(35) + 3}" font-size="9" fill="#c0392b" text-anchor="end">+35</text>
+        <text x="${PL - 4}" y="${y(-35) + 3}" font-size="9" fill="#2fa36b" text-anchor="end">-35</text>
+        ${labels}
+        <text x="${PL}" y="10" font-size="9" fill="#8a8f98">牛熊趋势分数回测（仅趋势模块·官方0AMV vs 均线，约5年）</text>
+      </svg>`;
+    })
+    .catch(() => { if (box) box.innerHTML = ""; });
 }
 
 async function fetchDataGz() {
