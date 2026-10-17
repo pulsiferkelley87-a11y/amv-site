@@ -568,8 +568,9 @@ function loadKline(code) {
   const box = document.getElementById("klineBox");
   if (!box) return;
   const raw = code.startsWith("sh") || code.startsWith("sz") || code.startsWith("bj") ? code
-    : (code.startsWith("6") || code.startsWith("9") ? "sh" + code
-       : code.startsWith("4") || code.startsWith("8") ? "bj" + code : "sz" + code);
+    : (code.startsWith("92") || code.startsWith("4") || code.startsWith("8") ? "bj" + code
+       : code.startsWith("6") ? "sh" + code
+       : "sz" + code);
   fetch(`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${raw},day,,,120,qfq`)
     .then(r => r.json())
     .then(j => {
