@@ -565,10 +565,16 @@ function klineSVG(rows) {
 }
 
 let KLINE_RANGE = 250;
+let KLINE_PERIOD = "day";
 let LAST_KLINE_CODE = "";
 
 function setKlineRange(n) {
   KLINE_RANGE = n;
+  if (LAST_KLINE_CODE) loadKline(LAST_KLINE_CODE);
+}
+
+function setKlinePeriod(p) {
+  KLINE_PERIOD = p;
   if (LAST_KLINE_CODE) loadKline(LAST_KLINE_CODE);
 }
 
@@ -580,15 +586,17 @@ function loadKline(code) {
     : (code.startsWith("92") || code.startsWith("4") || code.startsWith("8") ? "bj" + code
        : code.startsWith("6") ? "sh" + code
        : "sz" + code);
-  const btns = [60, 120, 250, 500].map(n =>
-    `<button onclick="setKlineRange(${n})" style="padding:1px 10px;border:1px solid ${n === KLINE_RANGE ? '#3b6fe0' : '#d1d5db'};border-radius:4px;background:${n === KLINE_RANGE ? '#3b6fe0' : '#fff'};color:${n === KLINE_RANGE ? '#fff' : '#374151'};cursor:pointer;font-size:11.5px;margin-right:4px;">${n}日</button>`).join("");
-  fetch(`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${raw},day,,,${KLINE_RANGE},qfq`)
+  const perBtns = [["day", "日K"], ["week", "周K"], ["month", "月K"]].map(([p, t]) =>
+    `<button onclick="setKlinePeriod('${p}')" style="padding:1px 10px;border:1px solid ${p === KLINE_PERIOD ? '#3b6fe0' : '#d1d5db'};border-radius:4px;background:${p === KLINE_PERIOD ? '#3b6fe0' : '#fff'};color:${p === KLINE_PERIOD ? '#fff' : '#374151'};cursor:pointer;font-size:11.5px;margin-right:4px;">${t}</button>`).join("");
+  const rangeBtns = [60, 120, 250, 500].map(n =>
+    `<button onclick="setKlineRange(${n})" style="padding:1px 10px;border:1px solid ${n === KLINE_RANGE ? '#3b6fe0' : '#d1d5db'};border-radius:4px;background:${n === KLINE_RANGE ? '#3b6fe0' : '#fff'};color:${n === KLINE_RANGE ? '#fff' : '#374151'};cursor:pointer;font-size:11.5px;margin-right:4px;">${n}${KLINE_PERIOD === "day" ? "日" : KLINE_PERIOD === "week" ? "周" : "月"}</button>`).join("");
+  fetch(`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${raw},${KLINE_PERIOD},,,${KLINE_RANGE},qfq`)
     .then(r => r.json())
     .then(j => {
       const node = (j.data || {})[raw] || {};
-      const rows = node.qfqday || node.day || [];
+      const rows = node.qfqday || node.qfqweek || node.qfqmonth || node.day || node.week || node.month || [];
       box.innerHTML = rows.length
-        ? `<div style="margin-bottom:4px;">${btns}</div>` + klineSVG(rows)
+        ? `<div style="margin-bottom:4px;">${perBtns}${rangeBtns}</div>` + klineSVG(rows)
         : "<span style='font-size:12px;color:var(--muted);'>K线数据暂不可用。</span>";
     })
     .catch(() => { box.innerHTML = "<span style='font-size:12px;color:var(--muted);'>K线加载失败。</span>"; });
