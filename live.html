@@ -611,8 +611,8 @@ function renderKline() {
   const n = KL_DATA.length;
   let start = Math.max(0, KL_VIEW.end - KL_VIEW.count + 1);
   const rows = KL_DATA.slice(start, KL_VIEW.end + 1);
-  const W = 660, H = 240, PL = 46, PR = 8, PT = 8, PB = 20;
-  const volH = 46;
+  const W = 660, H = 340, PL = 46, PR = 8, PT = 8, PB = 20;
+  const volH = 60;
   const ih = H - PT - PB - volH;
   const iw = W - PL - PR;
   const m = rows.length;
