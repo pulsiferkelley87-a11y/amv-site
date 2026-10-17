@@ -583,6 +583,19 @@ function showSignal(kw) {
   const key = Object.keys(sigs).find(c => c === kw || c.slice(2) === kw || (sigs[c].name || "") === kw);
   const s = key ? sigs[key] : null;
   if (!s) {
+    // 信号未覆盖：从全市场快照找，显示基本行情 + K 线
+    const stk = (LD.stocks || []).find(x => x.code === kw || x.code.slice(2) === kw || x.name === kw);
+    if (stk) {
+      const pcls = stk.pct >= 0 ? "up" : "down";
+      el.innerHTML =
+        `<b>${stk.code} ${stk.name}</b> ｜ ` +
+        `现价 <b>${stk.price.toFixed(2)}</b> ｜ <span class="${pcls}">${stk.pct >= 0 ? "+" : ""}${stk.pct.toFixed(2)}%</span> ｜ ` +
+        `换手 ${stk.turnover.toFixed(2)}% ｜ 成交额 ${(stk.amount / 1e8).toFixed(1)}亿 ` +
+        `<span style="color:var(--muted);">（暂无递推信号数据）</span>` +
+        `<div id="klineBox"><span style="font-size:12px;color:var(--muted);">K线加载中…</span></div>`;
+      loadKline(stk.code);
+      return;
+    }
     el.innerHTML = "<span style='color:#c0392b;'>未找到该股</span>";
     return;
   }
