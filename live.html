@@ -492,6 +492,83 @@ function renderFavs() {
   el.innerHTML = html;
 }
 
+function klineSVG(rows) {
+  if (!rows || rows.length < 5) return "";
+  const W = 660, H = 220, PL = 46, PR = 8, PT = 8, PB = 20;
+  const volH = 40;
+  const ih = H - PT - PB - volH;
+  const iw = W - PL - PR;
+  const n = rows.length;
+  const bw = iw / n;
+  const closes = rows.map(r => parseFloat(r[2]));
+  const highs = rows.map(r => parseFloat(r[4]));
+  const lows = rows.map(r => parseFloat(r[3]));
+  const vols = rows.map(r => parseFloat(r[5]));
+  const all = highs.concat(lows).filter(v => v > 0);
+  const mn = Math.min.apply(null, all), mx = Math.max.apply(null, all);
+  const rg = (mx - mn) || 1;
+  const maxV = Math.max.apply(null, vols) || 1;
+  const x = i => PL + i * bw + bw / 2;
+  const y = v => PT + (1 - (v - mn) / rg) * ih;
+  const vy = v => H - PB - (v / maxV) * volH;
+  let candles = "", volbars = "";
+  rows.forEach((r, i) => {
+    const o = parseFloat(r[1]), c = parseFloat(r[2]), h = parseFloat(r[4]), l = parseFloat(r[3]);
+    if (o <= 0 || c <= 0) return;
+    const up = c >= o;
+    const col = up ? "#d64545" : "#2fa36b";
+    const cx = x(i);
+    candles += `<line x1="${cx}" y1="${y(h).toFixed(1)}" x2="${cx}" y2="${y(l).toFixed(1)}" stroke="${col}" stroke-width="1"/>`;
+    const top = y(Math.max(o, c)), bot = y(Math.min(o, c));
+    const bodyH = Math.max(1.2, bot - top);
+    candles += `<rect x="${(cx - bw * 0.35).toFixed(1)}" y="${top.toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${col}"/>`;
+    volbars += `<rect x="${(cx - bw * 0.35).toFixed(1)}" y="${vy(vols[i]).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${(H - PB - vy(vols[i])).toFixed(1)}" fill="${col}" opacity="0.55"/>`;
+  });
+  const maLine = (period, color) => {
+    let d = "";
+    for (let i = period - 1; i < n; i++) {
+      const seg = closes.slice(i - period + 1, i + 1);
+      const m = seg.reduce((a, b) => a + b, 0) / period;
+      d += (i === period - 1 ? "M" : "L") + x(i).toFixed(1) + " " + y(m).toFixed(1);
+    }
+    return `<path d="${d}" fill="none" stroke="${color}" stroke-width="1.1"/>`;
+  };
+  let grid = "";
+  for (let k = 0; k <= 4; k++) {
+    const gy = PT + (k / 4) * ih;
+    const val = mx - (k / 4) * rg;
+    grid += `<line x1="${PL}" y1="${gy.toFixed(1)}" x2="${W - PR}" y2="${gy.toFixed(1)}" stroke="#eef0f3" stroke-width="1"/>`;
+    grid += `<text x="${PL - 4}" y="${(gy + 3).toFixed(1)}" font-size="9" fill="#8a8f98" text-anchor="end">${val.toFixed(2)}</text>`;
+  }
+  const last = closes[n - 1];
+  const up = last >= closes[0];
+  return `<svg width="100%" viewBox="0 0 ${W} ${H}" style="background:#fcfcfd;border:1px solid #e5e7eb;border-radius:6px;margin-top:6px;">
+    ${grid}
+    ${volbars}
+    ${candles}
+    ${maLine(5, "#e0a03b")}
+    ${maLine(10, "#3b6fe0")}
+    ${maLine(20, "#7c5cbf")}
+    <text x="${PL}" y="${H - 5}" font-size="9" fill="#8a8f98">日K（前复权）｜橙MA5 蓝MA10 紫MA20 ｜ ${rows[0][0]} ~ ${rows[n - 1][0]} ｜ 成交量</text>
+  </svg>`;
+}
+
+function loadKline(code) {
+  const box = document.getElementById("klineBox");
+  if (!box) return;
+  const raw = code.startsWith("sh") || code.startsWith("sz") || code.startsWith("bj") ? code
+    : (code.startsWith("6") || code.startsWith("9") ? "sh" + code
+       : code.startsWith("4") || code.startsWith("8") ? "bj" + code : "sz" + code);
+  fetch(`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${raw},day,,,120,qfq`)
+    .then(r => r.json())
+    .then(j => {
+      const node = (j.data || {})[raw] || {};
+      const rows = node.qfqday || node.day || [];
+      box.innerHTML = rows.length ? klineSVG(rows) : "<span style='font-size:12px;color:var(--muted);'>K线数据暂不可用。</span>";
+    })
+    .catch(() => { box.innerHTML = "<span style='font-size:12px;color:var(--muted);'>K线加载失败。</span>"; });
+}
+
 function showSignal(kw) {
   if (typeof kw !== "string" || !kw) {
     kw = (document.getElementById("sigSearch") || {}).value || "";
@@ -525,6 +602,9 @@ function showSignal(kw) {
   if (blocks.length) {
     el.innerHTML += `<div style="font-size:12px;color:var(--muted);margin-top:2px;">所属板块：${blocks.join("、")}</div>`;
   }
+  // 通达信风格K线图
+  el.innerHTML += `<div id="klineBox"><span style="font-size:12px;color:var(--muted);">K线加载中…</span></div>`;
+  loadKline(key);
   // 活跃度走势图（60日）
   loadSigHistory();
   if (SIG_HIST && SIG_HIST[key.slice(0, 6)] && SIG_HIST[key.slice(0, 6)].length) {
