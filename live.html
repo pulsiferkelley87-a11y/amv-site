@@ -138,6 +138,7 @@ function loadMembers() {
     .then(r => r.json())
     .then(j => {
       j.forEach(b => { MEMBERS[b.name] = b.stocks; });
+      renderLeader();  // 成分加载完成后刷新龙头·补涨
     })
     .catch(() => {});
 }
