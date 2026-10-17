@@ -6,12 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <title>活跃市值 0AMV 监测台</title>
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#3b6fe0">
-<link rel="icon" type="image/png" href="icon.png">
-<script>
-// echarts 改为动态加载（app2.js 里 loadEcharts）：首屏先出文字内容，不阻塞
-</script>
+<script src="echarts.min.js"></script>
 <style>
   :root {
     --bg: #f5f6f8; --card: #ffffff; --text: #1a1d24; --muted: #6b7280;
@@ -59,7 +54,7 @@
 </head>
 <body>
 <header>
-  <h1>活跃市值 0AMV 监测台 <a href="live.html" style="font-size:13px;color:var(--blue);text-decoration:none;">⚡ 实盘页</a></h1>
+  <h1>活跃市值 0AMV 监测台 <a href="live.html?v=20261009" style="font-size:13px;color:var(--blue);text-decoration:none;">⚡ 实盘页</a></h1>
   <div class="meta" id="meta">加载中…</div>
   <div class="meta" style="margin-top:4px;">
     历史回看：从 <input type="date" id="dateStart" style="padding:2px 6px;border:1px solid #d1d5db;border-radius:5px;">
@@ -70,10 +65,9 @@
   </div>
 </header>
 <div class="wrap">
-  <div class="card full" id="healthCard" style="display:none;">
-    <h2>🔌 数据源健康度 <span style="font-size:12px;color:var(--muted);font-weight:normal;">今日各数据源拉取成功率 · 东财快照 vs 通达信 TQLEX 交叉验证</span></h2>
-    <div id="healthBox" style="display:flex;flex-wrap:wrap;gap:16px;font-size:13px;"></div>
-    <div id="crossBox" style="margin-top:10px;font-size:12px;color:var(--muted);"></div>
+  <div class="card full">
+    <h2>📝 今日盘面总结 <span style="font-size:12px;color:var(--muted);font-weight:normal;">每日收盘后自动生成</span></h2>
+    <div id="summaryBox" style="font-size:13.5px;line-height:1.7;"></div>
   </div>
   <div class="card full">
     <h2>🐂🐻 A股牛熊识别系统 <span style="font-size:12px;color:var(--muted);font-weight:normal;">六大维度综合评分（-100~+100）：趋势25% + 广度20% + 量能15% + 宏观15% + 估值10% + 情绪15%</span></h2>
