@@ -231,6 +231,33 @@ def classify(total):
     return "熊市特征较强"
 
 
+def compute_bb_history(official_rows):
+    """历史趋势分数回测（用官方 0AMV 序列 vs 20/60/120/250 日均线）。"""
+    amv = [r["amv"] for r in official_rows]
+    dates = [r["date"] for r in official_rows]
+    out = []
+    for i in range(250, len(amv)):
+        cur = amv[i]
+        if cur <= 0:
+            continue
+        m20 = sum(amv[i - 20:i]) / 20
+        m60 = sum(amv[i - 60:i]) / 60
+        m120 = sum(amv[i - 120:i]) / 120
+        m250 = sum(amv[i - 250:i]) / 250
+        pts = 0
+        pts += 40 if cur > m20 else -40
+        pts += 25 if cur > m60 else -25
+        pts += 20 if cur > m120 else -20
+        pts += 15 if cur > m250 else -15
+        m250_prev = sum(amv[i - 270:i - 20]) / 250 if i >= 270 else m250
+        pts += 15 if m250 > m250_prev else -15
+        s60 = (amv[i] / amv[i - 60] - 1) * 100 if amv[i - 60] > 0 else 0
+        pts += 10 if s60 > 0 else -10
+        pts = max(-100, min(100, pts))
+        out.append({"date": dates[i], "score": pts})
+    return out[-1300:]
+
+
 def compute_bull_bear(stocks_rows, market_amount_series, sentiment_args):
     """主计算。"""
     indices_rows = {}
