@@ -366,17 +366,40 @@ function loadSigHistory() {
 
 function trendSVG(vals, color) {
   if (!vals || vals.length < 3) return "";
-  const W = 200, H = 60, P = 3;
+  const W = 620, H = 200, PL = 62, PR = 10, PT = 14, PB = 26;
+  const iw = W - PL - PR, ih = H - PT - PB;
   const mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals);
   const rg = (mx - mn) || 1;
-  const step = (W - P * 2) / (vals.length - 1);
-  let d = "";
+  const x = i => PL + (i / (vals.length - 1)) * iw;
+  const y = v => PT + (1 - (v - mn) / rg) * ih;
+  let d = "", dma = "";
   vals.forEach((v, i) => {
-    const x = P + i * step;
-    const y = P + (1 - (v - mn) / rg) * (H - P * 2);
-    d += (i ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1);
+    d += (i ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1);
+    if (i >= 9) {
+      const m = vals.slice(i - 9, i + 1).reduce((a, b) => a + b, 0) / 10;
+      dma += (i === 9 ? "M" : "L") + x(i).toFixed(1) + " " + y(m).toFixed(1);
+    }
   });
-  return `<svg width="${W}" height="${H}" style="background:#fafbfc;border:1px solid #e5e7eb;border-radius:6px;margin-top:4px;"><path d="${d}" fill="none" stroke="${color}" stroke-width="1.5"/></svg>`;
+  // 横向网格 + 刻度（4 行）
+  let grid = "";
+  for (let k = 0; k <= 4; k++) {
+    const gy = PT + (k / 4) * ih;
+    const val = mx - (k / 4) * rg;
+    grid += `<line x1="${PL}" y1="${gy.toFixed(1)}" x2="${W - PR}" y2="${gy.toFixed(1)}" stroke="#e8eaee" stroke-width="1"/>`;
+    grid += `<text x="${PL - 5}" y="${(gy + 3).toFixed(1)}" font-size="10" fill="#8a8f98" text-anchor="end">${(val / 1e8).toFixed(1)}亿</text>`;
+  }
+  const last = vals[vals.length - 1];
+  const ly = y(last);
+  const up = vals[vals.length - 1] >= vals[0];
+  const mainColor = up ? "#d64545" : "#2fa36b";
+  return `<svg width="100%" viewBox="0 0 ${W} ${H}" style="background:#fcfcfd;border:1px solid #e5e7eb;border-radius:6px;margin-top:6px;">
+    ${grid}
+    <path d="${dma}" fill="none" stroke="#e0a03b" stroke-width="1.2" opacity="0.85"/>
+    <path d="${d}" fill="none" stroke="${mainColor}" stroke-width="1.8"/>
+    <circle cx="${x(vals.length - 1)}" cy="${ly.toFixed(1)}" r="3.5" fill="${mainColor}"/>
+    <text x="${x(vals.length - 1) - 5}" y="${(ly - 6).toFixed(1)}" font-size="11" fill="${mainColor}" text-anchor="end">${(last / 1e8).toFixed(1)}亿</text>
+    <text x="${PL}" y="${H - 6}" font-size="10" fill="#8a8f98">近60日活跃SZ（蓝=活跃SZ，橙=MA10，单位：亿元）</text>
+  </svg>`;
 }
 
 function getFavs() {
