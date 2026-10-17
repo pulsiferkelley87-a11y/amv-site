@@ -1043,6 +1043,7 @@ def main():
     result = {"updated_at": bj.strftime("%Y-%m-%d %H:%M:%S"), "errors": []}
     stocks_closes = {}  # 牛熊广度模块用：{code: [closes]}
     sig_history = {}    # 个股近 60 日活跃SZ序列（查个股走势图用）
+    day_boards = {}     # 晋级率用：{date: {code: 连板数}}
 
     # 1) 官方序列
     official = load_official()
@@ -1228,6 +1229,18 @@ def main():
                     _valid = [round(v, 1) for v in kseries_r[-60:] if v is not None and v > 0]
                     if len(_valid) >= 10:
                         sig_history[s["code"]] = _valid
+                # 晋级率：逐日连板数（最近 15 个交易日）
+                _closes = [r.get("close") or 0.0 for r in kl]
+                _dates = [r.get("date") or "" for r in kl]
+                _thr = limit_pct(s["code"])
+                _ld = 0
+                for _i in range(len(_closes)):
+                    if _i > 0 and _closes[_i] > 0 and _closes[_i - 1] > 0 and (_closes[_i] / _closes[_i - 1] - 1) * 100 >= _thr:
+                        _ld += 1
+                    else:
+                        _ld = 0
+                    if _ld >= 1 and _dates[_i]:
+                        day_boards.setdefault(_dates[_i], {})[s["code"]] = _ld
                 if amv_r:
                     sig = compute_signals(kseries_r or [], kl)
                     row = {
@@ -1351,9 +1364,34 @@ def main():
         except (OSError, ValueError):
             pass
 
-    # A股牛熊识别系统（六大模块）——每次更新都计算，updated_at 随数据时间
+    # 连板晋级率（最近两个交易日）
     try:
-        from bull_bear import compute_bull_bear
+        _ds = sorted(day_boards.keys())
+        if len(_ds) >= 2:
+            _prev, _cur = _ds[-2], _ds[-1]
+            _p = day_boards[_prev]
+            _c = day_boards[_cur]
+            def _rate(pld, cld):
+                base = [c for c, ld in _p.items() if ld == pld]
+                if not base:
+                    return None
+                up = sum(1 for c in base if _c.get(c, 0) >= cld)
+                return round(up / len(base) * 100, 1)
+            result["promotion"] = {
+                "prev_date": _prev, "date": _cur,
+                "one_to_two": _rate(1, 2),
+                "two_to_three": _rate(2, 3),
+                "three_plus": _rate(3, 4),
+                "total_limit": len(_c),
+                "total_prev": len(_p),
+            }
+            with open(os.path.join(BASE, "promotion.json"), "w", encoding="utf-8") as f:
+                json.dump(result["promotion"], f, ensure_ascii=False)
+            print("promotion:", result["promotion"])
+    except Exception as e:
+        print("promotion err:", str(e)[:100])
+    try:
+        from bull_bear import compute_bull_bear, compute_bb_history
         up_n = sum(1 for x in spot if x.get("pct") and x["pct"] > 0)
         down_n = sum(1 for x in spot if x.get("pct") and x["pct"] < 0)
         lu_n = sum(1 for x in spot if x.get("pct") and x["pct"] >= 9.5)
@@ -1364,6 +1402,18 @@ def main():
                                (up_n, down_n, lu_n, ld_n, max_board))
         bb["updated_at"] = result["updated_at"]
         result["bull_bear"] = bb
+        # 历史趋势分数回测（官方 0AMV 序列）
+        try:
+            _off_rows = [{"date": d, "amv": v} for d, v in zip(
+                result.get("official_full", {}).get("date", []),
+                result.get("official_full", {}).get("amv", []))]
+            if len(_off_rows) > 260:
+                _hist = compute_bb_history(_off_rows)
+                result["bb_history"] = _hist
+                with open(os.path.join(BASE, "bb_history.json"), "w", encoding="utf-8") as f:
+                    json.dump({"updated_at": result["updated_at"], "history": _hist}, f, ensure_ascii=False)
+        except Exception:
+            pass
         with open(os.path.join(BASE, "bull_bear.json"), "w", encoding="utf-8") as f:
             json.dump(bb, f, ensure_ascii=False)
         print("bull_bear:", bb["total"], bb["state"])
