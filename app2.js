@@ -1055,8 +1055,8 @@ function renderSummary() {
   const el = document.getElementById("summaryBox");
   if (!el) return;
   el.innerHTML = "<span style='color:var(--muted);'>加载中…</span>";
-  fetch("summary.json?v=" + new Date().getTime())
-    .then(r => r.json())
+  const load = url => fetch(url).then(r => r.json());
+  load("https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com/summary.json?t=" + new Date().getTime())
     .then(j => {
       if (j && j.text) {
         el.innerHTML = `<div>${j.text}</div><div style="font-size:11px;color:var(--muted);margin-top:4px;">${j.date || ""} ${j.updated_at || ""}</div>`;
@@ -1064,7 +1064,17 @@ function renderSummary() {
         el.innerHTML = "<span style='color:var(--muted);'>今日总结生成中（收盘后自动更新）。</span>";
       }
     })
-    .catch(() => { el.innerHTML = "<span style='color:var(--muted);'>今日总结生成中（收盘后自动更新）。</span>"; });
+    .catch(() => {
+      load("summary.json?v=" + new Date().getTime())
+        .then(j => {
+          if (j && j.text) {
+            el.innerHTML = `<div>${j.text}</div><div style="font-size:11px;color:var(--muted);margin-top:4px;">${j.date || ""}</div>`;
+          } else {
+            el.innerHTML = "<span style='color:var(--muted);'>今日总结生成中（收盘后自动更新）。</span>";
+          }
+        })
+        .catch(() => { el.innerHTML = "<span style='color:var(--muted);'>今日总结生成中（收盘后自动更新）。</span>"; });
+    });
 }
 
 function renderAll() {
