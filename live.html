@@ -588,7 +588,7 @@ function loadKline(code) {
        : "sz" + code);
   const perBtns = [["day", "日K"], ["week", "周K"], ["month", "月K"]].map(([p, t]) =>
     `<button onclick="setKlinePeriod('${p}')" style="padding:1px 10px;border:1px solid ${p === KLINE_PERIOD ? '#3b6fe0' : '#d1d5db'};border-radius:4px;background:${p === KLINE_PERIOD ? '#3b6fe0' : '#fff'};color:${p === KLINE_PERIOD ? '#fff' : '#374151'};cursor:pointer;font-size:11.5px;margin-right:4px;">${t}</button>`).join("");
-  const rangeBtns = [60, 120, 250, 500].map(n =>
+  const rangeBtns = [60, 120, 250, 500, 1000].map(n =>
     `<button onclick="setKlineRange(${n})" style="padding:1px 10px;border:1px solid ${n === KLINE_RANGE ? '#3b6fe0' : '#d1d5db'};border-radius:4px;background:${n === KLINE_RANGE ? '#3b6fe0' : '#fff'};color:${n === KLINE_RANGE ? '#fff' : '#374151'};cursor:pointer;font-size:11.5px;margin-right:4px;">${n}${KLINE_PERIOD === "day" ? "日" : KLINE_PERIOD === "week" ? "周" : "月"}</button>`).join("");
   fetch(`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${raw},${KLINE_PERIOD},,,${KLINE_RANGE},qfq`)
     .then(r => r.json())
