@@ -553,7 +553,7 @@ function klineSVG(rows) {
   }
   const last = closes[n - 1];
   const up = last >= closes[0];
-  return `<svg width="100%" viewBox="0 0 ${W} ${H}" style="background:#fcfcfd;border:1px solid #e5e7eb;border-radius:6px;margin-top:6px;">
+  return `<svg width="100%" viewBox="0 0 ${W} ${H}" style="background:#fcfcfd;border:1px solid #e5e7eb;border-radius:6px;margin-top:6px;touch-action:none;">
     ${grid}
     ${volbars}
     ${candles}
@@ -564,7 +564,7 @@ function klineSVG(rows) {
   </svg>`;
 }
 
-let KLINE_RANGE = 250;
+let KLINE_RANGE = (/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent)) ? 60 : 250;
 let KLINE_PERIOD = "day";
 let LAST_KLINE_CODE = "";
 
