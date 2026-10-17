@@ -68,6 +68,12 @@ th { color:var(--muted); font-weight:600; position:sticky; top:0; background:var
         <span id="sigResult" style="margin-left:8px;font-size:13px;"></span>
       </span>
     </h2>
+    <div style="margin:4px 0;font-size:12px;">⭐ 自选：
+      <input id="favInput" placeholder="代码如 600825" style="padding:3px 8px;border:1px solid #d1d5db;border-radius:5px;width:130px;font-size:12.5px;">
+      <button onclick="addFav()" style="padding:2px 10px;border:1px solid #d1d5db;border-radius:5px;background:#fff;cursor:pointer;font-size:12.5px;">添加</button>
+      <button onclick="delFav()" style="padding:2px 10px;border:1px solid #d1d5db;border-radius:5px;background:#fff;cursor:pointer;font-size:12.5px;">清空</button>
+      <span id="favList"></span>
+    </div>
     <div class="tabs">
       <button class="tab active" onclick="setSigTab('up')">🔼 拐头向上</button>
       <button class="tab" onclick="setSigTab('down')">🔽 拐头向下</button>
@@ -344,6 +350,76 @@ function renderSignals() {
   });
   html += "</tbody></table>";
   el.innerHTML = html;
+  renderFavs();
+}
+
+let SIG_HIST = null;
+
+function loadSigHistory() {
+  if (SIG_HIST) return;
+  fetchGz("https://pulsiferkelley87-a11y.github.io/amv-site/sig_history.json.gz")
+    .then(j => {
+      if (j && j.history) SIG_HIST = j.history;
+    })
+    .catch(() => {});
+}
+
+function trendSVG(vals, color) {
+  if (!vals || vals.length < 3) return "";
+  const W = 200, H = 60, P = 3;
+  const mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals);
+  const rg = (mx - mn) || 1;
+  const step = (W - P * 2) / (vals.length - 1);
+  let d = "";
+  vals.forEach((v, i) => {
+    const x = P + i * step;
+    const y = P + (1 - (v - mn) / rg) * (H - P * 2);
+    d += (i ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1);
+  });
+  return `<svg width="${W}" height="${H}" style="background:#fafbfc;border:1px solid #e5e7eb;border-radius:6px;margin-top:4px;"><path d="${d}" fill="none" stroke="${color}" stroke-width="1.5"/></svg>`;
+}
+
+function getFavs() {
+  try { return JSON.parse(localStorage.getItem("amv_favs") || "[]"); } catch (e) { return []; }
+}
+
+function addFav() {
+  const kw = ((document.getElementById("favInput") || {}).value || "").trim();
+  if (!kw) return;
+  const favs = getFavs();
+  if (!favs.includes(kw)) {
+    favs.push(kw);
+    localStorage.setItem("amv_favs", JSON.stringify(favs));
+  }
+  document.getElementById("favInput").value = "";
+  renderFavs();
+}
+
+function delFav() {
+  localStorage.setItem("amv_favs", "[]");
+  renderFavs();
+}
+
+function renderFavs() {
+  const el = document.getElementById("favList");
+  if (!el) return;
+  const favs = getFavs();
+  if (!LD || !LD.signals) {
+    el.innerHTML = favs.length ? "（数据加载中…）" : "";
+    return;
+  }
+  let html = "";
+  favs.forEach(c => {
+    const key = Object.keys(LD.signals).find(k => k === c || k.slice(2) === c);
+    const sig = key ? LD.signals[key] : null;
+    if (sig) {
+      const g = sig.gap || 0;
+      html += `<span style="display:inline-block;border:1px solid #e5e7eb;border-radius:4px;padding:2px 8px;margin:3px;font-size:12px;">${sig.name} <span class="${g >= 0 ? "up" : "down"}">${g >= 0 ? "+" : ""}${g}%</span>${sig.limit_days ? ` <b style="color:#c0392b;">${sig.limit_days}板</b>` : ""}</span>`;
+    } else {
+      html += `<span style="color:var(--muted);font-size:12px;">${c} 无数据</span>`;
+    }
+  });
+  el.innerHTML = html;
 }
 
 function showSignal() {
@@ -371,6 +447,18 @@ function showSignal() {
     `5日趋势 ${s.trend5 != null ? (s.trend5 >= 0 ? "+" : "") + s.trend5 + "%" : "—"} ｜ ` +
     `量能比 ${s.vol_ratio != null ? s.vol_ratio : "—"}` +
     (s.limit_days ? ` ｜ <span style="color:#c0392b;font-weight:bold;">${s.limit_days}连板</span>` : "");
+  // 活跃度走势图（60日）
+  loadSigHistory();
+  if (SIG_HIST && SIG_HIST[key.slice(0, 6)] && SIG_HIST[key.slice(0, 6)].length) {
+    el.innerHTML += trendSVG(SIG_HIST[key.slice(0, 6)], "#3b6fe0");
+  } else {
+    const chk = () => {
+      if (SIG_HIST && SIG_HIST[key.slice(0, 6)] && SIG_HIST[key.slice(0, 6)].length) {
+        el.innerHTML += trendSVG(SIG_HIST[key.slice(0, 6)], "#3b6fe0");
+      }
+    };
+    setTimeout(chk, 2500);
+  }
 }
 
 function renderBreadth() {
