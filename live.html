@@ -760,7 +760,7 @@ function renderLeader() {
         best = Object.assign({ code: c }, sig);
       }
     });
-    if (best && (best.limit_days || 0) >= 2) {
+    if (best && (best.limit_days || 0) >= 1) {
       leaders.push({ blk: blk, code: best.code, name: best.name,
                      ld: best.limit_days || 0, pct: best.gap || 0 });
     }
@@ -774,11 +774,27 @@ function renderLeader() {
     return true;
   });
   if (!leaders.length) {
-    el.innerHTML = "<span style='color:var(--muted);'>当前无 2 板以上龙头。</span>";
+    el.innerHTML = "<span style='color:var(--muted);'>当前无连板股。</span>";
     return;
   }
+  const fresh = leaders.filter(l => l.ld === 1);
+  const solid = leaders.filter(l => l.ld >= 2);
+  let html = "";
+  if (solid.length) {
+    html += "<div style='padding:4px 0;'><b style='color:#c0392b;'>🔥 持续连板（2板+，当前主线高度）</b></div>";
+    html += buildLeaderTable(solid);
+  }
+  if (fresh.length) {
+    html += "<div style='padding:6px 0 4px;'><b style='color:#b9770e;'>🆕 新起连板（今日首板，最近的新面孔）</b></div>";
+    html += buildLeaderTable(fresh.slice(0, 20));
+  }
+  el.innerHTML = html;
+}
+
+function buildLeaderTable(list) {
+  const sigs = LD.signals;
   let html = `<table><thead><tr><th>板块</th><th>龙头</th><th>连板</th><th>MA10偏离</th><th>补涨候选</th></tr></thead><tbody>`;
-  leaders.slice(0, 30).forEach(l => {
+  list.forEach(l => {
     const candidates = (MEMBERS[l.blk] || []).map(c => {
       const sig = sigs[c] || sigs[c.slice(2)];
       const stk = (LD.stocks || []).find(x => x.code.slice(2) === c);
@@ -796,7 +812,7 @@ function renderLeader() {
       <td>${candHtml}</td></tr>`;
   });
   html += "</tbody></table>";
-  el.innerHTML = html;
+  return html;
 }
 
 function renderSwitch() {
