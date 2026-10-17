@@ -1258,10 +1258,13 @@ def main():
                     for i in range(max(0, len(kl) - 250), len(kl)):
                         d = kl[i]["date"]
                         day = day_map.setdefault(d, {"stocks": [], "sector_amv": {}})
+                        _pc = kl[i - 1].get("close") if i > 0 else None
+                        _pct = ((kl[i].get("close") or 0) / _pc - 1) * 100 if _pc else None
                         rec = {
                             "code": s["code"], "name": s["name"], "industry": s.get("industry"),
                             "amount": kl[i].get("amount"), "turnover": kl[i].get("turnover"),
                             "amv": kseries_r[i] if i < len(kseries_r) and kseries_r[i] is not None else None,
+                            "pct": round(_pct, 2) if _pct is not None else None,
                         }
                         day["stocks"].append(rec)
                         ind = s.get("industry") or "—"
@@ -1304,6 +1307,21 @@ def main():
                 ],
             }
         result["history_snaps"] = history_snaps
+        # 市场温度计：每日涨跌家数（近 250 交易日）
+        try:
+            _bh = {}
+            for _d, _day in day_map.items():
+                _ups = sum(1 for x in _day["stocks"] if (x.get("pct") or 0) > 0)
+                _downs = sum(1 for x in _day["stocks"] if (x.get("pct") or 0) < 0)
+                if _ups + _downs > 100:
+                    _bh[_d] = {"up": _ups, "down": _downs}
+            _bl = [{"date": _d, **v} for _d, v in sorted(_bh.items())][-250:]
+            result["breadth_history"] = _bl
+            with open(os.path.join(BASE, "breadth_history.json"), "w", encoding="utf-8") as f:
+                json.dump({"updated_at": result["updated_at"], "history": _bl}, f, ensure_ascii=False)
+            print(f"breadth_history: {len(_bl)} 天")
+        except Exception as e:
+            print("breadth err:", str(e)[:100])
 
     # 5) 全市场递推汇总序列（历史序列 + 新算尾部合并）
     if official:
