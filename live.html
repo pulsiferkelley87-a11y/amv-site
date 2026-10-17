@@ -83,7 +83,7 @@ th { color:var(--muted); font-weight:600; position:sticky; top:0; background:var
   </div>
   <div class="grid">
     <div class="card">
-      <h2>涨停池（今日）<span id="limitCnt" style="font-size:12px;color:var(--muted);"></span></h2>
+      <h2>涨停池（今日）<span id="limitCnt" style="font-size:12px;color:var(--muted);"></span> <span id="promoBox" style="font-size:12px;color:var(--muted);"></span></h2>
       <div id="ladderBox" style="margin-bottom:8px;"></div>
       <div class="scroll" id="limitList" style="max-height:420px;"></div>
     </div>
@@ -570,6 +570,22 @@ function renderLadder(arr) {
   box.innerHTML = html;
 }
 
+function loadPromo() {
+  const el = document.getElementById("promoBox");
+  if (!el) return;
+  fetch("promotion.json?v=" + new Date().getTime())
+    .then(r => r.json())
+    .then(p => {
+      if (!p || !p.date) {
+        el.innerHTML = "";
+        return;
+      }
+      const fmt = v => v != null ? `<b>${v}%</b>` : "—";
+      el.innerHTML = `｜ 晋级率（${p.date.slice(5)}）：1进2 ${fmt(p.one_to_two)} ｜ 2进3 ${fmt(p.two_to_three)} ｜ 3板+晋级 ${fmt(p.three_plus)}`;
+    })
+    .catch(() => {});
+}
+
 function renderLimits() {
   if (!LD || !LD.limit_up_list) return;
   let arr = LD.limit_up_list || [];
@@ -577,6 +593,7 @@ function renderLimits() {
     (((sigFor(b.code) || {}).limit_days || b.limit_days || 0) -
      ((sigFor(a.code) || {}).limit_days || a.limit_days || 0)) || (b.pct - a.pct));
   document.getElementById("limitCnt").textContent = `（${arr.length} 只，连板 ${arr.filter(s => (((sigFor(s.code) || {}).limit_days || s.limit_days || 0)) >= 1).length} 只）`;
+  loadPromo();
   renderLadder(arr);
   let html = `<table><thead><tr><th>代码</th><th>名称</th><th>连板</th><th>现价</th><th>涨幅</th><th>成交额(亿)</th><th>换手</th><th>流通市值(亿)</th></tr></thead><tbody>`;
   arr.forEach(s => {
