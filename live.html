@@ -382,7 +382,7 @@ function renderSignals() {
   arr.slice(0, 100).forEach(s => {
     const g = s.gap || 0;
     const t5 = s.trend5 != null ? s.trend5 : 0;
-    html += `<tr><td>${s.code}</td><td>${s.name}</td><td>${s.industry || "—"}</td>
+    html += `<tr style="cursor:pointer;" onclick="showSignal('${s.code}')"><td>${s.code}</td><td>${s.name}</td><td>${s.industry || "—"}</td>
       <td class="${g >= 0 ? "up" : "down"}">${g >= 0 ? "+" : ""}${g}%</td>
       <td>${s.pctile != null ? s.pctile + "%" : "—"}</td>
       <td class="${t5 >= 0 ? "up" : "down"}">${t5 >= 0 ? "+" : ""}${t5}%</td>
@@ -485,8 +485,10 @@ function renderFavs() {
   el.innerHTML = html;
 }
 
-function showSignal() {
-  const kw = (document.getElementById("sigSearch") || {}).value || "";
+function showSignal(kw) {
+  if (typeof kw !== "string" || !kw) {
+    kw = (document.getElementById("sigSearch") || {}).value || "";
+  }
   const el = document.getElementById("sigResult");
   if (!el || !LD || !LD.signals) return;
   if (!kw) {
@@ -510,6 +512,12 @@ function showSignal() {
     `5日趋势 ${s.trend5 != null ? (s.trend5 >= 0 ? "+" : "") + s.trend5 + "%" : "—"} ｜ ` +
     `量能比 ${s.vol_ratio != null ? s.vol_ratio : "—"}` +
     (s.limit_days ? ` ｜ <span style="color:#c0392b;font-weight:bold;">${s.limit_days}连板</span>` : "");
+  // 所属概念板块
+  const code6 = key.slice(0, 6);
+  const blocks = Object.keys(MEMBERS).filter(b => (MEMBERS[b] || []).includes(code6)).slice(0, 8);
+  if (blocks.length) {
+    el.innerHTML += `<div style="font-size:12px;color:var(--muted);margin-top:2px;">所属板块：${blocks.join("、")}</div>`;
+  }
   // 活跃度走势图（60日）
   loadSigHistory();
   if (SIG_HIST && SIG_HIST[key.slice(0, 6)] && SIG_HIST[key.slice(0, 6)].length) {
