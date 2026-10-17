@@ -564,9 +564,11 @@ function klineSVG(rows) {
   </svg>`;
 }
 
-let KLINE_RANGE = (/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent)) ? 60 : 250;
+let KLINE_RANGE = 1000;
 let KLINE_PERIOD = "day";
 let LAST_KLINE_CODE = "";
+let KL_DATA = null;          // 全量 K 线数据
+let KL_VIEW = { end: -1, count: 60 };  // 窗口（end=-1 表示最新）
 
 function setKlineRange(n) {
   KLINE_RANGE = n;
@@ -588,57 +590,142 @@ function loadKline(code) {
        : "sz" + code);
   const perBtns = [["day", "日K"], ["week", "周K"], ["month", "月K"]].map(([p, t]) =>
     `<button onclick="setKlinePeriod('${p}')" style="padding:6px 14px;border:1px solid ${p === KLINE_PERIOD ? '#3b6fe0' : '#d1d5db'};border-radius:5px;background:${p === KLINE_PERIOD ? '#3b6fe0' : '#fff'};color:${p === KLINE_PERIOD ? '#fff' : '#374151'};cursor:pointer;font-size:13px;margin-right:5px;">${t}</button>`).join("");
-  const rangeBtns = [60, 120, 250, 500, 1000].map(n =>
-    `<button onclick="setKlineRange(${n})" style="padding:6px 12px;border:1px solid ${n === KLINE_RANGE ? '#3b6fe0' : '#d1d5db'};border-radius:5px;background:${n === KLINE_RANGE ? '#3b6fe0' : '#fff'};color:${n === KLINE_RANGE ? '#fff' : '#374151'};cursor:pointer;font-size:13px;margin-right:5px;">${n}${KLINE_PERIOD === "day" ? "日" : KLINE_PERIOD === "week" ? "周" : "月"}</button>`).join("");
   fetch(`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${raw},${KLINE_PERIOD},,,${KLINE_RANGE},qfq`)
     .then(r => r.json())
     .then(j => {
       const node = (j.data || {})[raw] || {};
       const rows = node.qfqday || node.qfqweek || node.qfqmonth || node.day || node.week || node.month || [];
-      box.innerHTML = rows.length
-        ? `<div style="margin-bottom:4px;">${perBtns}${rangeBtns} <span style="font-size:11px;color:var(--muted);">（鼠标滚轮可缩放）</span></div>` + klineSVG(rows)
-        : "<span style='font-size:12px;color:var(--muted);'>K线数据暂不可用。</span>";
-      const svg = box.querySelector("svg");
-      if (svg) {
-        let wTimer = null;
-        svg.addEventListener("wheel", e => {
-          e.preventDefault();
-          if (wTimer) return;
-          wTimer = setTimeout(() => { wTimer = null; }, 350);
-          const steps = [60, 120, 250, 500, 1000];
-          const idx = steps.indexOf(KLINE_RANGE);
-          const ni = Math.max(0, Math.min(steps.length - 1, idx + (e.deltaY > 0 ? 1 : -1)));
-          if (steps[ni] !== KLINE_RANGE) setKlineRange(steps[ni]);
-        }, { passive: false });
-        // 手机双指缩放
-        let pinchStart = null;
-        svg.addEventListener("touchstart", e => {
-          if (e.touches.length === 2) {
-            e.preventDefault();
-            pinchStart = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
-                                   e.touches[0].clientY - e.touches[1].clientY);
-          }
-        }, { passive: false });
-        svg.addEventListener("touchmove", e => {
-          if (e.touches.length === 2 && pinchStart) {
-            e.preventDefault();
-            const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
-                                    e.touches[0].clientY - e.touches[1].clientY);
-            const ratio = dist / pinchStart;
-            const steps = [60, 120, 250, 500, 1000];
-            const idx = steps.indexOf(KLINE_RANGE);
-            if (ratio > 1.3 && idx > 0) {
-              setKlineRange(steps[idx - 1]);  // 张开 = 放大（更少天数）
-              pinchStart = dist;
-            } else if (ratio < 0.75 && idx < steps.length - 1) {
-              setKlineRange(steps[idx + 1]);  // 捏合 = 缩小（更多天数）
-              pinchStart = dist;
-            }
-          }
-        }, { passive: true });
+      if (!rows.length) {
+        box.innerHTML = "<span style='font-size:12px;color:var(--muted);'>K线数据暂不可用。</span>";
+        return;
       }
+      KL_DATA = rows;
+      KL_VIEW = { end: rows.length - 1, count: Math.min(60, rows.length) };
+      box.innerHTML = `<div style="margin-bottom:4px;">${perBtns} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜点击看十字光标</span></div>` + renderKline();
     })
     .catch(() => { box.innerHTML = "<span style='font-size:12px;color:var(--muted);'>K线加载失败。</span>"; });
+}
+
+function renderKline() {
+  if (!KL_DATA || !KL_DATA.length) return "";
+  const n = KL_DATA.length;
+  let start = Math.max(0, KL_VIEW.end - KL_VIEW.count + 1);
+  const rows = KL_DATA.slice(start, KL_VIEW.end + 1);
+  const W = 660, H = 240, PL = 46, PR = 8, PT = 8, PB = 20;
+  const volH = 46;
+  const ih = H - PT - PB - volH;
+  const iw = W - PL - PR;
+  const m = rows.length;
+  const bw = iw / m;
+  const closes = rows.map(r => parseFloat(r[2]));
+  const highs = rows.map(r => parseFloat(r[4]));
+  const lows = rows.map(r => parseFloat(r[3]));
+  const vols = rows.map(r => parseFloat(r[5]));
+  const all = highs.concat(lows).filter(v => v > 0);
+  const mn = Math.min.apply(null, all), mx = Math.max.apply(null, all);
+  const rg = (mx - mn) || 1;
+  const maxV = Math.max.apply(null, vols) || 1;
+  const x = i => PL + i * bw + bw / 2;
+  const y = v => PT + (1 - (v - mn) / rg) * ih;
+  const vy = v => H - PB - (v / maxV) * volH;
+  let candles = "", volbars = "";
+  rows.forEach((r, i) => {
+    const o = parseFloat(r[1]), c = parseFloat(r[2]), h = parseFloat(r[4]), l = parseFloat(r[3]);
+    if (o <= 0 || c <= 0) return;
+    const up = c >= o;
+    const col = up ? "#d64545" : "#2fa36b";
+    const cx = x(i);
+    candles += `<line x1="${cx}" y1="${y(h).toFixed(1)}" x2="${cx}" y2="${y(l).toFixed(1)}" stroke="${col}" stroke-width="1"/>`;
+    const top = y(Math.max(o, c)), bot = y(Math.min(o, c));
+    candles += `<rect x="${(cx - bw * 0.35).toFixed(1)}" y="${top.toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${Math.max(1.2, bot - top).toFixed(1)}" fill="${col}"/>`;
+    volbars += `<rect x="${(cx - bw * 0.35).toFixed(1)}" y="${vy(vols[i]).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${(H - PB - vy(vols[i])).toFixed(1)}" fill="${col}" opacity="0.55"/>`;
+  });
+  const maLine = (period, color) => {
+    let d = "";
+    for (let i = period - 1; i < m; i++) {
+      const seg = closes.slice(i - period + 1, i + 1);
+      const mv = seg.reduce((a, b) => a + b, 0) / period;
+      d += (i === period - 1 ? "M" : "L") + x(i).toFixed(1) + " " + y(mv).toFixed(1);
+    }
+    return `<path d="${d}" fill="none" stroke="${color}" stroke-width="1.1"/>`;
+  };
+  let grid = "";
+  for (let k = 0; k <= 4; k++) {
+    const gy = PT + (k / 4) * ih;
+    const val = mx - (k / 4) * rg;
+    grid += `<line x1="${PL}" y1="${gy.toFixed(1)}" x2="${W - PR}" y2="${gy.toFixed(1)}" stroke="#eef0f3" stroke-width="1"/>`;
+    grid += `<text x="${PL - 4}" y="${(gy + 3).toFixed(1)}" font-size="9" fill="#8a8f98" text-anchor="end">${val.toFixed(2)}</text>`;
+  }
+  const label = KLINE_PERIOD === "day" ? "日K" : KLINE_PERIOD === "week" ? "周K" : "月K";
+  const svg = `<svg id="klineSvg" width="100%" viewBox="0 0 ${W} ${H}" style="background:#fcfcfd;border:1px solid #e5e7eb;border-radius:6px;margin-top:6px;touch-action:none;">
+    ${grid}
+    ${volbars}
+    ${candles}
+    ${maLine(5, "#e0a03b")}
+    ${maLine(10, "#3b6fe0")}
+    ${maLine(20, "#7c5cbf")}
+    <text x="${PL}" y="${H - 5}" font-size="9" fill="#8a8f98">${label}（前复权）｜橙MA5 蓝MA10 紫MA20 ｜ ${rows[0][0]} ~ ${rows[m - 1][0]}</text>
+  </svg>`;
+  // 手势绑定（延迟到 DOM 就绪）
+  setTimeout(bindKlineGestures, 50);
+  return svg;
+}
+
+function bindKlineGestures() {
+  const svg = document.getElementById("klineSvg");
+  if (!svg || !KL_DATA) return;
+  const n = KL_DATA.length;
+  let dragStartX = null, pinchStart = null, pinchCount = null;
+  svg.ontouchstart = e => {
+    if (e.touches.length === 1) {
+      dragStartX = e.touches[0].clientX;
+    } else if (e.touches.length === 2) {
+      pinchStart = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
+                              e.touches[0].clientY - e.touches[1].clientY);
+      pinchCount = KL_VIEW.count;
+    }
+    e.preventDefault();
+  };
+  svg.ontouchmove = e => {
+    if (e.touches.length === 1 && dragStartX != null) {
+      const dx = e.touches[0].clientX - dragStartX;
+      dragStartX = e.touches[0].clientX;
+      const shift = Math.round(dx / (svg.clientWidth / KL_VIEW.count));
+      if (shift !== 0) {
+        KL_VIEW.end = Math.max(KL_VIEW.count - 1, Math.min(n - 1, KL_VIEW.end - shift));
+        document.getElementById("klineBox").innerHTML = document.getElementById("klineBox").innerHTML.replace(/<svg id="klineSvg"[\s\S]*<\/svg>/, renderKline());
+      }
+    } else if (e.touches.length === 2 && pinchStart) {
+      const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
+                              e.touches[0].clientY - e.touches[1].clientY);
+      const ratio = pinchStart / dist;
+      KL_VIEW.count = Math.max(20, Math.min(500, Math.round(pinchCount * ratio)));
+      document.getElementById("klineBox").innerHTML = document.getElementById("klineBox").innerHTML.replace(/<svg id="klineSvg"[\s\S]*<\/svg>/, renderKline());
+    }
+    e.preventDefault();
+  };
+  svg.ontouchend = () => { dragStartX = null; pinchStart = null; };
+  // 鼠标拖动（桌面）
+  svg.onmousedown = e => {
+    dragStartX = e.clientX;
+    svg.onmousemove = ev => {
+      const dx = ev.clientX - dragStartX;
+      dragStartX = ev.clientX;
+      const shift = Math.round(dx / (svg.clientWidth / KL_VIEW.count));
+      if (shift !== 0) {
+        KL_VIEW.end = Math.max(KL_VIEW.count - 1, Math.min(n - 1, KL_VIEW.end - shift));
+        document.getElementById("klineBox").innerHTML = document.getElementById("klineBox").innerHTML.replace(/<svg id="klineSvg"[\s\S]*<\/svg>/, renderKline());
+      }
+    };
+    svg.onmouseup = () => { svg.onmousemove = null; };
+  };
+  // 滚轮缩放（桌面）
+  svg.onwheel = e => {
+    e.preventDefault();
+    const factor = e.deltaY > 0 ? 1.2 : 0.8;
+    KL_VIEW.count = Math.max(20, Math.min(500, Math.round(KL_VIEW.count * factor)));
+    document.getElementById("klineBox").innerHTML = document.getElementById("klineBox").innerHTML.replace(/<svg id="klineSvg"[\s\S]*<\/svg>/, renderKline());
+  };
 }
 
 function showSignal(kw) {
