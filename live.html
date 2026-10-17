@@ -749,7 +749,7 @@ function renderLeader() {
   const el = document.getElementById("leaderBox");
   if (!el || !LD || !LD.signals) return;
   const sigs = LD.signals;
-  const leaders = [];
+  let leaders = [];
   Object.keys(MEMBERS).forEach(blk => {
     const codes = MEMBERS[blk] || [];
     let best = null;
@@ -766,6 +766,13 @@ function renderLeader() {
     }
   });
   leaders.sort((a, b) => b.ld - a.ld);
+  // 去重：同一股票属多个板块时，只保留连板最高的那条
+  const seenCodes = {};
+  leaders = leaders.filter(l => {
+    if (seenCodes[l.code]) return false;
+    seenCodes[l.code] = true;
+    return true;
+  });
   if (!leaders.length) {
     el.innerHTML = "<span style='color:var(--muted);'>当前无 2 板以上龙头。</span>";
     return;
