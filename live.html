@@ -87,6 +87,10 @@ th { color:var(--muted); font-weight:600; position:sticky; top:0; background:var
   </div>
   <div class="grid">
     <div class="card">
+      <h2>📋 龙虎榜（最新一期）<span id="lhbDate" style="font-size:12px;color:var(--muted);"></span></h2>
+      <div class="scroll" id="lhbList" style="max-height:420px;"></div>
+    </div>
+    <div class="card">
       <h2>涨停池（今日）<span id="limitCnt" style="font-size:12px;color:var(--muted);"></span> <span id="promoBox" style="font-size:12px;color:var(--muted);"></span></h2>
       <div id="ladderBox" style="margin-bottom:8px;"></div>
       <div class="scroll" id="limitList" style="max-height:420px;"></div>
@@ -227,6 +231,7 @@ function renderAll(j) {
   renderTemp();
   renderFlow();
   renderSignals();
+  renderLHB();
   renderMinutes();
   renderLimits();
   renderBlocks();
@@ -636,6 +641,29 @@ function loadPromo() {
     .catch(() => {});
 }
 
+function renderLHB() {
+  const el = document.getElementById("lhbList");
+  if (!el) return;
+  const arr = (LD && LD.lhb) || [];
+  if (!arr.length) {
+    el.innerHTML = "<p style='color:var(--muted);'>龙虎榜数据盘中/盘后自动更新。</p>";
+    return;
+  }
+  const d = document.getElementById("lhbDate");
+  if (d) d.textContent = `（${arr[0].date || ""}）`;
+  let html = `<table><thead><tr><th>代码</th><th>名称</th><th>净买额(亿)</th><th>涨跌</th><th>上榜原因</th></tr></thead><tbody>`;
+  arr.forEach(x => {
+    const net = x.net || 0;
+    const p = x.chg != null ? x.chg : 0;
+    html += `<tr style="cursor:pointer;" onclick="showSignal('${x.code}')"><td>${x.code}</td><td>${x.name}</td>
+      <td class="${net >= 0 ? "up" : "down"}">${net >= 0 ? "+" : ""}${net.toFixed(2)}</td>
+      <td class="${p >= 0 ? "up" : "down"}">${p >= 0 ? "+" : ""}${p}%</td>
+      <td style="font-size:11.5px;color:var(--muted);">${x.reason || ""}</td></tr>`;
+  });
+  html += "</tbody></table>";
+  el.innerHTML = html;
+}
+
 function renderLimits() {
   if (!LD || !LD.limit_up_list) return;
   let arr = LD.limit_up_list || [];
@@ -649,7 +677,7 @@ function renderLimits() {
   arr.forEach(s => {
     const sg = sigFor(s.code);
     const ld = sg ? (sg.limit_days || 0) : (s.limit_days || 0);
-    html += `<tr><td>${s.code}</td><td>${s.name}</td>
+    html += `<tr style="cursor:pointer;" onclick="showSignal('${s.code}')"><td>${s.code}</td><td>${s.name}</td>
       <td>${ld >= 1 ? `<span style="color:#c0392b;font-weight:bold;">${ld}板</span>` : "—"}</td>
       <td>${s.price.toFixed(2)}</td>
       <td class="up">+${s.pct.toFixed(2)}%</td>
