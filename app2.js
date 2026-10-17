@@ -1051,7 +1051,24 @@ function renderStockRows(rows) {
   document.getElementById("stockTable").innerHTML = html;
 }
 
+function renderSummary() {
+  const el = document.getElementById("summaryBox");
+  if (!el) return;
+  el.innerHTML = "<span style='color:var(--muted);'>加载中…</span>";
+  fetch("summary.json?v=" + new Date().getTime())
+    .then(r => r.json())
+    .then(j => {
+      if (j && j.text) {
+        el.innerHTML = `<div>${j.text}</div><div style="font-size:11px;color:var(--muted);margin-top:4px;">${j.date || ""} ${j.updated_at || ""}</div>`;
+      } else {
+        el.innerHTML = "<span style='color:var(--muted);'>今日总结生成中（收盘后自动更新）。</span>";
+      }
+    })
+    .catch(() => { el.innerHTML = "<span style='color:var(--muted);'>今日总结生成中（收盘后自动更新）。</span>"; });
+}
+
 function renderAll() {
+  renderSummary();
   renderBullBear();
   renderMeta();
   renderMain();
