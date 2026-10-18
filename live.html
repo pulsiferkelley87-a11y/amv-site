@@ -581,6 +581,21 @@ function setKlinePeriod(p) {
   if (LAST_KLINE_CODE) loadKline(LAST_KLINE_CODE);
 }
 
+function loadKlineFromSina(raw6, resolve, reject) {
+  // 新浪 kline 兜底（第三源）
+  const scale = KLINE_PERIOD === "day" ? 240 : KLINE_PERIOD === "week" ? 1200 : 7200;
+  const url = `https://quotes.sina.cn/cn/api/jsonp_v2.php/var%20_=/CN_MarketDataService.getKLineData?symbol=${raw6.startsWith("6") ? "sh" + raw6 : raw6.startsWith("4") || raw6.startsWith("8") || raw6.startsWith("92") ? "bj" + raw6 : "sz" + raw6}&scale=${scale}&ma=no&datalen=${KLINE_RANGE}`;
+  fetch(url)
+    .then(r => r.text())
+    .then(txt => {
+      const m = txt.match(/=\((.*)\)/s);
+      const arr = JSON.parse(m ? m[1] : txt);
+      const rows = (arr || []).map(x => [x.day, x.open, x.close, x.high, x.low, x.volume]);
+      resolve(rows);
+    })
+    .catch(() => reject(new Error("sina fail")));
+}
+
 function loadKlineFromEm(raw6, resolve, reject) {
   // 东财 kline 兜底（北交所等腾讯不支持的市场）
   const secid = raw6.startsWith("6") ? "1." + raw6 : "0." + raw6;
@@ -625,7 +640,17 @@ function loadKline(code) {
       KL_VIEW = { end: rows.length - 1, count: Math.min(60, rows.length) };
       box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动/点击看十字光标</span></div>` + renderKline();
     }, () => {
-      box.innerHTML = "<span style='font-size:12px;color:var(--muted);'>K线加载失败（该股可能已退市或停牌）。</span>";
+      loadKlineFromSina(raw6, rows2 => {
+        if (!rows2.length) {
+          box.innerHTML = "<span style='font-size:12px;color:var(--muted);'>K线加载失败（该股可能已退市或停牌）。</span>";
+          return;
+        }
+        KL_DATA = rows2;
+        KL_VIEW = { end: rows2.length - 1, count: Math.min(60, rows2.length) };
+        box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动/点击看十字光标</span></div>` + renderKline();
+      }, () => {
+        box.innerHTML = "<span style='font-size:12px;color:var(--muted);'>K线加载失败（该股可能已退市或停牌）。</span>";
+      });
     });
   };
   fetch(`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${raw},${KLINE_PERIOD},,,${KLINE_RANGE},qfq`, { signal: ctrl.signal })
