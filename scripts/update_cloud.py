@@ -1423,6 +1423,11 @@ def main():
         bb = compute_bull_bear(stocks_closes, amt_series,
                                (up_n, down_n, lu_n, ld_n, max_board))
         bb["updated_at"] = result["updated_at"]
+        # 最新交易日（快照/行情口径，休市日也准确）
+        try:
+            bb["trade_date"] = get_latest_trade_date()
+        except Exception:
+            pass
         result["bull_bear"] = bb
         # 历史趋势分数回测（官方 0AMV 序列）
         try:
