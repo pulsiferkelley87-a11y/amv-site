@@ -1167,7 +1167,7 @@ function renderBullBearBox(el, bb) {
     <div style="min-width:150px;text-align:center;">
       <div style="font-size:38px;font-weight:800;color:${total >= 15 ? "#d64545" : total <= -15 ? "#2fa36b" : "#6b7280"};">${total > 0 ? "+" : ""}${total}</div>
       <div style="font-size:14px;font-weight:600;">${bb.state}</div>
-      <div style="font-size:11px;color:var(--muted);">更新 ${bb.updated_at || ""}</div>
+      <div style="font-size:11px;color:var(--muted);">更新 ${bb.updated_at || ""}${bb.trade_date ? " ｜ 最新交易日 " + bb.trade_date : ""}</div>
     </div>
     <div style="flex:1;min-width:320px;">`;
   mods.forEach(([name, v, w]) => {
