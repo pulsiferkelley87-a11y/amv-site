@@ -567,6 +567,10 @@ function klineSVG(rows) {
 let KLINE_RANGE = 1000;
 let KLINE_PERIOD = "day";
 let LAST_KLINE_CODE = "";
+let KLINE_ABORT = null;   // 上一次 K 线请求的 AbortController（切换时取消旧请求）
+function abortPrevKline() {
+  if (KLINE_ABORT) { try { KLINE_ABORT.abort(); } catch (e) {} KLINE_ABORT = null; }
+}
 let KL_DATA = null;          // 全量 K 线数据
 let KL_VIEW = { end: -1, count: 60 };  // 窗口（end=-1 表示最新）
 let KL_SHOW_LEVELS = true;   // 关键位虚线开关
@@ -581,11 +585,11 @@ function setKlinePeriod(p) {
   if (LAST_KLINE_CODE) loadKline(LAST_KLINE_CODE);
 }
 
-function loadKlineFromSina(raw6, resolve, reject) {
+function loadKlineFromSina(raw6, resolve, reject, signal) {
   // 新浪 kline 兜底（第三源）
   const scale = KLINE_PERIOD === "day" ? 240 : KLINE_PERIOD === "week" ? 1200 : 7200;
   const url = `https://quotes.sina.cn/cn/api/jsonp_v2.php/var%20_=/CN_MarketDataService.getKLineData?symbol=${raw6.startsWith("6") ? "sh" + raw6 : raw6.startsWith("4") || raw6.startsWith("8") || raw6.startsWith("92") ? "bj" + raw6 : "sz" + raw6}&scale=${scale}&ma=no&datalen=${KLINE_RANGE}`;
-  fetch(url)
+  fetch(url, { signal: signal })
     .then(r => r.text())
     .then(txt => {
       const m = txt.match(/=\((.*)\)/s);
@@ -596,13 +600,13 @@ function loadKlineFromSina(raw6, resolve, reject) {
     .catch(() => reject(new Error("sina fail")));
 }
 
-function loadKlineFromEm(raw6, resolve, reject) {
+function loadKlineFromEm(raw6, resolve, reject, signal) {
   // 东财 kline 兜底（北交所等腾讯不支持的市场）
   const secid = raw6.startsWith("6") ? "1." + raw6 : "0." + raw6;
   const klt = KLINE_PERIOD === "day" ? 101 : KLINE_PERIOD === "week" ? 102 : 103;
   const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}` +
     `&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58&klt=${klt}&fqt=1&end=20500101&lmt=${KLINE_RANGE}`;
-  fetch(url)
+  fetch(url, { signal: signal })
     .then(r => r.json())
     .then(j => {
       const klines = ((j.data || {}).klines || []);
@@ -618,6 +622,8 @@ function loadKlineFromEm(raw6, resolve, reject) {
 function loadKline(code) {
   const box = document.getElementById("klineBox");
   if (!box) return;
+  abortPrevKline();
+  box.innerHTML = "<span style='font-size:12px;color:var(--muted);'>K线加载中…</span>";
   LAST_KLINE_CODE = code;
   const raw = code.startsWith("sh") || code.startsWith("sz") || code.startsWith("bj") ? code
     : (code.startsWith("92") || code.startsWith("4") || code.startsWith("8") ? "bj" + code
@@ -628,19 +634,18 @@ function loadKline(code) {
     `<button onclick="setKlinePeriod('${p}')" style="padding:6px 14px;border:1px solid ${p === KLINE_PERIOD ? '#3b6fe0' : '#d1d5db'};border-radius:5px;background:${p === KLINE_PERIOD ? '#3b6fe0' : '#fff'};color:${p === KLINE_PERIOD ? '#fff' : '#374151'};cursor:pointer;font-size:13px;margin-right:5px;">${t}</button>`).join("");
   const lvlBtn = `<button onclick="toggleKlineLevels()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:5px;background:#fff;cursor:pointer;font-size:13px;">📏 关键位：${KL_SHOW_LEVELS ? "开" : "关"}</button>`;
   const ctrl = new AbortController();
+  abortPrevKline();
+  KLINE_ABORT = ctrl;
   const timer = setTimeout(() => ctrl.abort(), 12000);
   const tryEm = () => {
     clearTimeout(timer);
-    loadKlineFromEm(raw6, rows => {
-      if (!rows.length) {
-        box.innerHTML = "<span style='font-size:12px;color:var(--muted);'>K线数据暂不可用（退市/停牌或无历史）。</span>";
-        return;
-      }
-      KL_DATA = rows;
-      KL_VIEW = { end: rows.length - 1, count: Math.min(60, rows.length) };
-      box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动/点击看十字光标</span></div>` + renderKline();
-    }, () => {
+    const c2 = new AbortController();
+    KLINE_ABORT = c2;
+    const doSina = () => {
+      const c3 = new AbortController();
+      KLINE_ABORT = c3;
       loadKlineFromSina(raw6, rows2 => {
+        KLINE_ABORT = null;
         if (!rows2.length) {
           box.innerHTML = "<span style='font-size:12px;color:var(--muted);'>K线加载失败（该股可能已退市或停牌）。</span>";
           return;
@@ -649,9 +654,20 @@ function loadKline(code) {
         KL_VIEW = { end: rows2.length - 1, count: Math.min(60, rows2.length) };
         box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动/点击看十字光标</span></div>` + renderKline();
       }, () => {
+        KLINE_ABORT = null;
         box.innerHTML = "<span style='font-size:12px;color:var(--muted);'>K线加载失败（该股可能已退市或停牌）。</span>";
-      });
-    });
+      }, c3.signal);
+    };
+    loadKlineFromEm(raw6, rows => {
+      KLINE_ABORT = null;
+      if (!rows.length) {
+        box.innerHTML = "<span style='font-size:12px;color:var(--muted);'>K线数据暂不可用（退市/停牌或无历史）。</span>";
+        return;
+      }
+      KL_DATA = rows;
+      KL_VIEW = { end: rows.length - 1, count: Math.min(60, rows.length) };
+      box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动/点击看十字光标</span></div>` + renderKline();
+    }, () => doSina(), c2.signal);
   };
   fetch(`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${raw},${KLINE_PERIOD},,,${KLINE_RANGE},qfq`, { signal: ctrl.signal })
     .then(r => r.json())
@@ -667,7 +683,10 @@ function loadKline(code) {
       KL_VIEW = { end: rows.length - 1, count: Math.min(60, rows.length) };
       box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动/点击看十字光标</span></div>` + renderKline();
     })
-    .catch(() => tryEm());
+    .catch(e => {
+      if (e && e.name === "AbortError") return;   // 被新请求取消：静默退出，不做兜底
+      tryEm();
+    });
 }
 
 function toggleKlineLevels() {
