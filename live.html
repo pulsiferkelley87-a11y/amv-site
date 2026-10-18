@@ -687,8 +687,8 @@ function loadKline(code) {
       clearTimeout(timer);
       const node = (j.data || {})[raw] || {};
       const rows = node.qfqday || node.qfqweek || node.qfqmonth || node.day || node.week || node.month || [];
-      if (!rows.length) {
-        tryEm();  // 腾讯无数据 → 东财兜底（北交所）
+      if (rows.length < 2) {
+        tryEm();  // 腾讯残数据（如北交只有1根不复权）→ 走东财/新浪兜底
         return;
       }
       KL_DATA = rows;
