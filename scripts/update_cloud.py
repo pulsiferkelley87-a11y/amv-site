@@ -1410,6 +1410,14 @@ def main():
         print("promotion err:", str(e)[:100])
     try:
         from bull_bear import compute_bull_bear, compute_bb_history
+        # 牛熊重算仅限：daily 全量模式 + 行情日期=今天（交易日）。
+        # 周末/节假日重算会导致分数漂移（-45→-29 的根因）；hourly light 用残缺快照也漂移。
+        _today = time.strftime("%Y-%m-%d", time.localtime())
+        _trade_date = (result.get("updated_at") or "")[:10]
+        if os.environ.get("TOP_N") == "300":
+            raise RuntimeError("skip bull_bear (hourly light 不重算牛熊)")
+        if _trade_date != _today:
+            raise RuntimeError("skip bull_bear (非交易日, 行情日期 %s)" % _trade_date)
         up_n = sum(1 for x in spot if x.get("pct") and x["pct"] > 0)
         down_n = sum(1 for x in spot if x.get("pct") and x["pct"] < 0)
         lu_n = sum(1 for x in spot if x.get("pct") and x["pct"] >= 9.5)
