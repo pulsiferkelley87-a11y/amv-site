@@ -585,38 +585,50 @@ function setKlinePeriod(p) {
   if (LAST_KLINE_CODE) loadKline(LAST_KLINE_CODE);
 }
 
+function loadJsonp(url, resolve, reject, signal, mode) {
+  // script 标签 JSONP，绕过浏览器跨域限制
+  const s = document.createElement("script");
+  const cb = "jxcb_" + Math.floor(Math.random() * 1e9);
+  let done = false;
+  const cleanup = () => { try { delete window[cb]; } catch (e) {} if (s.parentNode) s.parentNode.removeChild(s); clearTimeout(timer); };
+  const fail = err => { if (done) return; done = true; cleanup(); reject(err); };
+  const timer = setTimeout(() => fail(new Error("timeout")), 8000);
+  if (signal) {
+    try { signal.addEventListener("abort", () => fail(new DOMException("aborted", "AbortError"))); } catch (e) {}
+  }
+  if (mode === "em") {
+    window[cb] = data => { if (done) return; done = true; cleanup(); resolve(data); };
+    s.src = url + (url.includes("?") ? "&" : "?") + "cb=" + cb;
+  } else {
+    s.onload = () => { if (done) return; done = true; cleanup(); resolve(window._); };
+    s.src = url;
+  }
+  s.onerror = () => fail(new Error("script err"));
+  document.head.appendChild(s);
+}
+
 function loadKlineFromSina(raw6, resolve, reject, signal) {
-  // 新浪 kline 兜底（第三源）
+  // 新浪 kline 兜底（第三源，JSONP）
   const scale = KLINE_PERIOD === "day" ? 240 : KLINE_PERIOD === "week" ? 1200 : 7200;
   const url = `https://quotes.sina.cn/cn/api/jsonp_v2.php/var%20_=/CN_MarketDataService.getKLineData?symbol=${raw6.startsWith("6") ? "sh" + raw6 : raw6.startsWith("4") || raw6.startsWith("8") || raw6.startsWith("92") ? "bj" + raw6 : "sz" + raw6}&scale=${scale}&ma=no&datalen=${KLINE_RANGE}`;
-  fetch(url, { signal: signal })
-    .then(r => r.text())
-    .then(txt => {
-      const m = txt.match(/=\((.*)\)/s);
-      const arr = JSON.parse(m ? m[1] : txt);
-      const rows = (arr || []).map(x => [x.day, x.open, x.close, x.high, x.low, x.volume]);
-      resolve(rows);
-    })
-    .catch(() => reject(new Error("sina fail")));
+  loadJsonp(url, arr => {
+    resolve((arr || []).map(x => [x.day, x.open, x.close, x.high, x.low, x.volume]));
+  }, reject, signal, "sina");
 }
 
 function loadKlineFromEm(raw6, resolve, reject, signal) {
-  // 东财 kline 兜底（北交所等腾讯不支持的市场）
+  // 东财 kline 兜底（北交所等腾讯不支持的市场，JSONP）
   const secid = raw6.startsWith("6") ? "1." + raw6 : "0." + raw6;
   const klt = KLINE_PERIOD === "day" ? 101 : KLINE_PERIOD === "week" ? 102 : 103;
   const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}` +
     `&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58&klt=${klt}&fqt=1&end=20500101&lmt=${KLINE_RANGE}`;
-  fetch(url, { signal: signal })
-    .then(r => r.json())
-    .then(j => {
-      const klines = ((j.data || {}).klines || []);
-      const rows = klines.map(s => {
-        const p = s.split(",");
-        return [p[0], p[1], p[2], p[3], p[4], p[5]];  // [date, open, close, high, low, vol]
-      });
-      resolve(rows);
-    })
-    .catch(() => reject(new Error("em fail")));
+  loadJsonp(url, j => {
+    const klines = ((j.data || {}).klines || []);
+    resolve(klines.map(s => {
+      const p = s.split(",");
+      return [p[0], p[1], p[2], p[3], p[4], p[5]];
+    }));
+  }, reject, signal, "em");
 }
 
 function loadKline(code) {
