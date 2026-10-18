@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>K线数据源诊断</title>
+<style>
+body { font-family: sans-serif; margin: 20px; background: #f7f8fa; }
+h2 { font-size: 16px; }
+.item { background: #fff; border-radius: 8px; padding: 12px 16px; margin: 10px 0; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.ok { color: #0a7d32; font-weight: bold; }
+.fail { color: #c0392b; font-weight: bold; }
+.run { color: #b7791f; font-weight: bold; }
+pre { font-size: 11px; color: #555; white-space: pre-wrap; word-break: break-all; max-height: 120px; overflow: auto; }
+</style>
+</head>
+<body>
+<h2>K线数据源诊断（打开后自动测）</h2>
+<div id="box"></div>
+<script>
+const box = document.getElementById("box");
+function add(title) {
+  const d = document.createElement("div");
+  d.className = "item";
+  d.innerHTML = `<div>${title}</div><div class="run" id="${title.replace(/\W/g,'')}">测试中…</div>`;
+  box.appendChild(d);
+  return document.getElementById(title.replace(/\W/g,''));
+}
+function set(id, ok, txt) {
+  id.className = ok ? "ok" : "fail";
+  id.innerHTML = (ok ? "✅ 通 " : "❌ 不通 ") + txt;
+}
+function jsonp(url, mode, cbName, timeout) {
+  return new Promise((res, rej) => {
+    const s = document.createElement("script");
+    const cb = "jx" + Math.random().toString(36).slice(2);
+    const timer = setTimeout(() => { cleanup(); rej(new Error("timeout")); }, timeout || 8000);
+    function cleanup() { try { delete window[cb]; } catch(e){} clearTimeout(timer); s.remove(); }
+    if (mode === "em") {
+      window[cb] = d => { cleanup(); res(d); };
+      s.src = url + (url.includes("?") ? "&" : "?") + "cb=" + cb;
+    } else {
+      s.onload = () => { cleanup(); res(window._); };
+      s.src = url;
+    }
+    s.onerror = () => { cleanup(); rej(new Error("load err")); };
+    document.head.appendChild(s);
+  });
+}
+
+(async () => {
+  // 1. 腾讯 fetch（看 CORS 是否放行）
+  {
+    const el = add("腾讯 K线 fetch");
+    try {
+      const t0 = performance.now();
+      const r = await fetch("https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh600000,day,,,60,qfq");
+      const j = await r.json();
+      const rows = ((j.data||{}).sh600000||{}).qfqday || [];
+      set(el, true, `${rows.length} 根，${Math.round(performance.now()-t0)}ms`);
+    } catch (e) { set(el, false, e.message); }
+  }
+  // 2. 腾讯 K线 script（jsonp 兜底测试）
+  {
+    const el = add("腾讯 K线 script");
+    try {
+      const t0 = performance.now();
+      await jsonp("https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh600000,day,,,60,qfq&_var=kline_jx", "sina", "", 8000);
+      set(el, true, Math.round(performance.now()-t0) + "ms");
+    } catch (e) { set(el, false, e.message); }
+  }
+  // 3. 东财 JSONP（北交所）
+  {
+    const el = add("东财 K线 JSONP (430047)");
+    try {
+      const t0 = performance.now();
+      const j = await jsonp("https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=0.430047&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58&klt=101&fqt=1&end=20500101&lmt=60", "em", "cb", 8000);
+      const kl = ((j.data||{}).klines||[]);
+      set(el, true, `${kl.length} 根，${Math.round(performance.now()-t0)}ms`);
+    } catch (e) { set(el, false, e.message); }
+  }
+  // 4. 新浪 JSONP（北交所）
+  {
+    const el = add("新浪 K线 JSONP (bj430047)");
+    try {
+      const t0 = performance.now();
+      const arr = await jsonp("https://quotes.sina.cn/cn/api/jsonp_v2.php/var%20_=/CN_MarketDataService.getKLineData?symbol=bj430047&scale=240&ma=no&datalen=60", "sina", "", 8000);
+      set(el, true, `${(arr||[]).length} 根，${Math.round(performance.now()-t0)}ms`);
+    } catch (e) { set(el, false, e.message); }
+  }
+  // 5. 腾讯 北交所 920157
+  {
+    const el = add("腾讯 K线 北交所 (bj920157)");
+    try {
+      const t0 = performance.now();
+      const r = await fetch("https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=bj920157,day,,,60,qfq");
+      const j = await r.json();
+      const rows = ((j.data||{}).bj920157||{}).qfqday || [];
+      set(el, true, `${rows.length} 根，${Math.round(performance.now()-t0)}ms`);
+    } catch (e) { set(el, false, e.message); }
+  }
+})();
+</script>
+</body>
+</html>
