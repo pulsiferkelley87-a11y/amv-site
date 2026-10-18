@@ -1077,8 +1077,34 @@ function renderSummary() {
     });
 }
 
+function renderSources() {
+  const el = document.getElementById("srcBox");
+  if (!el) return;
+  const rows = [];
+  const add = (name, ok, timeTxt) => {
+    rows.push(`<span style="display:inline-block;border:1px solid ${ok ? "#cfe6d4" : "#f0c9c0"};background:${ok ? "#f4faf5" : "#fdf3f1"};border-radius:4px;padding:3px 10px;margin:3px;font-size:12px;">${ok ? "✅" : "⚠️"} ${name}：${timeTxt}</span>`);
+    el.innerHTML = rows.join("");
+  };
+  if (D) {
+    add("主数据（云端重算）", true, D.updated_at || "—");
+    const off = D.official || {};
+    if (off.date && off.date.length) add("官方0AMV序列", true, "最新 " + off.date[off.date.length - 1]);
+    add("通达信口径（本地同步）", true, D.official_source || "—");
+  }
+  el.innerHTML = rows.join("") || "<span style='color:var(--muted);'>加载中…</span>";
+  fetch("news.json?v=" + new Date().getTime())
+    .then(r => r.json())
+    .then(j => add("快讯（新浪+东财+金十）", true, j.updated_at || "—"))
+    .catch(() => add("快讯（新浪+东财+金十）", false, "读取失败"));
+  fetch("https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com/live_data.json?t=" + new Date().getTime())
+    .then(r => r.json())
+    .then(j => add("实盘数据（腾讯云）", true, j.updated_at || "—"))
+    .catch(() => add("实盘数据（腾讯云）", false, "连接失败"));
+}
+
 function renderAll() {
   renderSummary();
+  renderSources();
   renderBullBear();
   renderMeta();
   renderMain();
