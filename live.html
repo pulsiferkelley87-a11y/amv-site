@@ -592,20 +592,26 @@ function loadKline(code) {
   const perBtns = [["day", "日K"], ["week", "周K"], ["month", "月K"]].map(([p, t]) =>
     `<button onclick="setKlinePeriod('${p}')" style="padding:6px 14px;border:1px solid ${p === KLINE_PERIOD ? '#3b6fe0' : '#d1d5db'};border-radius:5px;background:${p === KLINE_PERIOD ? '#3b6fe0' : '#fff'};color:${p === KLINE_PERIOD ? '#fff' : '#374151'};cursor:pointer;font-size:13px;margin-right:5px;">${t}</button>`).join("");
   const lvlBtn = `<button onclick="toggleKlineLevels()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:5px;background:#fff;cursor:pointer;font-size:13px;">📏 关键位：${KL_SHOW_LEVELS ? "开" : "关"}</button>`;
-  fetch(`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${raw},${KLINE_PERIOD},,,${KLINE_RANGE},qfq`)
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 12000);
+  fetch(`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${raw},${KLINE_PERIOD},,,${KLINE_RANGE},qfq`, { signal: ctrl.signal })
     .then(r => r.json())
     .then(j => {
+      clearTimeout(timer);
       const node = (j.data || {})[raw] || {};
       const rows = node.qfqday || node.qfqweek || node.qfqmonth || node.day || node.week || node.month || [];
       if (!rows.length) {
-        box.innerHTML = "<span style='font-size:12px;color:var(--muted);'>K线数据暂不可用。</span>";
+        box.innerHTML = "<span style='font-size:12px;color:var(--muted);'>K线数据暂不可用（退市/停牌或无历史）。</span>";
         return;
       }
       KL_DATA = rows;
       KL_VIEW = { end: rows.length - 1, count: Math.min(60, rows.length) };
       box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动/点击看十字光标</span></div>` + renderKline();
     })
-    .catch(() => { box.innerHTML = "<span style='font-size:12px;color:var(--muted);'>K线加载失败。</span>"; });
+    .catch(() => {
+      clearTimeout(timer);
+      box.innerHTML = "<span style='font-size:12px;color:var(--muted);'>K线加载失败（该股可能已退市或停牌）。</span>";
+    });
 }
 
 function toggleKlineLevels() {
