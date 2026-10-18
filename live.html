@@ -712,18 +712,156 @@ function toggleKlineLevels() {
 }
 
 function computeLevels() {
-  // 基于近 120 根（不足则全部）算压力位/支撑位/突破位
-  if (!KL_DATA || !KL_DATA.length) return null;
-  const win = KL_DATA.slice(-120);
-  const highs = win.map(r => parseFloat(r[4])).filter(v => v > 0);
-  const lows = win.map(r => parseFloat(r[3])).filter(v => v > 0);
-  const closes = win.map(r => parseFloat(r[2])).filter(v => v > 0);
-  if (!highs.length || !lows.length || !closes.length) return null;
-  const pressure = Math.max.apply(null, highs);
-  const support = Math.min.apply(null, lows);
-  const cur = closes[closes.length - 1];
-  const broken = cur > pressure;  // 现价突破压力位
-  return { pressure, support, cur, broken };
+  // 关键位：分型转折+密集成交+缺口+均线+黄金分割 五源打分（Z哥战法口径）
+  if (!KL_DATA || KL_DATA.length < 10) return null;
+  const win = KL_DATA.slice(-250);
+  const n = win.length;
+  const H = win.map(r => parseFloat(r[4]));
+  const L = win.map(r => parseFloat(r[3]));
+  const C = win.map(r => parseFloat(r[2]));
+  const V = win.map(r => parseFloat(r[5]));
+  const ok = i => i >= 0 && i < n && H[i] > 0 && L[i] > 0 && C[i] > 0;
+  const cur = C[n - 1];
+  if (!(cur > 0)) return null;
+  // ATR14（自适应阈值）
+  let atr = 0, atrN = 0;
+  for (let i = 1; i < n; i++) {
+    if (!ok(i) || !ok(i - 1)) continue;
+    atr += Math.max(H[i] - L[i], Math.abs(H[i] - C[i - 1]), Math.abs(L[i] - C[i - 1]));
+    atrN++;
+  }
+  atr = atrN ? atr / atrN : cur * 0.03;
+
+  // ---- 源一：分型转折点（左右3根确认，替代ZIG避免未来函数） ----
+  const ph = [], pl = [];
+  for (let i = 3; i < n - 3; i++) {
+    if (!ok(i)) continue;
+    let isH = true, isL = true;
+    for (let k = 1; k <= 3; k++) {
+      if (!ok(i - k) || !ok(i + k)) { isH = false; isL = false; break; }
+      if (H[i] <= H[i - k] || H[i] <= H[i + k]) isH = false;
+      if (L[i] >= L[i - k] || L[i] >= L[i + k]) isL = false;
+    }
+    if (isH) ph.push({ i: i, price: H[i] });
+    if (isL) pl.push({ i: i, price: L[i] });
+  }
+  const mergePivots = (list, isHigh) => {
+    if (!list.length) return [];
+    list.sort((a, b) => a.i - b.i);
+    const out = [];
+    for (const p of list) {
+      const last = out[out.length - 1];
+      const tol = Math.max(2 * atr, 0.02 * p.price);
+      if (last && p.i - last.i <= 10 && Math.abs(p.price - last.price) <= tol) {
+        last.price = isHigh ? Math.max(last.price, p.price) : Math.min(last.price, p.price);
+      } else {
+        out.push({ i: p.i, price: p.price });
+      }
+    }
+    return out;
+  };
+  const highsP = mergePivots(ph, true);
+  const lowsP = mergePivots(pl, false);
+
+  // ---- 源二：密集成交区（120根成交额加权 VWAP） ----
+  let vwap = 0, vwN = 0;
+  win.slice(-120).forEach(r => {
+    const h = parseFloat(r[4]), l = parseFloat(r[3]), a = parseFloat(r[6]);
+    const amt = a > 0 ? a : parseFloat(r[5]) * (h + l) / 2;
+    if (amt > 0 && h > 0 && l > 0) { vwap += amt * (h + l) / 2; vwN += amt; }
+  });
+  const vwapP = vwN ? vwap / vwN : 0;
+
+  // ---- 源三：缺口（宽度≥0.8%且未回补） ----
+  const gapsUp = [], gapsDown = [];
+  for (let i = 1; i < n; i++) {
+    if (!ok(i) || !ok(i - 1)) continue;
+    if (L[i] > H[i - 1]) gapsUp.push({ lo: H[i - 1], hi: L[i], i: i });
+    else if (H[i] < L[i - 1]) gapsDown.push({ lo: H[i], hi: L[i - 1], i: i });
+  }
+  const unfilledUp = gapsUp.filter(g => {
+    if ((g.hi - g.lo) / g.lo < 0.008) return false;
+    for (let j = g.i + 1; j < n; j++) if (ok(j) && L[j] <= g.lo) return false;
+    return true;
+  }).slice(-3);
+  const unfilledDown = gapsDown.filter(g => {
+    if ((g.hi - g.lo) / g.lo < 0.008) return false;
+    for (let j = g.i + 1; j < n; j++) if (ok(j) && H[j] >= g.hi) return false;
+    return true;
+  }).slice(-3);
+
+  // ---- 源四：均线 ----
+  const ma = p => {
+    let s = 0, c = 0;
+    for (let i = n - p; i < n; i++) if (ok(i)) { s += C[i]; c++; }
+    return c ? s / c : 0;
+  };
+  const ma60 = ma(60);
+
+  // ---- 源五：黄金分割（120根波段 0.5/0.618） ----
+  const winH = [], winL = [];
+  for (let i = Math.max(0, n - 120); i < n; i++) {
+    if (ok(i)) { winH.push(H[i]); winL.push(L[i]); }
+  }
+  const swingH = Math.max.apply(null, winH);
+  const swingL = Math.min.apply(null, winL);
+  const fib = [0.5, 0.618].map(f => swingH - (swingH - swingL) * f);
+
+  // ---- 打分合并 ----
+  const near = (a, b) => Math.abs(a - b) / Math.max(b, 0.001) < 0.01;
+  const testCount = price => {
+    let c = 0;
+    for (let i = Math.max(1, n - 120); i < n; i++) {
+      if (ok(i) && H[i] >= price * 0.99 && L[i] <= price * 1.01) c++;
+    }
+    return c;
+  };
+  const buildCands = dir => {
+    const cands = [];
+    const add = (price, src, w) => {
+      if (!price || price <= 0) return;
+      if (dir === "R" && price < cur * 1.005) return;   // 压力位须在现价上方
+      if (dir === "S" && price > cur * 0.995) return;   // 支撑位须在现价下方
+      const hit = cands.find(c => near(c.price, price));
+      if (hit) { hit.src += "+" + src; hit.w = Math.max(hit.w, w); }
+      else cands.push({ price: price, src: src, w: w, tests: 0 });
+    };
+    if (dir === "R") {
+      highsP.forEach(p => add(p.price, "分型", 3));
+      unfilledDown.forEach(g => add(g.hi, "缺口", 2));
+      add(ma60, "均线", 1);
+      add(vwapP, "筹码", 2);
+      fib.forEach(f => add(f, "斐波", 1.5));
+    } else {
+      lowsP.forEach(p => add(p.price, "分型", 3));
+      unfilledUp.forEach(g => add(g.lo, "缺口", 2));
+      add(ma60, "均线", 1);
+      add(vwapP, "筹码", 2);
+      fib.forEach(f => add(f, "斐波", 1.5));
+    }
+    cands.forEach(c => {
+      c.tests = testCount(c.price);
+      const multi = 1 + (c.src.split("+").length - 1) * 0.5;
+      const distW = Math.max(0, 1 - Math.abs(c.price - cur) / Math.max(cur, 0.001));
+      c.score = c.w * multi * 3 + c.tests * 3 + distW * 1.5;
+    });
+    cands.sort((a, b) => b.score - a.score);
+    return cands.slice(0, 3).map(c => ({ price: c.price, src: c.src, tests: c.tests }));
+  };
+  const resistances = buildCands("R");
+  const supports = buildCands("S");
+
+  // ---- 突破判定（收盘站上+放量1.2倍+2日站稳） ----
+  const topR = resistances.length ? resistances[0].price : 0;
+  let broken = 0;
+  if (topR > 0 && C[n - 1] > topR) {
+    const v5 = V.slice(Math.max(0, n - 6), n - 1).filter(x => x > 0);
+    const volAvg5 = v5.length ? v5.reduce((a, b) => a + b, 0) / v5.length : 0;
+    const volOk = volAvg5 > 0 && V[n - 1] >= volAvg5 * 1.2;
+    const stand2 = ok(n - 2) && C[n - 2] > topR;
+    broken = volOk ? (stand2 ? 2 : 1) : (stand2 ? 1 : 0);
+  }
+  return { resistances: resistances, supports: supports, broken: broken, topR: topR, cur: cur, ma60: ma60 };
 }
 
 function renderKline() {
@@ -777,21 +915,28 @@ function renderKline() {
     grid += `<text x="${PL - 4}" y="${(gy + 3).toFixed(1)}" font-size="9" fill="#8a8f98" text-anchor="end">${val.toFixed(2)}</text>`;
   }
   const label = KLINE_PERIOD === "day" ? "日K" : KLINE_PERIOD === "week" ? "周K" : "月K";
-  // 关键位虚线（压力/支撑/突破）
+  // 关键位（Z哥口径：五源打分→带）
   let levelLines = "";
   if (KL_SHOW_LEVELS) {
     const lv = computeLevels();
     if (lv) {
-      const drawLevel = (price, color, tag) => {
-        if (price < mn || price > mx) return "";
-        const ly = y(price).toFixed(1);
-        return `<line x1="${PL}" y1="${ly}" x2="${W - PR}" y2="${ly}" stroke="${color}" stroke-width="1" stroke-dasharray="5,4" opacity="0.85"/>
-        <text x="${W - PR - 4}" y="${(parseFloat(ly) - 3).toFixed(1)}" font-size="10" fill="${color}" text-anchor="end">${tag} ${price.toFixed(2)}</text>`;
+      const drawBand = (price, color, tag, solid) => {
+        if (!(price > 0)) return "";
+        const lo = price * 0.99, hi = price * 1.01;
+        const visLo = Math.max(lo, mn), visHi = Math.min(hi, mx);
+        if (visLo >= visHi) return "";
+        const py = y(price).toFixed(1);
+        const yy = y(visHi).toFixed(1);
+        const hh = (y(visLo) - y(visHi)).toFixed(1);
+        const dash = solid ? "" : ' stroke-dasharray="5,4"';
+        return `<rect x="${PL}" y="${yy}" width="${W - PL - PR}" height="${hh}" fill="${color}" opacity="0.07"/>
+        <line x1="${PL}" y1="${py}" x2="${W - PR}" y2="${py}" stroke="${color}" stroke-width="${solid ? 1.5 : 1}"${dash} opacity="0.85"/>
+        <text x="${W - PR - 4}" y="${(parseFloat(py) - 3).toFixed(1)}" font-size="10" fill="${color}" text-anchor="end">${tag} ${price.toFixed(2)}</text>`;
       };
-      levelLines += drawLevel(lv.pressure, "#d64545", "压力位");
-      levelLines += drawLevel(lv.support, "#2fa36b", "低位支撑");
-      if (lv.broken) {
-        levelLines += drawLevel(lv.pressure, "#3b6fe0", "已突破");
+      lv.resistances.forEach((r, i) => { levelLines += drawBand(r.price, "#d64545", "压力" + (i + 1), false); });
+      lv.supports.forEach((s, i) => { levelLines += drawBand(s.price, "#2fa36b", "支撑" + (i + 1), false); });
+      if (lv.broken > 0) {
+        levelLines += drawBand(lv.topR, "#3b6fe0", lv.broken === 2 ? "有效突破" : "疑似突破", true);
       }
     }
   }
@@ -809,7 +954,7 @@ function renderKline() {
       <rect id="crossInfo" x="${PL}" y="${PT}" width="150" height="78" rx="4" fill="#fff" stroke="#d8dbe0" opacity="0.95"/>
       <text id="crossText" x="${PL + 8}" y="${PT + 16}" font-size="10.5" fill="#1a1d24"></text>
     </g>
-    <text x="${PL}" y="${H - 5}" font-size="9" fill="#8a8f98">${label}（前复权）｜橙MA5 蓝MA10 紫MA20 ｜ ${rows[0][0]} ~ ${rows[m - 1][0]}</text>
+    <text x="${PL}" y="${H - 5}" font-size="9" fill="#8a8f98">${label}（前复权）｜橙MA5 蓝MA10 紫MA20｜关键位：红压力带 绿支撑带 蓝突破 ｜ ${rows[0][0]} ~ ${rows[m - 1][0]}</text>
   </svg>`;
   // 手势绑定（延迟到 DOM 就绪）
   setTimeout(bindKlineGestures, 50);
