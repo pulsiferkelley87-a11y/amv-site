@@ -353,6 +353,14 @@ function renderFlow() {
       <td class="${p >= 0 ? "up" : "down"}">${p >= 0 ? "+" : ""}${p}%</td></tr>`;
   });
   html += "</tbody></table>";
+  if (LD.stock_flow && LD.stock_flow.length) {
+    html += `<div style="margin-top:10px;font-size:12px;color:var(--muted);">个股主力净流入 TOP20（东财口径，今日）</div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;">`;
+    LD.stock_flow.slice(0, 20).forEach((x, i) => {
+      const p = x.pct != null ? (x.pct > 0 ? "+" : "") + x.pct.toFixed(2) + "%" : "";
+      html += `<span style="font-size:12px;background:#fdf6f4;border:1px solid #f0cfc6;border-radius:4px;padding:3px 8px;"><b>${i + 1}.</b> ${x.name} <span class="up">+${(x.flow || 0).toFixed(2)}亿</span> <span style="color:var(--muted);">${p}</span></span>`;
+    });
+    html += `</div>`;
+  }
   html += `<div style="margin-top:8px;"><button onclick="toggleFlowHistory()" style="padding:2px 10px;border:1px solid #d1d5db;border-radius:5px;background:#fff;cursor:pointer;font-size:12px;">📅 近 10 日主线回看</button><div id="flowHistBox" style="margin-top:4px;"></div></div>`;
   el.innerHTML = html;
 }
