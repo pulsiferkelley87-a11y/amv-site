@@ -65,6 +65,10 @@ th { color:var(--muted); font-weight:600; position:sticky; top:0; background:var
     <div id="flowBox" style="font-size:13px;"></div>
   </div>
   <div class="card">
+    <h2>🎯 临近支撑位监控 <span style="font-size:12px;color:var(--muted);font-weight:normal;">现价距支撑位 &lt;5%（盘中实时比对，点击看 K 线）</span></h2>
+    <div id="nearSupportBox" style="font-size:13px;"></div>
+  </div>
+  <div class="card">
     <h2>个股信号（逐股递推·日频）
       <span style="font-size:12px;color:var(--muted);font-weight:normal;">查个股：
         <input id="sigSearch" placeholder="代码或名称" style="padding:3px 8px;border:1px solid #d1d5db;border-radius:5px;width:150px;font-size:12.5px;">
@@ -239,6 +243,7 @@ function renderAll(j) {
   renderBreadth();
   renderTemp();
   renderFlow();
+  renderNearSupport();
   renderSignals();
   renderLHB();
   renderLeader();
@@ -321,6 +326,25 @@ function renderTemp() {
       </svg>`;
     })
     .catch(() => { el.innerHTML = "<span style='color:var(--muted);'>加载失败。</span>"; });
+}
+
+function renderNearSupport() {
+  const el = document.getElementById("nearSupportBox");
+  if (!el || !LD) return;
+  const arr = LD.near_support || [];
+  if (!arr.length) {
+    el.innerHTML = "<span style='color:var(--muted);'>暂无临近支撑位的股票（盘中实时更新）。</span>";
+    return;
+  }
+  let html = "";
+  arr.forEach(x => {
+    const p = x.pct != null ? (x.pct > 0 ? "+" : "") + x.pct.toFixed(2) + "%" : "";
+    html += `<div onclick="showSignal('${x.code}')" style="cursor:pointer;padding:4px 0;border-bottom:1px dashed #eee;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+      <span><b>${x.name}</b> <span style="color:var(--muted);font-size:12px;">${x.code}</span></span>
+      <span style="font-size:12.5px;">现价 <b>${x.price}</b> ｜ 支撑 <b style="color:#2fa36b;">${x.support}</b> ｜ 距离 <b style="color:#c0392b;">${x.dist}%</b> ｜ ${p}</span>
+    </div>`;
+  });
+  el.innerHTML = html;
 }
 
 function renderFlow() {
