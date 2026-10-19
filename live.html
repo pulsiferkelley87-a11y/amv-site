@@ -330,9 +330,10 @@ function renderFlow() {
     return;
   }
   const arr = LD.board_flow.slice(0, 12);
+  const srcTag = arr.length && arr[0].src === "同花顺" ? "同花顺（东财风控兑底）" : "东财（概念板块）";
   const solid = arr.filter(x => (x.flow || 0) > 1 && (x.flow5 || 0) > 0 && (x.flow10 || 0) > 0 && (x.pct || 0) > 0).slice(0, 3);
   const pulse = arr.filter(x => (x.flow || 0) > 3 && (x.flow5 || 0) <= 0).slice(0, 3);
-  let html = "";
+  let html = `<div style="font-size:11px;color:var(--muted);padding:2px 0 6px;">数据源：${srcTag}｜口径：今日主力净流入（亿）</div>`;
   if (solid.length) {
     html += `<div style="padding:4px 0 6px;">🎯 主线（多日持续流入+上涨）：${solid.map(x => `<b style="color:#c0392b;">${x.name}</b>`).join("、")}</div>`;
   } else {
