@@ -438,6 +438,43 @@ def compute_stock_amv(rows):
     return y[-1], [k["date"] for k in rows], y
 
 
+def compute_support_watch(stocks_closes, limit=800):
+    """全市场支撑位监控底表：close 口径分型低点（左右3根）+ 近20日低点兑底，
+    支撑=现价下方最近的显著低点，输出距支撑 <5% 的股票。"""
+    out = []
+    for code, closes in stocks_closes.items():
+        if len(closes) < 60:
+            continue
+        cs = [c for c in closes if c and c > 0][-120:]
+        if len(cs) < 60:
+            continue
+        cur = cs[-1]
+        n = len(cs)
+        lows = []
+        for i in range(3, n - 3):
+            if (all(cs[i] <= cs[i - k] for k in (1, 2, 3))
+                    and all(cs[i] <= cs[i + k] for k in (1, 2, 3))):
+                lows.append((i, cs[i]))
+        w20 = cs[-20:]
+        lows.append((n - 20 + w20.index(min(w20)), min(w20)))
+        merged = []
+        for i, p in sorted(lows):
+            if merged and abs(p - merged[-1][1]) / max(p, 0.01) < 0.02:
+                merged[-1] = (i, min(merged[-1][1], p))
+            else:
+                merged.append((i, p))
+        below = [p for _, p in merged if p < cur * 0.995]
+        if not below:
+            continue
+        support = max(below)
+        dist = (cur - support) / support * 100
+        if 0 < dist < 5:
+            out.append({"code": code, "support": round(support, 2),
+                        "close": round(cur, 2), "dist": round(dist, 2)})
+    out.sort(key=lambda x: x["dist"])
+    return out[:limit]
+
+
 def load_mv_map(spot):
     """流通市值映射：优先本地 stock_list（新浪口径，亿元->元），否则 spot 快照。"""
     mv_map = {}
@@ -1446,6 +1483,16 @@ def main():
         print("bull_bear:", bb["total"], bb["state"])
     except Exception as e:
         print("bull_bear err:", str(e)[:120])
+
+    # 支撑位监控底表（全市场，盘后算一次，盘中由云函数用实时价比对）
+    try:
+        _sw = compute_support_watch(stocks_closes)
+        result["support_watch"] = _sw
+        with open(os.path.join(BASE, "support_watch.json"), "w", encoding="utf-8") as f:
+            json.dump({"updated_at": result["updated_at"], "list": _sw}, f, ensure_ascii=False)
+        print(f"support_watch: {len(_sw)} 只距支撑 <5%")
+    except Exception as e:
+        print("support_watch err:", str(e)[:100])
 
     # 数据源健康度（今日各源拉取成功率）
     result["source_health"] = {
