@@ -354,10 +354,10 @@ function renderFlow() {
   });
   html += "</tbody></table>";
   if (LD.stock_flow && LD.stock_flow.length) {
-    html += `<div style="margin-top:10px;font-size:12px;color:var(--muted);">个股主力净流入 TOP20（东财口径，今日）</div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;">`;
-    LD.stock_flow.slice(0, 20).forEach((x, i) => {
+    html += `<div style="margin-top:10px;font-size:12px;color:var(--muted);">个股主力净流入 TOP50（东财口径，今日，点击看 K 线）</div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;">`;
+    LD.stock_flow.slice(0, 50).forEach((x, i) => {
       const p = x.pct != null ? (x.pct > 0 ? "+" : "") + x.pct.toFixed(2) + "%" : "";
-      html += `<span style="font-size:12px;background:#fdf6f4;border:1px solid #f0cfc6;border-radius:4px;padding:3px 8px;"><b>${i + 1}.</b> ${x.name} <span class="up">+${(x.flow || 0).toFixed(2)}亿</span> <span style="color:var(--muted);">${p}</span></span>`;
+      html += `<span onclick="showSignal('${x.code}')" title="点击查看 K 线" style="font-size:12px;background:#fdf6f4;border:1px solid #f0cfc6;border-radius:4px;padding:3px 8px;cursor:pointer;"><b>${i + 1}.</b> ${x.name} <span class="up">+${(x.flow || 0).toFixed(2)}亿</span> <span style="color:var(--muted);">${p}</span></span>`;
     });
     html += `</div>`;
   }
@@ -1348,17 +1348,28 @@ function renderSwitch() {
 function renderLHB() {
   const el = document.getElementById("lhbList");
   if (!el) return;
-  const arr = (LD && LD.lhb) || [];
+  // 优先独立 lhb.json（17 点后云函数自动更新当天榜单）
+  fetch("https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com/lhb.json?t=" + new Date().getTime())
+    .then(r => r.json())
+    .then(j => {
+      const arr = (j && j.list) || [];
+      renderLHBList(el, arr, (j && j.updated_at) || "");
+    })
+    .catch(() => renderLHBList(el, (LD && LD.lhb) || [], ""));
+}
+
+function renderLHBList(el, arr, updatedAt) {
   if (!arr.length) {
-    el.innerHTML = "<p style='color:var(--muted);'>龙虎榜数据盘中/盘后自动更新。</p>";
+    el.innerHTML = "<p style='color:var(--muted);'>龙虎榜数据盘后自动更新（17 点后交易所披露）。</p>";
     return;
   }
   const d = document.getElementById("lhbDate");
-  if (d) d.textContent = `（${arr[0].date || ""}）`;
+  if (d) d.textContent = `（${updatedAt.slice(0, 10) || ""}）`;
   let html = `<table><thead><tr><th>代码</th><th>名称</th><th>净买额(亿)</th><th>涨跌</th><th>上榜原因</th></tr></thead><tbody>`;
   arr.forEach(x => {
-    const net = x.net || 0;
-    const p = x.chg != null ? x.chg : 0;
+    const net = x.net != null ? x.net : (x.net_amt || 0);
+    const p = x.chg != null ? x.chg : (x.pct != null ? x.pct : 0);
+    const reason = x.reason || "";
     html += `<tr style="cursor:pointer;" onclick="showSignal('${x.code}')"><td>${x.code}</td><td>${x.name}</td>
       <td class="${net >= 0 ? "up" : "down"}">${net >= 0 ? "+" : ""}${net.toFixed(2)}</td>
       <td class="${p >= 0 ? "up" : "down"}">${p >= 0 ? "+" : ""}${p}%</td>
