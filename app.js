@@ -858,12 +858,17 @@ function loadGoodNews() {
       box.innerHTML = "<div style='font-size:12.5px;color:var(--muted);padding:6px 0;'>📌 今日利好速览：暂无可收录的利好消息。</div>";
       return;
     }
-    box.innerHTML = items.map(x =>
-      `<div style="padding:5px 0;border-bottom:1px dashed #eee;font-size:13px;">` +
-      `<span style="color:var(--muted);font-size:11.5px;">${(x.time || "").slice(11, 16)}</span> ` +
-      `${x.text}` +
-      (x.category ? `<span style="margin-left:6px;font-size:11px;color:#3b6fe0;background:#eef3fd;border-radius:3px;padding:1px 6px;">${x.category}</span>` : "") +
-      `</div>`).join("");
+    let html = `<div style="border:1px solid #f0c9c0;background:#fdf3f1;border-radius:8px;padding:8px 10px;margin-bottom:8px;">
+      <b style="font-size:13px;">📌 今日利好速览（${j.date || ""}，${items.length} 条）</b>
+      <div style="max-height:220px;overflow-y:auto;margin-top:4px;">`;
+    items.slice(0, 50).forEach(n => {
+      html += `<div style="padding:2px 0;font-size:12.5px;">
+        <span style="color:#999;">${(n.time || "").slice(11)}</span> ${(n.text || "").replace(/</g, "&lt;").replace(/>/g, "&gt;")}` +
+        (n.category ? ` <span style="font-size:11px;color:#3b6fe0;background:#eef3fd;border-radius:3px;padding:0 5px;">${n.category}</span>` : "") +
+        `</div>`;
+    });
+    html += "</div></div>";
+    box.innerHTML = html;
   };
   fetch("https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com/good_news.json?t=" + new Date().getTime())
     .then(r => r.json())
