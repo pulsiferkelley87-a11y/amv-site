@@ -1104,7 +1104,7 @@ function renderSources() {
     add("通达信口径（本地同步）", true, D.official_source || "—");
   }
   el.innerHTML = rows.join("") || "<span style='color:var(--muted);'>加载中…</span>";
-  fetch("news.json?v=" + new Date().getTime())
+  fetch("https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com/news.json?t=" + new Date().getTime())
     .then(r => r.json())
     .then(j => add("快讯（新浪+东财+金十）", true, j.updated_at || "—"))
     .catch(() => add("快讯（新浪+东财+金十）", false, "读取失败"));
@@ -1319,14 +1319,24 @@ function autoRefreshData() {
 }
 
 function autoRefreshNews() {
-  fetch("news.json?v=" + new Date().getTime())
+  // 与 renderNews 同源：优先 COS（最新），失败回退 Pages
+  fetch("https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com/news.json?t=" + new Date().getTime())
     .then(r => r.json())
     .then(j => {
       if (j && j.news) {
         renderNewsList(j.news, j.updated_at || "");
       }
     })
-    .catch(() => {});
+    .catch(() => {
+      fetch("news.json?v=" + new Date().getTime())
+        .then(r => r.json())
+        .then(j => {
+          if (j && j.news) {
+            renderNewsList(j.news, j.updated_at || "");
+          }
+        })
+        .catch(() => {});
+    });
 }
 
 function queryCloudStatus(msg) {
