@@ -861,7 +861,7 @@ function loadGoodNews() {
     let html = `<div style="border:1px solid #f0c9c0;background:#fdf3f1;border-radius:8px;padding:8px 10px;margin-bottom:8px;">
       <b style="font-size:13px;">📌 今日利好速览（${j.date || ""}，${items.length} 条）</b>
       <div style="max-height:220px;overflow-y:auto;margin-top:4px;">`;
-    items.slice(0, 50).forEach(n => {
+    items.slice(0, 250).forEach(n => {
       html += `<div style="padding:2px 0;font-size:12.5px;">
         <span style="color:#999;">${(n.time || "").slice(11)}</span> ${(n.text || "").replace(/</g, "&lt;").replace(/>/g, "&gt;")}` +
         (n.category ? ` <span style="font-size:11px;color:#3b6fe0;background:#eef3fd;border-radius:3px;padding:0 5px;">${n.category}</span>` : "") +
