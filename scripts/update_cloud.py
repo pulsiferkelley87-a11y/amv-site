@@ -1447,10 +1447,19 @@ def main():
         print("promotion err:", str(e)[:100])
     try:
         from bull_bear import compute_bull_bear, compute_bb_history
-        # 牛熊重算：hourly light（TOP_N=300 残缺快照）一律跳过——只有 daily 全量重算。
-        # daily 每天（含周末）用最后交易日全市场数据重算：数值稳定不漂移，时间戳每天自动更新。
+        # 牛熊重算规则：
+        # 1) hourly light（TOP_N=300 残缺快照）一律跳过——只有 daily 全量重算。
+        # 2) 交易日当天已重算过（现有 json 的 trade_date == 今天）则锁定，不再重算，
+        #    避免一天内快照差异导致分数跳变（-40 → -26 的问题）。
         if os.environ.get("TOP_N") == "300":
             raise RuntimeError("skip bull_bear (hourly light 不重算牛熊)")
+        _today = time.strftime("%Y-%m-%d", time.localtime())
+        try:
+            _old = json.load(open(os.path.join(BASE, "bull_bear.json"), encoding="utf-8"))
+            if (_old.get("trade_date") or "") == _today and (_old.get("scores") or {}).get("sentiment"):
+                raise RuntimeError(f"skip bull_bear (今天 {_today} 已重算，锁定)")
+        except FileNotFoundError:
+            pass
         up_n = sum(1 for x in spot if x.get("pct") and x["pct"] > 0)
         down_n = sum(1 for x in spot if x.get("pct") and x["pct"] < 0)
         lu_n = sum(1 for x in spot if x.get("pct") and x["pct"] >= 9.5)
