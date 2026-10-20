@@ -1462,10 +1462,35 @@ def main():
             pass
         up_n = sum(1 for x in spot if x.get("pct") and x["pct"] > 0)
         down_n = sum(1 for x in spot if x.get("pct") and x["pct"] < 0)
-        lu_n = sum(1 for x in spot if x.get("pct") and x["pct"] >= 9.5)
+        # 涨停数：涨停价四舍五入精确判定（与实盘页同口径，2026 新规）
+        def _limit_up(x):
+            try:
+                pct = x.get("pct")
+                price = x.get("price")
+                code = str(x.get("code") or "")
+                if pct is None or not price:
+                    return False
+                pre = price / (1 + pct / 100.0)
+                if code.startswith("bj") or code.startswith(("4", "8", "92")):
+                    ratio = 1.30
+                elif code.startswith(("30", "68")):
+                    ratio = 1.20
+                else:
+                    ratio = 1.10
+                limit = round(pre * ratio, 2)
+                return price >= limit - 0.001
+            except Exception:
+                return False
+        lu_n = sum(1 for x in spot if _limit_up(x))
         ld_n = sum(1 for x in spot if x.get("pct") and x["pct"] <= -9.5)
         max_board = max((s.get("limit_days", 0) for s in amv_rows), default=0)
+        # 量能序列：官方序列 amount 可能滞后（如停在 9-30），把最后一期替换为今日全市场成交额
         amt_series = result.get("official", {}).get("amount") or []
+        if amt_series and spot:
+            _today_amt = sum(x.get("amount") or 0 for x in spot)
+            if _today_amt > 0:
+                amt_series = list(amt_series)
+                amt_series[-1] = _today_amt
         bb = compute_bull_bear(stocks_closes, amt_series,
                                (up_n, down_n, lu_n, ld_n, max_board))
         bb["updated_at"] = result["updated_at"]
