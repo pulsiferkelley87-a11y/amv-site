@@ -1001,13 +1001,17 @@ function renderKline() {
   return svg;
 }
 
+let KL_DRAG = null;   // 拖动状态（跨重绘保留，修复重绘后拖动中断）
+let KL_RAF = null;    // rAF 句柄
+let KL_PINCH = null;  // 双指缩放状态
+
 function bindKlineGestures() {
   const svg = document.getElementById("klineSvg");
   if (!svg || !KL_DATA) return;
   const n = KL_DATA.length;
-  let dragStartX = null, dragBaseEnd = 0, dragCurEnd = 0;
-  let pinchStart = null, pinchCount = null;
-  let tapStart = null, tapMoved = false;
+  if (!KL_DRAG) KL_DRAG = { startX: null, baseEnd: 0, curEnd: 0, tap: null, moved: false };
+  if (!KL_PINCH) KL_PINCH = { dist: null, count: 0 };
+  const D = KL_DRAG, PN = KL_PINCH;
   const W = 660, H = 340, PL = 46, PR = 8, PT = 8, PB = 20;
 
   const bwPx = () => {
@@ -1018,7 +1022,7 @@ function bindKlineGestures() {
   const repaint = () => {
     const box = document.getElementById("klineBox");
     if (box) box.innerHTML = box.innerHTML.replace(/<svg id="klineSvg"[\s\S]*<\/svg>/, renderKline());
-    setTimeout(bindKlineGestures, 0);
+    if (KL_RAF) { cancelAnimationFrame(KL_RAF); KL_RAF = null; }
   };
   const panEl = () => {
     const s2 = document.getElementById("klineSvg");
@@ -1064,52 +1068,56 @@ function bindKlineGestures() {
       `<tspan x="${infoX + 8}" dy="14">量 ${(v / 10000).toFixed(1)}万手</tspan>`;
   };
 
+  let rafId = null;
+  const scheduleRedraw = () => {
+    if (rafId == null) {
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (KL_VIEW.end !== D.curEnd) {
+          KL_VIEW.end = D.curEnd;
+          repaint();
+        }
+      });
+    }
+  };
+
   const doDrag = clientX => {
-    const dx = clientX - dragStartX;
-    if (tapStart && Math.abs(clientX - tapStart.x) > 10) tapMoved = true;
+    const dx = clientX - D.startX;
+    if (D.tap && Math.abs(clientX - D.tap.x) > 10) D.moved = true;
     const deltaEnd = -Math.round(dx / bwPx());
     if (deltaEnd === 0) return;
-    if (Math.abs(deltaEnd) >= KL_PAD) {
-      // 超出缓冲区：提交并重绘，重置锚点继续拖
-      dragBaseEnd = clampEnd(dragBaseEnd + deltaEnd);
-      KL_VIEW.end = dragBaseEnd;
-      dragStartX = clientX;
-      dragCurEnd = dragBaseEnd;
-      repaint();
-    } else {
-      dragCurEnd = clampEnd(dragBaseEnd + deltaEnd);
-      applyPan(deltaEnd * bwPx());
-    }
+    D.curEnd = clampEnd(D.baseEnd + deltaEnd);
+    scheduleRedraw();
   };
 
   svg.ontouchstart = e => {
     if (e.touches.length === 1) {
-      dragStartX = e.touches[0].clientX;
-      dragBaseEnd = KL_VIEW.end;
-      dragCurEnd = KL_VIEW.end;
-      tapStart = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
-      tapMoved = false;
+      D.startX = e.touches[0].clientX;
+      D.baseEnd = KL_VIEW.end;
+      D.curEnd = KL_VIEW.end;
+      D.tap = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
+      D.moved = false;
     } else if (e.touches.length === 2) {
-      pinchStart = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
+      PN.dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
                               e.touches[0].clientY - e.touches[1].clientY);
-      pinchCount = KL_VIEW.count;
+      PN.count = KL_VIEW.count;
     }
     e.preventDefault();
   };
   svg.ontouchmove = e => {
-    if (e.touches.length === 1 && dragStartX != null) {
+    if (e.touches.length === 1 && D.startX != null) {
       doDrag(e.touches[0].clientX);
-    } else if (e.touches.length === 2 && pinchStart) {
+    } else if (e.touches.length === 2 && PN.dist) {
       const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
                               e.touches[0].clientY - e.touches[1].clientY);
-      const ratio = pinchStart / dist;
-      KL_VIEW.count = Math.max(20, Math.min(500, Math.round(pinchCount * ratio)));
+      const ratio = PN.dist / dist;
+      KL_VIEW.count = Math.max(20, Math.min(500, Math.round(PN.count * ratio)));
       repaint();
     }
     e.preventDefault();
   };
   svg.ontouchend = e => {
-    if (tapStart && !tapMoved && Date.now() - tapStart.t < 300 && e.changedTouches && e.changedTouches.length) {
+    if (D.tap && !D.moved && Date.now() - D.tap.t < 300 && e.changedTouches && e.changedTouches.length) {
       const t = e.changedTouches[0];
       showCross(t.clientX, t.clientY);
       setTimeout(() => {
@@ -1117,26 +1125,26 @@ function bindKlineGestures() {
         if (c2) c2.style.display = "none";
       }, 3500);
     }
-    if (dragStartX != null && KL_VIEW.end !== dragCurEnd) {
-      KL_VIEW.end = dragCurEnd;
+    if (D.startX != null && KL_VIEW.end !== D.curEnd) {
+      KL_VIEW.end = D.curEnd;
       repaint();
     }
-    dragStartX = null;
-    pinchStart = null;
-    tapStart = null;
+    D.startX = null;
+    PN.dist = null;
+    D.tap = null;
   };
   // 鼠标移动显示十字光标（桌面）
   svg.onmousemove = e => {
-    if (!dragStartX) showCross(e.clientX, e.clientY);
+    if (!D.startX) showCross(e.clientX, e.clientY);
   };
   svg.onmouseleave = () => {
     const c2 = document.getElementById("klineCross");
     if (c2) c2.style.display = "none";
   };
   svg.onmousedown = e => {
-    dragStartX = e.clientX;
-    dragBaseEnd = KL_VIEW.end;
-    dragCurEnd = KL_VIEW.end;
+    D.startX = e.clientX;
+    D.baseEnd = KL_VIEW.end;
+    D.curEnd = KL_VIEW.end;
     const c2 = document.getElementById("klineCross");
     if (c2) c2.style.display = "none";
     svg.onmousemove = ev => {
@@ -1144,13 +1152,13 @@ function bindKlineGestures() {
     };
     svg.onmouseup = () => {
       svg.onmousemove = e2 => {
-        if (!dragStartX) showCross(e2.clientX, e2.clientY);
+        if (!D.startX) showCross(e2.clientX, e2.clientY);
       };
-      if (KL_VIEW.end !== dragCurEnd) {
-        KL_VIEW.end = dragCurEnd;
+      if (KL_VIEW.end !== D.curEnd) {
+        KL_VIEW.end = D.curEnd;
         repaint();
       }
-      dragStartX = null;
+      D.startX = null;
     };
   };
   // 滚轮缩放（桌面）
