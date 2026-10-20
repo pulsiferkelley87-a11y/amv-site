@@ -811,11 +811,16 @@ function filterSectorBtns() {
 }
 
 function renderNews() {
-  // 优先独立 news.json（每小时自动更新），失败回退 data.json 的日更快讯
-  fetch("news.json?v=" + new Date().getTime())
+  // 优先腾讯云 COS（amv-news 云函数每小时写），失败回退 Pages 的 news.json 与主数据日更快讯
+  fetch("https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com/news.json?t=" + new Date().getTime())
     .then(r => r.json())
     .then(j => renderNewsList(j.news || [], j.updated_at || ""))
-    .catch(() => renderNewsList(D.news || [], ""));
+    .catch(() => {
+      fetch("news.json?v=" + new Date().getTime())
+        .then(r => r.json())
+        .then(j => renderNewsList(j.news || [], j.updated_at || ""))
+        .catch(() => renderNewsList(D.news || [], ""));
+    });
 }
 
 function renderNewsList(news, updatedAt) {
