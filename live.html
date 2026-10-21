@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <title>实盘监测 · 活跃市值</title>
 <style>
-:root { --bg:#f5f6f8; --card:#fff; --text:var(--text); --muted:var(--muted);
+:root { --bg:var(--soft); --card:#fff; --text:var(--text); --muted:var(--muted);
         --red:#d64545; --green:#2fa36b; --blue:#3b6fe0; }
 * { margin:0; padding:0; box-sizing:border-box; }
 body { background:var(--bg); color:var(--text); font-family:"Microsoft YaHei","PingFang SC",sans-serif; }
@@ -38,8 +38,8 @@ th { color:var(--muted); font-weight:600; position:sticky; top:0; background:var
 .search { padding:4px 10px; border:1px solid var(--border); border-radius:5px; width:180px; font-size:13px; }
 .flat { color:var(--muted); }
 <style>
-:root{--bg:#f7f8fa;--card:#ffffff;--card2:#fcfcfd;--text:#1a1d24;--muted:#6b7280;--border:#e5e7eb;--accent:#3b6fe0;}
-[data-theme="dark"]{--bg:#15171c;--card:#1e222a;--card2:#1e222a;--text:#e8ebf2;--muted:#9098a8;--border:#2e3440;}
+:root{--bg:#f7f8fa;--card:#ffffff;--card2:#fcfcfd;--text:#1a1d24;--muted:#6b7280;--border:#e5e7eb;--accent:#3b6fe0;--soft:var(--soft);--soft-red:var(--soft-red);--soft-red2:var(--soft-red2);--soft-red-bd:var(--soft-red-bd);--soft-red-bd2:var(--soft-red-bd2);--soft-green:var(--soft-green);--soft-green-bd:var(--soft-green-bd);}
+[data-theme="dark"]{--bg:#15171c;--card:#1e222a;--card2:#1e222a;--text:#e8ebf2;--muted:#9098a8;--border:#2e3440;--soft:#23272f;--soft-red:#2b2225;--soft-red2:#2a2124;--soft-red-bd:#4a3335;--soft-red-bd2:#4a3438;--soft-green:#22302a;--soft-green-bd:#2f4a3d;}
 body{background:var(--bg);color:var(--text);transition:background .2s;}
 .card{background:var(--card);border:1px solid var(--border);}
 table th,table td{border-color:var(--border);}
@@ -388,7 +388,7 @@ function renderFlow() {
     html += `<div style="margin-top:10px;font-size:12px;color:var(--muted);">个股主力净流入 TOP50（东财口径，今日，点击看 K 线）</div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;">`;
     LD.stock_flow.slice(0, 50).forEach((x, i) => {
       const p = x.pct != null ? (x.pct > 0 ? "+" : "") + x.pct.toFixed(2) + "%" : "";
-      html += `<span onclick="showSignal('${x.code}')" title="点击查看 K 线" style="font-size:12px;background:#fdf6f4;border:1px solid #f0cfc6;border-radius:4px;padding:3px 8px;cursor:pointer;"><b>${i + 1}.</b> ${x.name} <span class="up">+${(x.flow || 0).toFixed(2)}亿</span> <span style="color:var(--muted);">${p}</span></span>`;
+      html += `<span onclick="showSignal('${x.code}')" title="点击查看 K 线" style="font-size:12px;background:var(--soft-red2);border:1px solid var(--soft-red-bd2);border-radius:4px;padding:3px 8px;cursor:pointer;"><b>${i + 1}.</b> ${x.name} <span class="up">+${(x.flow || 0).toFixed(2)}亿</span> <span style="color:var(--muted);">${p}</span></span>`;
     });
     html += `</div>`;
   }
@@ -483,7 +483,7 @@ function trendSVG(vals, color) {
   for (let k = 0; k <= 4; k++) {
     const gy = PT + (k / 4) * ih;
     const val = mx - (k / 4) * rg;
-    grid += `<line x1="${PL}" y1="${gy.toFixed(1)}" x2="${W - PR}" y2="${gy.toFixed(1)}" stroke="#e8eaee" stroke-width="1"/>`;
+    grid += `<line x1="${PL}" y1="${gy.toFixed(1)}" x2="${W - PR}" y2="${gy.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>`;
     grid += `<text x="${PL - 5}" y="${(gy + 3).toFixed(1)}" font-size="10" fill="var(--muted)" text-anchor="end">${(val / 1e8).toFixed(1)}亿</text>`;
   }
   const last = vals[vals.length - 1];
@@ -1269,7 +1269,7 @@ function minuteSVG(pts, color) {
     d += (i ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1);
   });
   const last = pts[pts.length - 1], first = pts[0];
-  return `<svg width="${W}" height="${H + 16}" style="background:#fafbfc;border:1px solid var(--border);border-radius:8px;">
+  return `<svg width="${W}" height="${H + 16}" style="background:var(--soft);border:1px solid var(--border);border-radius:8px;">
     <path d="${d}" fill="none" stroke="${color}" stroke-width="1.4"/>
     <text x="4" y="10" font-size="9" fill="var(--muted)">${first[0]}</text>
     <text x="${W - 30}" y="10" font-size="9" fill="var(--muted)">${last[0]}</text>
@@ -1313,7 +1313,7 @@ function renderLadder(arr) {
   tiers.forEach(d => {
     const list = groups[d];
     const names = list.map(s =>
-      `<span style="display:inline-block;background:#fdf3f1;border:1px solid #f0c9c0;border-radius:4px;padding:1px 7px;margin:2px 3px;font-size:12px;white-space:nowrap;">${s.name}<span style="color:var(--muted);">(${s.code.slice(2)})</span></span>`).join("");
+      `<span style="display:inline-block;background:var(--soft-red);border:1px solid var(--soft-red-bd);border-radius:4px;padding:1px 7px;margin:2px 3px;font-size:12px;white-space:nowrap;">${s.name}<span style="color:var(--muted);">(${s.code.slice(2)})</span></span>`).join("");
     const levelColor = d >= 5 ? "#c0392b" : d >= 3 ? "#b9770e" : "var(--muted)";
     html += `<div style="padding:3px 0;border-bottom:1px dashed var(--border);">
       <span style="display:inline-block;min-width:52px;font-weight:bold;color:${levelColor};">${d}板</span>
