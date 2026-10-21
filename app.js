@@ -354,12 +354,21 @@ function markStale(updatedAt) {
   }
 }
 
+function themeColors() {
+  const dark = document.documentElement.getAttribute("data-theme") === "dark";
+  return dark
+    ? { text: "#9098a8", axis: "#2e3440", split: "#2e3440", tooltipBg: "#1e222a", tooltipText: "#e8ebf2" }
+    : { text: "#6b7280", axis: "#c9ccd2", split: "#eef0f3", tooltipBg: "#ffffff", tooltipText: "#1a1d24" };
+}
+
 function baseOption() {
+  const tc = themeColors();
   return {
     animation: false,
     grid: { left: 55, right: 55, top: 40, bottom: 40 },
-    tooltip: { trigger: "axis", backgroundColor: "#fff", borderColor: "var(--border)",
-               textStyle: { color: "var(--text)", fontSize: 12 } },
+    textStyle: { color: tc.text },
+    tooltip: { trigger: "axis", backgroundColor: tc.tooltipBg, borderColor: tc.axis,
+               textStyle: { color: tc.tooltipText, fontSize: 12 } },
   };
 }
 
@@ -1375,6 +1384,7 @@ function line(data, name, color, width) {
 
 load();
 loadBullBear();  // 牛熊卡片独立立即加载（2KB 小文件，不等主数据）
+window.refreshCharts = renderAll;  // 主题切换后重绘图表（新配色）
 
 // 自动刷新：数据每 10 分钟、快讯每 5 分钟（静默，无需手动操作）
 setInterval(autoRefreshData, 600000);
