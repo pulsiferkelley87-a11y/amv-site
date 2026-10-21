@@ -1064,6 +1064,10 @@ function renderStockRows(rows) {
   document.getElementById("stockTable").innerHTML = html;
 }
 
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
 function renderSummary() {
   const el = document.getElementById("summaryBox");
   if (!el) return;
@@ -1072,7 +1076,7 @@ function renderSummary() {
   load("https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com/summary.json?t=" + new Date().getTime())
     .then(j => {
       if (j && j.text) {
-        el.innerHTML = `<div>${j.text}</div><div style="font-size:11px;color:var(--muted);margin-top:4px;">${j.date || ""} ${j.updated_at || ""}</div>`;
+        el.innerHTML = `<div>${esc(j.text)}</div><div style="font-size:11px;color:var(--muted);margin-top:4px;">${esc(j.date || "")} ${esc(j.updated_at || "")}</div>`;
       } else {
         el.innerHTML = "<span style='color:var(--muted);'>今日总结生成中（收盘后自动更新）。</span>";
       }
@@ -1081,7 +1085,7 @@ function renderSummary() {
       load("summary.json?v=" + new Date().getTime())
         .then(j => {
           if (j && j.text) {
-            el.innerHTML = `<div>${j.text}</div><div style="font-size:11px;color:var(--muted);margin-top:4px;">${j.date || ""}</div>`;
+            el.innerHTML = `<div>${esc(j.text)}</div><div style="font-size:11px;color:var(--muted);margin-top:4px;">${esc(j.date || "")}</div>`;
           } else {
             el.innerHTML = "<span style='color:var(--muted);'>今日总结生成中（收盘后自动更新）。</span>";
           }
