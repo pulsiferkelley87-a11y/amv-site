@@ -1,14 +1,14 @@
 // amv-site 前端逻辑
 const COLORS = {
   official: "#d64545",
-  var1: "#9aa3af",
+  var1: "var(--muted)",
   c5: "#3b6fe0",
   c13: "#2fa36b",
   c34: "#b8860b",
   cinf: "#7c5cbf",
   amv_hat: "#e07b3b",
   znz0: "#3b6fe0",
-  dmv: "#9aa3af",
+  dmv: "var(--muted)",
 };
 
 let D = null;
@@ -358,8 +358,8 @@ function baseOption() {
   return {
     animation: false,
     grid: { left: 55, right: 55, top: 40, bottom: 40 },
-    tooltip: { trigger: "axis", backgroundColor: "#fff", borderColor: "#e5e7eb",
-               textStyle: { color: "#1a1d24", fontSize: 12 } },
+    tooltip: { trigger: "axis", backgroundColor: "#fff", borderColor: "var(--border)",
+               textStyle: { color: "var(--text)", fontSize: 12 } },
   };
 }
 
@@ -835,16 +835,17 @@ function renderNewsList(news, updatedAt) {
   loadGoodNews();
   const GOOD = ["利好", "获批", "中标", "预增", "超预期", "回购", "增持", "涨价", "创新高", "签约", "净流入", "降息", "降温", "提振", "上调", "回暖", "强劲", "突破", "加速", "翻红", "大涨", "新高"];
   const BAD = ["利空", "处罚", "立案", "亏损", "下滑", "减持", "退市", "违规", "爆雷", "下调", "净流出", "加息", "升温", "萎缩", "疲软", "大跌", "暴跌", "违约"];
-  let html = "";
+  let html = "<div style='max-height:420px;overflow-y:auto;'>";
   news.forEach(n => {
     let txt = n.text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
     let cls = "";
     if (GOOD.some(k => txt.includes(k))) cls = "good";
     else if (BAD.some(k => txt.includes(k))) cls = "bad";
-    html += `<div class="newsItem ${cls}" style="padding:4px 0;border-bottom:1px solid #f0f0f0;font-size:13px;">
-      <span style="color:#999;margin-right:8px;">${n.time || ""}</span>${txt}
+    html += `<div class="newsItem ${cls}" style="padding:4px 0;border-bottom:1px solid var(--border);font-size:13px;">
+      <span style="color:var(--muted);margin-right:8px;">${n.time || ""}</span>${txt}
     </div>`;
   });
+  html += "</div>";
   el.innerHTML = html;
 }
 
@@ -858,13 +859,13 @@ function loadGoodNews() {
       box.innerHTML = "<div style='font-size:12.5px;color:var(--muted);padding:6px 0;'>📌 今日利好速览：暂无可收录的利好消息。</div>";
       return;
     }
-    let html = `<div style="border:1px solid #f0c9c0;background:#fdf3f1;border-radius:8px;padding:8px 10px;margin-bottom:8px;">
+    let html = `<div style="border:1px solid var(--soft-red-bd);background:var(--soft-red);border-radius:8px;padding:8px 10px;margin-bottom:8px;">
       <b style="font-size:13px;">📌 今日利好速览（${j.date || ""}，${items.length} 条）</b>
       <div style="max-height:220px;overflow-y:auto;margin-top:4px;">`;
     items.slice(0, 250).forEach(n => {
       html += `<div style="padding:2px 0;font-size:12.5px;">
-        <span style="color:#999;">${(n.time || "").slice(11)}</span> ${(n.text || "").replace(/</g, "&lt;").replace(/>/g, "&gt;")}` +
-        (n.category ? ` <span style="font-size:11px;color:#3b6fe0;background:#eef3fd;border-radius:3px;padding:0 5px;">${n.category}</span>` : "") +
+        <span style="color:var(--muted);">${(n.time || "").slice(11)}</span> ${(n.text || "").replace(/</g, "&lt;").replace(/>/g, "&gt;")}` +
+        (n.category ? ` <span style="font-size:11px;color:#3b6fe0;background:var(--soft);border-radius:3px;padding:0 5px;">${n.category}</span>` : "") +
         `</div>`;
     });
     html += "</div></div>";
@@ -1094,7 +1095,7 @@ function renderSources() {
   if (!el) return;
   const rows = [];
   const add = (name, ok, timeTxt) => {
-    rows.push(`<span style="display:inline-block;border:1px solid ${ok ? "#cfe6d4" : "#f0c9c0"};background:${ok ? "#f4faf5" : "#fdf3f1"};border-radius:4px;padding:3px 10px;margin:3px;font-size:12px;">${ok ? "✅" : "⚠️"} ${name}：${timeTxt}</span>`);
+    rows.push(`<span style="display:inline-block;border:1px solid ${ok ? "var(--soft-green-bd)" : "var(--soft-red-bd)"};background:${ok ? "var(--soft-green)" : "var(--soft-red)"};border-radius:4px;padding:3px 10px;margin:3px;font-size:12px;">${ok ? "✅" : "⚠️"} ${name}：${timeTxt}</span>`);
     el.innerHTML = rows.join("");
   };
   if (D) {
@@ -1173,11 +1174,11 @@ function renderBullBearBox(el, bb) {
   const bar = v => {
     const p = Math.max(0, Math.min(100, (v + 100) / 2));
     const c = v >= 20 ? "#2fa36b" : v <= -20 ? "#d64545" : "#b8860b";
-    return `<div style="height:8px;background:#eef0f3;border-radius:4px;margin:2px 0;"><div style="width:${p}%;height:8px;background:${c};border-radius:4px;"></div></div>`;
+    return `<div style="height:8px;background:var(--border);border-radius:4px;margin:2px 0;"><div style="width:${p}%;height:8px;background:${c};border-radius:4px;"></div></div>`;
   };
   let html = `<div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start;">
     <div style="min-width:150px;text-align:center;">
-      <div style="font-size:38px;font-weight:800;color:${total >= 15 ? "#d64545" : total <= -15 ? "#2fa36b" : "#6b7280"};">${total > 0 ? "+" : ""}${total}</div>
+      <div style="font-size:38px;font-weight:800;color:${total >= 15 ? "#d64545" : total <= -15 ? "#2fa36b" : "var(--muted)"};">${total > 0 ? "+" : ""}${total}</div>
       <div style="font-size:14px;font-weight:600;">${bb.state}</div>
       <div style="font-size:11px;color:var(--muted);">更新 ${bb.updated_at || ""}${bb.trade_date ? " ｜ 最新交易日 " + bb.trade_date : ""}</div>
     </div>
@@ -1220,18 +1221,18 @@ function loadBBHistory() {
       let labels = "";
       h.forEach((p, i) => {
         if (i % 200 === 0 || i === h.length - 1) {
-          labels += `<text x="${x(i).toFixed(1)}" y="${H - 4}" font-size="9" fill="#8a8f98" text-anchor="middle">${p.date.slice(0, 4)}</text>`;
+          labels += `<text x="${x(i).toFixed(1)}" y="${H - 4}" font-size="9" fill="var(--muted)" text-anchor="middle">${p.date.slice(0, 4)}</text>`;
         }
       });
-      box.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" style="background:#fcfcfd;border:1px solid #e5e7eb;border-radius:6px;">
+      box.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" style="background:var(--card2);border:1px solid var(--border);border-radius:6px;">
         <line x1="${PL}" y1="${y(35)}" x2="${W - PR}" y2="${y(35)}" stroke="#e0c9c9" stroke-width="1" stroke-dasharray="3,3"/>
         <line x1="${PL}" y1="${y(-35)}" x2="${W - PR}" y2="${y(-35)}" stroke="#c9e0cf" stroke-width="1" stroke-dasharray="3,3"/>
-        <line x1="${PL}" y1="${y(0)}" x2="${W - PR}" y2="${y(0)}" stroke="#d8dbe0" stroke-width="1"/>
+        <line x1="${PL}" y1="${y(0)}" x2="${W - PR}" y2="${y(0)}" stroke="var(--border)" stroke-width="1"/>
         <path d="${d}" fill="none" stroke="#3b6fe0" stroke-width="1.4"/>
         <text x="${PL - 4}" y="${y(35) + 3}" font-size="9" fill="#c0392b" text-anchor="end">+35</text>
         <text x="${PL - 4}" y="${y(-35) + 3}" font-size="9" fill="#2fa36b" text-anchor="end">-35</text>
         ${labels}
-        <text x="${PL}" y="10" font-size="9" fill="#8a8f98">牛熊趋势分数回测（仅趋势模块·官方0AMV vs 均线，约5年）</text>
+        <text x="${PL}" y="10" font-size="9" fill="var(--muted)">牛熊趋势分数回测（仅趋势模块·官方0AMV vs 均线，约5年）</text>
       </svg>`;
     })
     .catch(() => { if (box) box.innerHTML = ""; });
