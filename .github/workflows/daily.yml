@@ -2,7 +2,7 @@ name: Daily Update
 
 on:
   schedule:
-    - cron: '30 7 * * *'     # UTC 07:30 = 北京 15:30
+    - cron: '35 7 * * *'     # UTC 07:35 = 北京 15:35（避开 light 的 :30 并发写仓库）
     - cron: '0 8,9 * * *'    # UTC 08:00/09:00 = 北京 16:00/17:00 兜底（GitHub 调度常漏）
   workflow_dispatch: {}
 
