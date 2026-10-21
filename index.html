@@ -9,13 +9,13 @@
 <script src="echarts.min.js"></script>
 <style>
   :root {
-    --bg: #f5f6f8; --card: #ffffff; --text: #1a1d24; --muted: #6b7280;
+    --bg: #f5f6f8; --card: #ffffff; --text: var(--text); --muted: var(--muted);
     --red: #d64545; --green: #2fa36b; --blue: #3b6fe0; --amber: #b8860b;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: var(--bg); color: var(--text);
          font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
-  header { padding: 18px 24px 10px; background: var(--card); border-bottom: 1px solid #e5e7eb; }
+  header { padding: 18px 24px 10px; background: var(--card); border-bottom: 1px solid var(--border); }
   header h1 { font-size: 20px; font-weight: 700; }
   header .meta { margin-top: 6px; font-size: 12px; color: var(--muted); }
   .wrap { max-width: 1200px; margin: 0 auto; padding: 16px; }
@@ -28,7 +28,7 @@
   .chart.tall { height: 300px; }
   .full { grid-column: 1 / -1; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { padding: 6px 8px; text-align: right; border-bottom: 1px solid #eef0f3; }
+  th, td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--border); }
   th:first-child, td:first-child { text-align: left; }
   th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--card); }
   .up { color: var(--red); } .down { color: var(--green); }
@@ -38,29 +38,36 @@
   .newsItem.bad { color: var(--green); }
   .tag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 11px;
          margin-right: 4px; color: #fff; }
-  .modeBtn { padding: 2px 10px; border: 1px solid #d1d5db; border-radius: 5px;
-             background: #fff; cursor: pointer; font-size: 12px; color: #374151; }
+  .modeBtn { padding: 2px 10px; border: 1px solid var(--border); border-radius: 5px;
+             background: #fff; cursor: pointer; font-size: 12px; color: var(--text); }
   .modeBtn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
   .sectorBtns { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-  .sectorBtn { padding: 3px 10px; border: 1px solid #d1d5db; border-radius: 14px;
-               background: #fff; cursor: pointer; font-size: 12px; color: #374151;
+  .sectorBtn { padding: 3px 10px; border: 1px solid var(--border); border-radius: 14px;
+               background: #fff; cursor: pointer; font-size: 12px; color: var(--text);
                transition: all .15s; }
   .sectorBtn:hover { border-color: var(--blue); color: var(--blue); }
   .sectorBtn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
   .tag.green { background: var(--green); } .tag.amber { background: var(--amber); }
   .tag.blue { background: var(--blue); } .tag.gray { background: #9aa3af; }
   @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
-</style>
+<style>
+:root{--bg:#f7f8fa;--card:#ffffff;--card2:#fcfcfd;--text:#1a1d24;--muted:#6b7280;--border:#e5e7eb;--accent:#3b6fe0;}
+[data-theme="dark"]{--bg:#15171c;--card:#1e222a;--card2:#1e222a;--text:#e8ebf2;--muted:#9098a8;--border:#2e3440;}
+body{background:var(--bg);color:var(--text);transition:background .2s;}
+.card{background:var(--card);border:1px solid var(--border);}
+table th,table td{border-color:var(--border);}
+#themeBtn{position:fixed;top:10px;right:12px;z-index:999;width:38px;height:38px;border-radius:50%;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:18px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.15);}
+</style></style>
 </head>
 <body>
 <header>
   <h1>活跃市值 0AMV 监测台 <a href="live.html?v=20261009" style="font-size:13px;color:var(--blue);text-decoration:none;">⚡ 实盘页</a></h1>
   <div class="meta" id="meta">加载中…</div>
   <div class="meta" style="margin-top:4px;">
-    历史回看：从 <input type="date" id="dateStart" style="padding:2px 6px;border:1px solid #d1d5db;border-radius:5px;">
-    到 <input type="date" id="dateEnd" style="padding:2px 6px;border:1px solid #d1d5db;border-radius:5px;">
-    <button onclick="applyRange()" style="padding:2px 10px;border:1px solid #d1d5db;border-radius:5px;background:#fff;cursor:pointer;">只看这段</button>
-    <button onclick="showLatest()" style="padding:2px 10px;border:1px solid #d1d5db;border-radius:5px;background:#fff;cursor:pointer;">回到最新</button>
+    历史回看：从 <input type="date" id="dateStart" style="padding:2px 6px;border:1px solid var(--border);border-radius:5px;">
+    到 <input type="date" id="dateEnd" style="padding:2px 6px;border:1px solid var(--border);border-radius:5px;">
+    <button onclick="applyRange()" style="padding:2px 10px;border:1px solid var(--border);border-radius:5px;background:var(--card);cursor:pointer;">只看这段</button>
+    <button onclick="showLatest()" style="padding:2px 10px;border:1px solid var(--border);border-radius:5px;background:var(--card);cursor:pointer;">回到最新</button>
     <span id="histRange" style="color:var(--muted);"></span>
   </div>
 </header>
@@ -79,7 +86,7 @@
   </div>
   <div class="card full">
     <h2>官方 0AMV 叠加 · 自研活跃市值指标
-      <button id="btnDrop" onclick="toggleDrop()" style="float:right;padding:2px 10px;border:1px solid #d1d5db;border-radius:5px;background:#fff;cursor:pointer;font-size:12px;">−2.3%标记：开</button>
+      <button id="btnDrop" onclick="toggleDrop()" style="float:right;padding:2px 10px;border:1px solid var(--border);border-radius:5px;background:var(--card);cursor:pointer;font-size:12px;">−2.3%标记：开</button>
     </h2>
     <div class="note">实测结论（全市场 5566 只逐股回测，2021-2026）：活跃SZ = 流通市值 × 活跃度，活跃度递推 A_t = 0.9169×A_t-1 + min(换手率/1.1, 1)×(1−A_t-1)（半衰期 10 天），逐股加总与官方 0AMV 相关系数 0.9983、误差 1.8%。图中「活跃SZ(逐股递推·实测)」即此口径全历史序列。</div>
     <div class="chart" id="chartMain"></div>
@@ -110,16 +117,16 @@
   </div>
   <div class="card full">
     <h2>今日选股 · 活跃度拐头（方向A）
-      <button id="btnRefresh" onclick="refreshAll()" style="float:right;padding:3px 14px;border:1px solid #d1d5db;border-radius:5px;background:#fff;cursor:pointer;font-size:13px;">🔄 立即刷新</button>
+      <button id="btnRefresh" onclick="refreshAll()" style="float:right;padding:3px 14px;border:1px solid var(--border);border-radius:5px;background:var(--card);cursor:pointer;font-size:13px;">🔄 立即刷新</button>
     </h2>
     <div class="note" id="pickNote">活跃度 A 上穿自身 10 日均线（昨日在均线下、今日站上），捕捉资金重新激活。按活跃SZ从大到小排列。</div>
     <div style="margin:6px 0;font-size:12px;">
       选股日期：
-      <select id="pickDateSel" onchange="onPickDateChange()" style="padding:2px 8px;border:1px solid #d1d5db;border-radius:5px;"></select>
+      <select id="pickDateSel" onchange="onPickDateChange()" style="padding:2px 8px;border:1px solid var(--border);border-radius:5px;"></select>
       <span style="margin-left:12px;">板块：</span>
-      <select id="pickIndSel" onchange="onPickDateChange()" style="padding:2px 8px;border:1px solid #d1d5db;border-radius:5px;"></select>
+      <select id="pickIndSel" onchange="onPickDateChange()" style="padding:2px 8px;border:1px solid var(--border);border-radius:5px;"></select>
       <span style="margin-left:12px;">排序：</span>
-      <select id="pickSortSel" onchange="onPickDateChange()" style="padding:2px 8px;border:1px solid #d1d5db;border-radius:5px;">
+      <select id="pickSortSel" onchange="onPickDateChange()" style="padding:2px 8px;border:1px solid var(--border);border-radius:5px;">
         <option value="amv">活跃SZ</option>
         <option value="gap">上穿幅度</option>
         <option value="up">连续上升天数</option>
@@ -135,8 +142,8 @@
       <span style="float:right;font-size:12px;color:var(--muted);font-weight:normal;">基于自研递推模型（与官方相关 0.9983）：活跃SZ 相对自身 MA10 偏离 + 250 日分位 + 拐头方向</span>
     </h2>
     <div style="margin:6px 0;font-size:12px;">
-      查个股：<input id="sigSearch" placeholder="代码或名称，如 300308 / 宁德时代" style="padding:4px 10px;border:1px solid #d1d5db;border-radius:5px;width:220px;font-size:13px;">
-      <button onclick="showSignal()" style="padding:3px 12px;border:1px solid #d1d5db;border-radius:5px;background:#fff;cursor:pointer;">查看信号</button>
+      查个股：<input id="sigSearch" placeholder="代码或名称，如 300308 / 宁德时代" style="padding:4px 10px;border:1px solid var(--border);border-radius:5px;width:220px;font-size:13px;">
+      <button onclick="showSignal()" style="padding:3px 12px;border:1px solid var(--border);border-radius:5px;background:var(--card);cursor:pointer;">查看信号</button>
       <span id="sigResult" style="margin-left:10px;font-size:13px;"></span>
     </div>
     <div class="grid" style="margin-top:8px;">
@@ -157,7 +164,7 @@
         <button id="tabInd" class="modeBtn active" onclick="setSecTab('industry')">行业</button>
         <button id="tabConcept" class="modeBtn" onclick="setSecTab('concept')">概念(通达信)</button>
         <button id="tabTdxStyle" class="modeBtn" onclick="setSecTab('tdxstyle')">风格(通达信)</button>
-        <input id="sectorSearch" type="text" placeholder="搜索板块…" oninput="filterSectorBtns()" style="float:right;padding:2px 8px;border:1px solid #d1d5db;border-radius:5px;width:140px;">
+        <input id="sectorSearch" type="text" placeholder="搜索板块…" oninput="filterSectorBtns()" style="float:right;padding:2px 8px;border:1px solid var(--border);border-radius:5px;width:140px;">
         板块活跃SZ = 成分股递推活跃SZ加总。点击按钮或柱子 → 成分个股榜（通达信板块代码 880xxx 可对照通达信软件）。
       </div>
       <div class="sectorBtns" id="sectorBtns" style="max-height:220px;overflow-y:auto;"></div>
@@ -171,7 +178,7 @@
         <button id="btnAmt" class="modeBtn active" onclick="setMode('amt')">活跃SZ贡献</button>
         <button id="btnReg" class="modeBtn" onclick="setMode('reg')">活跃SZ(递推)</button>
         <span style="flex:1;"></span>
-        <button id="backBtn2" onclick="showMarketStocks()" style="display:none;padding:3px 10px;border:1px solid #d1d5db;border-radius:5px;background:#fff;cursor:pointer;">← 返回全市场排名</button>
+        <button id="backBtn2" onclick="showMarketStocks()" style="display:none;padding:3px 10px;border:1px solid var(--border);border-radius:5px;background:var(--card);cursor:pointer;">← 返回全市场排名</button>
       </div>
       <div class="scroll" id="stockTable"></div>
     </div>
@@ -187,5 +194,10 @@
   }
 })();
 </script>
-</body>
+<button id="themeBtn" onclick="toggleTheme()" title="切换主题">🌙</button>
+<script>
+function setTheme(t){document.documentElement.setAttribute("data-theme",t);localStorage.setItem("amv-theme",t);var b=document.getElementById("themeBtn");if(b)b.textContent=t==="dark"?"☀️":"🌙";}
+function toggleTheme(){setTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");}
+(function(){var t=localStorage.getItem("amv-theme");if(!t){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}setTheme(t);})();
+</script></body>
 </html>
