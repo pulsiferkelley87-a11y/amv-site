@@ -475,6 +475,42 @@ def compute_support_watch(stocks_closes, limit=800):
     return out[:limit]
 
 
+def cos_put_support_watch(sw_list, updated_at):
+    """支撑底表上传 COS（腾讯云签名，urllib 实现）。密钥从环境变量读。"""
+    secret_id = os.environ.get("COS_SECRET_ID", "")
+    secret_key = os.environ.get("COS_SECRET_KEY", "")
+    bucket = os.environ.get("COS_BUCKET", "amv-live-1500351250")
+    region = os.environ.get("COS_REGION", "ap-guangzhou")
+    if not secret_id or not secret_key:
+        print("support_watch COS: 无密钥，跳过上传")
+        return
+    import hashlib
+    import hmac
+    import urllib.request
+    path = "/support_watch.json"
+    host = f"{bucket}.cos.{region}.myqcloud.com"
+    start = int(time.time())
+    end = start + 600
+    key_time = f"{start};{end}"
+    sign_key = hmac.new(secret_key.encode(), key_time.encode(), hashlib.sha1).hexdigest()
+    http_string = f"put\n{path}\n\nhost={host}\n"
+    sha_http = hashlib.sha1(http_string.encode()).hexdigest()
+    string_to_sign = f"sha1\n{key_time}\n{sha_http}\n"
+    signature = hmac.new(sign_key.encode(), string_to_sign.encode(), hashlib.sha1).hexdigest()
+    auth = (f"q-sign-algorithm=sha1&q-ak={secret_id}&q-sign-time={key_time}"
+            f"&q-key-time={key_time}&q-header-list=host&q-url-param-list="
+            f"&q-signature={signature}")
+    body = json.dumps({"updated_at": updated_at, "list": sw_list}, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(f"https://{host}{path}", method="PUT", data=body)
+    req.add_header("Host", host)
+    req.add_header("Authorization", auth)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            print(f"support_watch COS 上传: {r.status}")
+    except Exception as e:
+        print("support_watch COS 上传失败:", str(e)[:80])
+
+
 def load_mv_map(spot):
     """流通市值映射：优先本地 stock_list（新浪口径，亿元->元），否则 spot 快照。"""
     mv_map = {}
@@ -1525,6 +1561,8 @@ def main():
         with open(os.path.join(BASE, "support_watch.json"), "w", encoding="utf-8") as f:
             json.dump({"updated_at": result["updated_at"], "list": _sw}, f, ensure_ascii=False)
         print(f"support_watch: {len(_sw)} 只距支撑 <5%")
+        # 直接上传 COS（云函数盘中从 COS 读，摆脱本地 21:15 依赖）
+        cos_put_support_watch(_sw, result["updated_at"])
     except Exception as e:
         print("support_watch err:", str(e)[:100])
 
