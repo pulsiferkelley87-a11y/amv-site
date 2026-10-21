@@ -56,6 +56,11 @@ body{background:var(--bg);color:var(--text);transition:background .2s;}
 .card{background:var(--card);border:1px solid var(--border);}
 table th,table td{border-color:var(--border);}
 #themeBtn{position:fixed;top:10px;right:12px;z-index:999;width:38px;height:38px;border-radius:50%;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:18px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.15);}
+input,select,textarea{background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:4px 8px;font-size:13px;}
+input:focus,select:focus{outline:none;border-color:var(--accent);}
+::-webkit-scrollbar{width:8px;height:8px;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+::-webkit-scrollbar-track{background:transparent;}
 </style></style>
 </head>
 <body>
@@ -187,7 +192,7 @@ table th,table td{border-color:var(--border);}
 // 时间戳动态加载，彻底绕过浏览器缓存；支持 gzip 解压的浏览器走压缩版（快）
 (function () {
   var ts = new Date().getTime();
-  document.write('<script src="app12.js?v=' + ts + '"><\/script>');
+  document.write('<script src="app13.js?v=' + ts + '"><\/script>');
   if (typeof DecompressionStream === "undefined") {
     document.write('<script src="app-data.js?v=' + ts + '"><\/script>');
   }
@@ -195,7 +200,7 @@ table th,table td{border-color:var(--border);}
 </script>
 <button id="themeBtn" onclick="toggleTheme()" title="切换主题">🌙</button>
 <script>
-function setTheme(t){document.documentElement.setAttribute("data-theme",t);localStorage.setItem("amv-theme",t);var b=document.getElementById("themeBtn");if(b)b.textContent=t==="dark"?"☀️":"🌙";}
+function setTheme(t){document.documentElement.setAttribute("data-theme",t);localStorage.setItem("amv-theme",t);var b=document.getElementById("themeBtn");if(b)b.textContent=t==="dark"?"☀️":"🌙";try{if(window.refreshCharts)window.refreshCharts();}catch(e){}try{if(window.renderStocksChart)window.renderStocksChart();}catch(e){}}
 function toggleTheme(){setTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");}
 (function(){var t=localStorage.getItem("amv-theme");if(!t){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}setTheme(t);})();
 </script></body>
