@@ -1,0 +1,22 @@
+# 敏感文件，绝不提交
+.cos_secret.json
+.gh_token
+*.secret*
+*.token*
+
+# 临时/缓存
+__pycache__/
+*.pyc
+.push_stage/
+.tmp_untracked_backup/
+diag_*.py
+test_*.py
+check_*.py
+fix_*.py
+add_theme*.py
+rebuild_*.py
+gen_*.py
+upload_log.txt
+index.py
+index_news.py
+*.zip
