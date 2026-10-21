@@ -1166,7 +1166,6 @@ function loadBullBear() {
 function renderBullBearBox(el, bb) {
   const s = bb.scores;
   const total = bb.total;
-  const tCls = total >= 15 ? "up" : total <= -15 ? "down" : "flat";
   const mods = [
     ["价格趋势", s.trend, "25%"],
     ["市场广度", s.breadth, "20%"],
