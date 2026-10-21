@@ -101,6 +101,68 @@ def em_paginate(fs, fields, fid="f6"):
     return rows
 
 
+def fetch_spot_tx():
+    """腾讯行情源快照（全市场，qt.gtimg 批量查，GBK）。"""
+    codes = []
+    for lst_path in (os.path.join(DATA_DIR, "stock_list.json"),
+                     os.path.join(BASE, "stock_list.json")):
+        if not os.path.exists(lst_path):
+            continue
+        try:
+            with open(lst_path, encoding="utf-8") as f:
+                lst = json.load(f)
+        except (OSError, ValueError):
+            continue
+        for x in lst:
+            c = x.get("code") or ""
+            if c and not c.startswith(("sh", "sz", "bj")):
+                c = ("sh" if c.startswith("6") else
+                     "bj" if c.startswith(("4", "8", "92")) else "sz") + c
+            if c:
+                codes.append(c)
+        break
+    if len(codes) < 3000:
+        return []
+    rows = []
+    hdr = {"User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/"}
+    for i in range(0, len(codes), 60):
+        batch = codes[i:i + 60]
+        try:
+            r = session.get("https://qt.gtimg.cn/q=" + ",".join(batch),
+                            headers=hdr, timeout=15)
+            if r.status_code != 200:
+                continue
+            txt = r.content.decode("gbk", errors="replace")
+        except Exception:
+            continue
+        for line in txt.split(";"):
+            line = line.strip()
+            if "=" not in line:
+                continue
+            pre = line.split("=", 1)[0].strip()
+            code = pre.replace("v_", "")
+            if code.startswith(("sh", "sz", "bj")):
+                code = code[2:]
+            parts = line.split("=", 1)[1].strip('"').split("~")
+            if len(parts) < 46:
+                continue
+            try:
+                rows.append({
+                    "code": code, "name": parts[1],
+                    "price": float(parts[3] or 0),
+                    "pct": float(parts[32] or 0),
+                    "amount": float(parts[37] or 0) * 10000,
+                    "turnover": float(parts[38] or 0),
+                    "float_mv": float(parts[44] or 0) * 1e8,
+                    "volume": None, "total_mv": None, "industry": "—",
+                })
+            except (ValueError, IndexError):
+                continue
+        time.sleep(0.05)
+    _stat("tx", len(rows) >= 3000)
+    return rows
+
+
 def fetch_spot():
     fs = "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048"
     fields = "f12,f14,f2,f3,f5,f6,f8,f20,f21,f100"
@@ -119,7 +181,10 @@ def fetch_spot():
     if len(out) >= 3000:
         _stat("em", True)
         return out
-    _stat("em", False)  # 东财快照不完整，下方走新浪兜底
+    _stat("em", False)  # 东财快照不完整，下方走腾讯/新浪兜底
+    tx = fetch_spot_tx()
+    if len(tx) >= 3000:
+        return tx
     # 东财风控兜底：用新浪股票列表构造快照（成交额/流通市值/换手率齐全）
     ind_map = {}
     for p in (os.path.join(DATA_DIR, "industry_map.json"),
