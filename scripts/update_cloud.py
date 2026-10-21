@@ -1484,9 +1484,12 @@ def main():
     try:
         from bull_bear import compute_bull_bear, compute_bb_history
         # 牛熊重算规则：
+        # 0) spot 残缺（<3000 只）一律跳过——残缺快照算出的情绪/量能会与真实对不上
         # 1) hourly light（TOP_N=300 残缺快照）一律跳过——只有 daily 全量重算。
         # 2) 交易日当天已重算过（现有 json 的 trade_date == 今天）则锁定，不再重算，
         #    避免一天内快照差异导致分数跳变（-40 → -26 的问题）。
+        if len(spot) < 3000:
+            raise RuntimeError(f"skip bull_bear (spot 残缺 {len(spot)} 只)")
         if os.environ.get("TOP_N") == "300":
             raise RuntimeError("skip bull_bear (hourly light 不重算牛熊)")
         _today = time.strftime("%Y-%m-%d", time.localtime())
