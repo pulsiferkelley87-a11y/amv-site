@@ -6,8 +6,9 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <title>实盘监测 · 活跃市值</title>
 <style>
-:root { --bg:var(--soft); --card:#fff; --text:var(--text); --muted:var(--muted);
-        --red:#d64545; --green:#2fa36b; --blue:#3b6fe0; }
+:root{--bg:#f7f8fa;--card:#ffffff;--card2:#fcfcfd;--text:#1a1d24;--muted:#6b7280;--border:#e5e7eb;--accent:#3b6fe0;--soft:#f5f6f8;--soft-red:#fdf3f1;--soft-red2:#fdf6f4;--soft-red-bd:#f0c9c0;--soft-red-bd2:#f0cfc6;--soft-green:#f4faf5;--soft-green-bd:#cfe6d4;}
+[data-theme="dark"]{--bg:#15171c;--card:#1e222a;--card2:#1e222a;--text:#e8ebf2;--muted:#9098a8;--border:#2e3440;--soft:#23272f;--soft-red:#2b2225;--soft-red2:#2a2124;--soft-red-bd:#4a3335;--soft-red-bd2:#4a3438;--soft-green:#22302a;--soft-green-bd:#2f4a3d;}
+
 * { margin:0; padding:0; box-sizing:border-box; }
 body { background:var(--bg); color:var(--text); font-family:"Microsoft YaHei","PingFang SC",sans-serif; }
 header { padding:14px 24px; background:var(--card); border-bottom:1px solid var(--border);
@@ -38,8 +39,8 @@ th { color:var(--muted); font-weight:600; position:sticky; top:0; background:var
 .search { padding:4px 10px; border:1px solid var(--border); border-radius:5px; width:180px; font-size:13px; }
 .flat { color:var(--muted); }
 <style>
-:root{--bg:var(--bg);--card:#ffffff;--card2:var(--card2);--text:var(--text);--muted:var(--muted);--border:var(--border);--accent:#3b6fe0;--soft:var(--soft);--soft-red:var(--soft-red);--soft-red2:var(--soft-red2);--soft-red-bd:var(--soft-red-bd);--soft-red-bd2:var(--soft-red-bd2);--soft-green:var(--soft-green);--soft-green-bd:var(--soft-green-bd);}
-[data-theme="dark"]{--bg:#15171c;--card:#1e222a;--card2:#1e222a;--text:#e8ebf2;--muted:#9098a8;--border:#2e3440;--soft:#23272f;--soft-red:#2b2225;--soft-red2:#2a2124;--soft-red-bd:#4a3335;--soft-red-bd2:#4a3438;--soft-green:#22302a;--soft-green-bd:#2f4a3d;}
+
+
 body{background:var(--bg);color:var(--text);transition:background .2s;}
 .card{background:var(--card);border:1px solid var(--border);}
 table th,table td{border-color:var(--border);}
@@ -622,7 +623,7 @@ function loadKline(code) {
        : "sz" + code);
   const raw6 = raw.slice(2);
   const perBtns = [["day", "日K"], ["week", "周K"], ["month", "月K"]].map(([p, t]) =>
-    `<button onclick="setKlinePeriod('${p}')" style="padding:6px 14px;border:1px solid ${p === KLINE_PERIOD ? '#3b6fe0' : 'var(--border)'};border-radius:5px;background:${p === KLINE_PERIOD ? '#3b6fe0' : '#fff'};color:${p === KLINE_PERIOD ? '#fff' : 'var(--text)'};cursor:pointer;font-size:13px;margin-right:5px;">${t}</button>`).join("");
+    `<button onclick="setKlinePeriod('${p}')" style="padding:6px 14px;border:1px solid ${p === KLINE_PERIOD ? '#3b6fe0' : 'var(--border)'};border-radius:5px;background:${p === KLINE_PERIOD ? '#3b6fe0' : 'var(--card)'};color:${p === KLINE_PERIOD ? 'var(--card)' : 'var(--text)'};cursor:pointer;font-size:13px;margin-right:5px;">${t}</button>`).join("");
   const lvlBtn = `<button onclick="toggleKlineLevels()" style="padding:6px 12px;border:1px solid var(--border);border-radius:5px;background:var(--card);cursor:pointer;font-size:13px;">📏 关键位：${KL_SHOW_LEVELS ? "开" : "关"}</button>`;
   const ctrl = new AbortController();
   abortPrevKline();
