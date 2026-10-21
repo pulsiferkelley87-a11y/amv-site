@@ -90,9 +90,9 @@ table th,table td{border-color:var(--border);}
       <span id="favList"></span>
     </div>
     <div class="tabs">
-      <button class="tab active" onclick="setSigTab('up')">🔼 拐头向上</button>
-      <button class="tab" onclick="setSigTab('down')">🔽 拐头向下</button>
-      <button class="tab" onclick="setSigTab('hot')">🔥 高位偏离</button>
+      <button class="tab active" onclick="setSigTab(\'up\', event)">🔼 拐头向上</button>
+      <button class="tab" onclick="setSigTab(\'down\', event)">🔽 拐头向下</button>
+      <button class="tab" onclick="setSigTab(\'hot\', event)">🔥 高位偏离</button>
     </div>
     <div class="scroll" id="sigList" style="max-height:420px;"></div>
   </div>
@@ -117,10 +117,10 @@ table th,table td{border-color:var(--border);}
     <div class="card">
       <h2>板块实时（通达信口径）<span id="blkDetail" style="font-size:12px;color:var(--muted);float:right;"></span></h2>
       <div class="tabs">
-        <button class="tab active" onclick="setBlkTab('concept')">概念</button>
-        <button class="tab" onclick="setBlkTab('style')">风格</button>
-        <button class="tab" onclick="setBlkTab('up')">领涨</button>
-        <button class="tab" onclick="setBlkTab('down')">领跌</button>
+        <button class="tab active" onclick="setBlkTab(\'concept\', event)">概念</button>
+        <button class="tab" onclick="setBlkTab(\'style\', event)">风格</button>
+        <button class="tab" onclick="setBlkTab(\'up\', event)">领涨</button>
+        <button class="tab" onclick="setBlkTab(\'down\', event)">领跌</button>
         <input class="search" id="blkSearch" placeholder="搜索板块…" oninput="renderBlocks()">
       </div>
       <div class="scroll" id="blkList"></div>
@@ -128,10 +128,10 @@ table th,table td{border-color:var(--border);}
     <div class="card">
       <h2>个股实时 <button class="tab" onclick="backToStkList()" style="float:right;">返回全市场</button></h2>
       <div class="tabs">
-        <button class="tab active" onclick="setStkTab('up')">涨幅榜</button>
-        <button class="tab" onclick="setStkTab('down')">跌幅榜</button>
-        <button class="tab" onclick="setStkTab('amount')">成交额榜</button>
-        <button class="tab" onclick="setStkTab('turnover')">换手榜</button>
+        <button class="tab active" onclick="setStkTab(\'up\', event)">涨幅榜</button>
+        <button class="tab" onclick="setStkTab(\'down\', event)">跌幅榜</button>
+        <button class="tab" onclick="setStkTab(\'amount\', event)">成交额榜</button>
+        <button class="tab" onclick="setStkTab(\'turnover\', event)">换手榜</button>
         <input class="search" id="stkSearch" placeholder="代码/名称…" oninput="renderStocks()">
       </div>
       <div class="scroll" id="stkList"></div>
@@ -291,10 +291,10 @@ function loadSignalsFromPages() {
 
 let SIG_TAB = "up";
 
-function setSigTab(t) {
+function setSigTab(t, ev) {
   SIG_TAB = t;
   document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
-  event.target.classList.add("active");
+  if (ev && ev.target) ev.target.classList.add("active");
   renderSignals();
 }
 
@@ -1459,11 +1459,11 @@ function renderLHBList(el, arr, updatedAt) {
   arr.forEach(x => {
     const net = x.net != null ? x.net : (x.net_amt || 0);
     const p = x.chg != null ? x.chg : (x.pct != null ? x.pct : 0);
-    const reason = x.reason || "";
+    const reason = String(x.reason || "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     html += `<tr style="cursor:pointer;" onclick="showSignal('${x.code}')"><td>${x.code}</td><td>${x.name}</td>
       <td class="${net >= 0 ? "up" : "down"}">${net >= 0 ? "+" : ""}${net.toFixed(2)}</td>
       <td class="${p >= 0 ? "up" : "down"}">${p >= 0 ? "+" : ""}${p}%</td>
-      <td style="font-size:11.5px;color:var(--muted);">${x.reason || ""}</td></tr>`;
+      <td style="font-size:11.5px;color:var(--muted);">${reason}</td></tr>`;
   });
   html += "</tbody></table>";
   el.innerHTML = html;
@@ -1586,7 +1586,7 @@ function renderStocks() {
   document.getElementById("stkList").innerHTML = html;
 }
 
-function setBlkTab(t) {
+function setBlkTab(t, ev) {
   BLK_TAB = t;
   document.querySelectorAll("#blkList").forEach(()=>{});
   const btns = document.querySelectorAll(".card .tabs .tab");
@@ -1594,14 +1594,14 @@ function setBlkTab(t) {
   // 高亮当前 tab（简单处理：全部重画）
   const allTabs = document.querySelectorAll(".tab");
   allTabs.forEach(b => b.classList.remove("active"));
-  event && event.target && event.target.classList.add("active");
+  if (ev && ev.target) ev.target.classList.add("active");
 }
 
-function setStkTab(t) {
+function setStkTab(t, ev) {
   STK_TAB = t;
   const allTabs = document.querySelectorAll(".tab");
   allTabs.forEach(b => b.classList.remove("active"));
-  if (event && event.target) event.target.classList.add("active");
+  if (ev && ev.target) ev.target.classList.add("active");
   renderStocks();
 }
 
