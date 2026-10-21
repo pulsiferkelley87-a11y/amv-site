@@ -116,7 +116,7 @@ def fetch_spot():
             })
         except KeyError:
             continue
-    if len(out) >= 500:
+    if len(out) >= 3000:
         _stat("em", True)
         return out
     _stat("em", False)  # 东财快照不完整，下方走新浪兜底
