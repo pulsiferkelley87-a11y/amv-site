@@ -219,11 +219,11 @@ async function fetchGz(url) {
 function loadData() {
   // 主数据源：腾讯云 COS（每分钟更新）；失败回退 Pages
   fetchGz("https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com/live_data.json.gz")
-    .then(j => renderAll(j))
+    .then(j => { renderAll(j); loadSignalsFromPages(); })
     .catch(() => {
       fetch("live_data.json?v=" + new Date().getTime())
         .then(r => r.json())
-        .then(j => renderAll(j))
+        .then(j => { renderAll(j); loadSignalsFromPages(); })
         .catch(() => {
           document.getElementById("updTime").innerHTML =
             '<span style="color:#c0392b;">数据拉取失败，稍后自动重试</span>';
