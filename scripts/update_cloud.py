@@ -1182,6 +1182,44 @@ def compute_concept_boards(stocks_amv, picks):
     return out
 
 
+def fetch_sectors_fallback(spot):
+    """东财板块接口风控时：用全市场快照 + 行业映射本地聚合行业榜。"""
+    ind_map = {}
+    for p in (os.path.join(DATA_DIR, "industry_map.json"),
+              os.path.join(BASE, "industry_map.json")):
+        if os.path.exists(p):
+            try:
+                with open(p, encoding="utf-8") as f:
+                    ind_map = json.load(f)
+            except (OSError, ValueError):
+                ind_map = {}
+            break
+    agg = {}
+    for s in spot:
+        code = str(s.get("code") or "")
+        ind = ind_map.get(code) or s.get("industry") or "—"
+        if ind == "—":
+            continue
+        a = agg.setdefault(ind, {"amount": 0.0, "pct_sum": 0.0, "pct_n": 0,
+                                "mv": 0.0, "turn_sum": 0.0, "turn_n": 0})
+        a["amount"] += float(s.get("amount") or 0)
+        if s.get("pct") is not None:
+            a["pct_sum"] += float(s["pct"]); a["pct_n"] += 1
+        a["mv"] += float(s.get("float_mv") or 0)
+        if s.get("turnover") is not None:
+            a["turn_sum"] += float(s["turnover"]); a["turn_n"] += 1
+    out = []
+    for name, a in agg.items():
+        out.append({
+            "code": "", "name": name, "amount": a["amount"],
+            "pct": round(a["pct_sum"] / a["pct_n"], 2) if a["pct_n"] else None,
+            "turnover": round(a["turn_sum"] / a["turn_n"], 2) if a["turn_n"] else None,
+            "mv": a["mv"],
+        })
+    out.sort(key=lambda x: -x["amount"])
+    return out[:50]
+
+
 def main():
     # 北京时间（云端 runner 是 UTC，需 +8）
     bj = datetime.utcnow() + timedelta(hours=8)
@@ -1202,6 +1240,9 @@ def main():
         spot = fetch_spot()
     sectors = fetch_sectors()
     styles = fetch_styles()
+    if not sectors and spot:
+        sectors = fetch_sectors_fallback(spot)
+        print(f"sectors 东财风控，行业聚合兜底: {len(sectors)} 个")
     if not spot:
         result["errors"].append("spot fetch failed")
         spot = []
