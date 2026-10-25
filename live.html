@@ -346,9 +346,24 @@ function renderNearSupport() {
   if (!el || !LD) return;
   const arr = LD.near_support || [];
   if (!arr.length) {
-    el.innerHTML = "<span style='color:var(--muted);'>暂无临近支撑位的股票（盘中实时更新）。</span>";
+    // 休市回退最后交易日存档
+    fetch("https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com/near_support_last.json?t=" + new Date().getTime())
+      .then(r => r.json())
+      .then(j => {
+        const items = (j && j.near_support) || [];
+        if (items.length) {
+          renderNearSupportList(el, items, "（休市复盘：" + (j.updated_at || "").slice(0, 10) + " 最后交易日口径）");
+        } else {
+          el.innerHTML = "<span style='color:var(--muted);'>暂无临近支撑位的股票（盘中实时更新）。</span>";
+        }
+      })
+      .catch(() => { el.innerHTML = "<span style='color:var(--muted);'>暂无临近支撑位的股票（盘中实时更新）。</span>"; });
     return;
   }
+  renderNearSupportList(el, arr, "");
+}
+
+function renderNearSupportList(el, arr, note) {
   let html = "";
   arr.forEach(x => {
     const p = x.pct != null ? (x.pct > 0 ? "+" : "") + x.pct.toFixed(2) + "%" : "";
@@ -357,13 +372,28 @@ function renderNearSupport() {
       <span style="font-size:12.5px;">现价 <b>${x.price}</b> ｜ 支撑 <b style="color:#2fa36b;">${x.support}</b> ｜ 距离 <b style="color:#c0392b;">${x.dist}%</b> ｜ ${p}</span>
     </div>`;
   });
+  html += note ? `<div style="font-size:11px;color:var(--muted);">${note}</div>` : "";
   el.innerHTML = html;
 }
 
 function renderFlow() {
   const el = document.getElementById("flowBox");
   if (!el || !LD || !LD.board_flow || !LD.board_flow.length) {
-    if (el) el.innerHTML = "<span style='color:var(--muted);'>盘前/休市暂无资金流数据，开盘后（9:15 起）自动更新。</span>";
+    if (!el) return;
+    // 休市时回退到最后交易日的资金主线存档（复盘用）
+    fetch("https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com/flow_last.json?t=" + new Date().getTime())
+      .then(r => r.json())
+      .then(j => {
+        const arr = (j && j.board_flow) || [];
+        if (arr.length) {
+          LD.board_flow = arr;
+          renderFlow();
+          el.insertAdjacentHTML("beforeend", `<div style="font-size:11px;color:var(--muted);">（休市复盘：${(j.updated_at || "").slice(0, 10)} 最后交易日口径）</div>`);
+        } else {
+          el.innerHTML = "<span style='color:var(--muted);'>盘前/休市暂无资金流数据，开盘后（9:15 起）自动更新。</span>";
+        }
+      })
+      .catch(() => { el.innerHTML = "<span style='color:var(--muted);'>盘前/休市暂无资金流数据，开盘后（9:15 起）自动更新。</span>"; });
     return;
   }
   const arr = LD.board_flow.slice(0, 12);
@@ -1488,6 +1518,28 @@ function renderIndices() {
 function renderBlocks() {
   if (!LD) return;
   const kw = document.getElementById("blkSearch").value;
+  if (!(LD.blocks || []).length) {
+    // 休市回退最后交易日板块存档
+    fetch("https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com/blocks_last.json?t=" + new Date().getTime())
+      .then(r => r.json())
+      .then(j => {
+        const arr = (j && j.blocks) || [];
+        if (arr.length) {
+          LD.blocks = arr;
+          renderBlocks();
+          document.getElementById("blkDetail").textContent =
+            "休市复盘：" + (j.updated_at || "").slice(0, 10) + " 最后交易日";
+        } else {
+          document.getElementById("blkList").innerHTML =
+            "<span style='color:var(--muted);'>盘前/休市暂无板块数据，开盘后自动更新。</span>";
+        }
+      })
+      .catch(() => {
+        document.getElementById("blkList").innerHTML =
+          "<span style='color:var(--muted);'>盘前/休市暂无板块数据，开盘后自动更新。</span>";
+      });
+    return;
+  }
   let list = (LD.blocks || []).filter(b => b.name.includes(kw));
   if (BLK_TAB === "concept") list = list.filter(b => b.type === "概念");
   else if (BLK_TAB === "style") list = list.filter(b => b.type === "风格");
