@@ -793,9 +793,9 @@ def load_official():
         with open(OFF_ZNZ_CSV, encoding="utf-8") as f:
             for r in _csv.DictReader(f):
                 znz_rows[r["date"]] = float(r["close"])
-        dates = sorted(set(amv_rows) & set(znz_rows))
+        dates = sorted(set(amv_rows))  # 以 0AMV 日期为准；znz0 缺失时填 None（0号指数更新滞后不影响主序列）
         return [
-            {"date": d, "amv": amv_rows[d][0], "znz0": znz_rows[d],
+            {"date": d, "amv": amv_rows[d][0], "znz0": znz_rows.get(d),
              "amount": amv_rows[d][1], "volume": amv_rows[d][2]}
             for d in dates
         ]
@@ -813,11 +813,18 @@ def compute_self(official_rows):
             amt[i] = (amt[i - 1] + amt[i + 1]) / 2
     var1 = [v / 1e7 for v in sma(amt, 10)]
     x5, x13, x34 = sma(var1, 3), sma(var1, 5), sma(var1, 8)
-    turn = [amt[i] / (z[i] * 1e8) for i in range(n)]
-    c5 = dma(x5, [min(1.0, turn[i] / 0.02) for i in range(n)])
-    c13 = dma(x13, [min(1.0, turn[i] / 0.1) for i in range(n)])
-    c34 = dma(x34, [min(1.0, turn[i] / 0.18) for i in range(n)])
-    cinf = dma(var1, [min(1.0, turn[i] / 1.1) for i in range(n)])
+    turn = [amt[i] / (z[i] * 1e8) if z[i] else None for i in range(n)]
+    # 缺失 znz0 的行用最近有效值兜底（避免 turn 全 None）
+    _last_t = None
+    for i in range(n):
+        if turn[i] is None:
+            turn[i] = _last_t
+        else:
+            _last_t = turn[i]
+    c5 = dma(x5, [min(1.0, (turn[i] or 0) / 0.02) for i in range(n)])
+    c13 = dma(x13, [min(1.0, (turn[i] or 0) / 0.1) for i in range(n)])
+    c34 = dma(x34, [min(1.0, (turn[i] or 0) / 0.18) for i in range(n)])
+    cinf = dma(var1, [min(1.0, (turn[i] or 0) / 1.1) for i in range(n)])
     st10 = sma(turn, 10)
     return {
         "date": dates, "var1": var1, "c5": c5, "c13": c13, "c34": c34,
@@ -1303,8 +1310,8 @@ def main():
             "amv": [r["amv"] for r in official],
             "znz0": [r["znz0"] for r in official],
             "amount": [r["amount"] for r in official],
-            "dmv": [r["znz0"] - r["amv"] for r in official],
-            "ratio": [r["amv"] / r["znz0"] for r in official],
+            "dmv": [(r["znz0"] - r["amv"]) if r["znz0"] is not None else None for r in official],
+            "ratio": [(r["amv"] / r["znz0"]) if r["znz0"] else None for r in official],
             "ma10": ma10_full,
             "ma80": ma80_full,
         }
@@ -1313,14 +1320,14 @@ def main():
             "date": [r["date"] for r in official],
             "amv": [r["amv"] for r in official],
             "znz0": [r["znz0"] for r in official],
-            "ratio": [r["amv"] / r["znz0"] for r in official],
+            "ratio": [(r["amv"] / r["znz0"]) if r["znz0"] else None for r in official],
         }
         w = official[::5]
         result["official_weekly"] = {
             "date": [r["date"] for r in w],
             "amv": [r["amv"] for r in w],
             "znz0": [r["znz0"] for r in w],
-            "ratio": [r["amv"] / r["znz0"] for r in w],
+            "ratio": [(r["amv"] / r["znz0"]) if r["znz0"] else None for r in w],
         }
         ind = compute_self(official)
         result["self"] = ind
