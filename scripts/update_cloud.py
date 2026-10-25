@@ -1314,6 +1314,23 @@ def main():
             s["score"] = round((a if a else 50) * 0.5 + (b if b else 50) * 0.3 + (c if c else 50) * 0.2, 1)
         result["sectors"] = sorted(sectors, key=lambda x: -(x.get("amount") or 0))
         result["sector_members"] = fetch_sector_members(result["sectors"], top_n=50)
+        if not result["sector_members"]:
+            # 东财板块成员接口风控：用本地行业映射反转聚合
+            _ind_map = {}
+            for p in (os.path.join(DATA_DIR, "industry_map.json"),
+                      os.path.join(BASE, "industry_map.json")):
+                if os.path.exists(p):
+                    try:
+                        with open(p, encoding="utf-8") as f:
+                            _ind_map = json.load(f)
+                    except (OSError, ValueError):
+                        _ind_map = {}
+                    break
+            _rev = {}
+            for c, ind in _ind_map.items():
+                _rev.setdefault(ind, []).append(c)
+            result["sector_members"] = _rev
+            print(f"sector_members 东财风控，行业映射反转: {len(_rev)} 个行业")
     if styles:
         for s in styles:
             s["amount"] = num(s.get("amount"))
