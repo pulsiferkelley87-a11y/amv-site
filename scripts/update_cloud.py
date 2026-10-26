@@ -1699,35 +1699,86 @@ def main():
     except Exception as e:
         print("support_watch err:", str(e)[:100])
 
-    # 快上穿十日线（盘后复盘）：A 在 MA10 下方 3% 内且近 5 日上升
+    # 快上穿十日线（Z哥口径：X>A + gap连续收窄 + 预计穿线≤3日 + A三日递增，纯活跃度A）
     try:
+        _sw_map = {}
+        for _x in (result.get("support_watch") or []):
+            _sw_map[str(_x.get("code") or "")] = _x
         _name_map = {}
         _spot_map = {}
+        _turn_map = {}
+        _mv_map = {}
         for _s in spot:
-            _name_map[str(_s.get("code") or "")] = _s.get("name") or ""
-            _spot_map[str(_s.get("code") or "")] = _s
+            _c = str(_s.get("code") or "")
+            _name_map[_c] = _s.get("name") or ""
+            _spot_map[_c] = _s
+            _turn_map[_c] = _s.get("turnover")
+            _mv_map[_c] = _s.get("float_mv")
         _about = []
         for _code, _vals in sig_history.items():
             if len(_vals) < 15:
                 continue
-            _a = _vals[-1]
-            _ma10 = sum(_vals[-10:]) / 10
-            if _ma10 <= 0 or _a <= 0:
+            _mv = _mv_map.get(_code)
+            if not _mv:
                 continue
-            _gap = (_ma10 - _a) / _ma10 * 100
-            if 0 < _gap <= 3 and _vals[-1] > _vals[-5] and _vals[-1] >= _vals[-3]:
-                _stk = _spot_map.get(_code) or {}
-                _about.append({
-                    "code": _code, "name": _name_map.get(_code, _code),
-                    "price": _stk.get("price"), "pct": _stk.get("pct"),
-                    "a": round(_a, 0), "ma10": round(_ma10, 0),
-                    "gap_pct": round(_gap, 2),
-                })
-        _about.sort(key=lambda x: x["gap_pct"])
+            A = [v / _mv for v in _vals]  # 归一化为纯活跃度 A（剔除流通市值污染）
+            a = A[-1]
+            ma10 = sum(A[-10:]) / 10
+            if ma10 <= 0 or a <= 0:
+                continue
+            gap_pct = (ma10 - a) / ma10 * 100
+            if gap_pct <= 0:  # 已上穿，不属于“快上穿”
+                continue
+            # X > A：当前换手强度高于平滑活跃度（A 继续向上的充要条件）
+            _turn = _turn_map.get(_code)
+            if _turn is None:
+                continue
+            X = min(float(_turn) / 1.1, 1.0)
+            if X <= a:
+                continue
+            # A 三日递增（勾头已现）
+            if not (A[-1] > A[-2] > A[-3]):
+                continue
+            # gap 连续 2 日收窄（要金叉未金叉）
+            ma10_1 = sum(A[-11:-1]) / 10
+            ma10_2 = sum(A[-12:-2]) / 10
+            gap1 = (ma10_1 - A[-2]) / ma10_1
+            gap2 = (ma10_2 - A[-3]) / ma10_2
+            if not (gap1 < gap2):
+                continue
+            # 预计穿线天数 = gap / 今日增速
+            growth = (A[-1] / A[-2] - 1) * 100
+            days = gap_pct / growth if growth > 0 else 999
+            if days > 3:
+                continue
+            # 支撑共振（Z哥：地利）——距有效支撑 <3% 且收盘未破支撑
+            _sw = _sw_map.get(_code)
+            if not _sw:
+                continue
+            _dist = _sw.get("dist")
+            if _dist is None or _dist >= 3:
+                continue
+            if _sw.get("close") and _sw["close"] <= _sw.get("support", 0):
+                continue
+            # 穿越概率 = 收敛速度 × 动力强度
+            converge = (gap2 - gap1) * 100
+            power = min((X - a) / max(a, 0.001), 1.0)
+            score = round(converge * power, 4)
+            _stk = _spot_map.get(_code) or {}
+            _about.append({
+                "code": _code, "name": _name_map.get(_code, _code),
+                "price": _stk.get("price"), "pct": _stk.get("pct"),
+                "a": round(a, 4), "ma10": round(ma10, 4),
+                "gap_pct": round(gap_pct, 2), "days": round(days, 1),
+                "support": _sw.get("support"), "dist": _dist,
+                "score": score,
+            })
+        # 排序：支撑位置优先（距支撑近的先）→ 穿越概率
+        _about.sort(key=lambda x: (x["dist"], -x["score"]))
         result["about_to_cross"] = _about[:60]
         with open(os.path.join(BASE, "about_to_cross.json"), "w", encoding="utf-8") as f:
             json.dump({"updated_at": result["updated_at"], "list": _about[:60]}, f, ensure_ascii=False)
-        print(f"about_to_cross: {len(_about)} 只快上穿")
+        print(f"about_to_cross: {len(_about)} 只快上穿（Z哥口径）")
     except Exception as e:
         print("about_to_cross err:", str(e)[:100])
 
