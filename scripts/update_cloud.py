@@ -1699,6 +1699,38 @@ def main():
     except Exception as e:
         print("support_watch err:", str(e)[:100])
 
+    # 快上穿十日线（盘后复盘）：A 在 MA10 下方 3% 内且近 5 日上升
+    try:
+        _name_map = {}
+        _spot_map = {}
+        for _s in spot:
+            _name_map[str(_s.get("code") or "")] = _s.get("name") or ""
+            _spot_map[str(_s.get("code") or "")] = _s
+        _about = []
+        for _code, _vals in sig_history.items():
+            if len(_vals) < 15:
+                continue
+            _a = _vals[-1]
+            _ma10 = sum(_vals[-10:]) / 10
+            if _ma10 <= 0 or _a <= 0:
+                continue
+            _gap = (_ma10 - _a) / _ma10 * 100
+            if 0 < _gap <= 3 and _vals[-1] > _vals[-5] and _vals[-1] >= _vals[-3]:
+                _stk = _spot_map.get(_code) or {}
+                _about.append({
+                    "code": _code, "name": _name_map.get(_code, _code),
+                    "price": _stk.get("price"), "pct": _stk.get("pct"),
+                    "a": round(_a, 0), "ma10": round(_ma10, 0),
+                    "gap_pct": round(_gap, 2),
+                })
+        _about.sort(key=lambda x: x["gap_pct"])
+        result["about_to_cross"] = _about[:60]
+        with open(os.path.join(BASE, "about_to_cross.json"), "w", encoding="utf-8") as f:
+            json.dump({"updated_at": result["updated_at"], "list": _about[:60]}, f, ensure_ascii=False)
+        print(f"about_to_cross: {len(_about)} 只快上穿")
+    except Exception as e:
+        print("about_to_cross err:", str(e)[:100])
+
     # 数据源健康度（今日各源拉取成功率）
     result["source_health"] = {
         "em": dict(SOURCE_STATS["em"]),
