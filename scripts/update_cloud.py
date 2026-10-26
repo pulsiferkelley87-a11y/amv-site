@@ -1786,6 +1786,64 @@ def main():
         with open(os.path.join(BASE, "about_to_cross_support.json"), "w", encoding="utf-8") as f:
             json.dump({"updated_at": result["updated_at"], "list": _about[:60]}, f, ensure_ascii=False)
         print(f"about_to_cross: 基础 {len(_about_base)} 只 / 支撑共振 {len(_about)} 只（Z哥口径）")
+        # 晋级闭环：存档今日名单 + 判定昨日名单次日是否成功上穿
+        try:
+            _hist_path = os.path.join(BASE, "about_cross_history.json")
+            _hist = {}
+            if os.path.exists(_hist_path):
+                try:
+                    _hist = json.load(open(_hist_path, encoding="utf-8"))
+                except (OSError, ValueError):
+                    _hist = {}
+            _today_s = result["updated_at"][:10]
+            # 存档今日（名单 top60 + 基础数）
+            _hist[_today_s] = {
+                "list": [{"code": x["code"], "name": x["name"]} for x in _about_base[:60]],
+                "count": len(_about_base),
+            }
+            # 只保留最近 60 天
+            _hist = dict(sorted(_hist.items())[-60:])
+            json.dump(_hist, open(_hist_path, "w", encoding="utf-8"), ensure_ascii=False)
+            # 判定昨日名单晋级（今日 A > 今日 MA10）
+            _cur_a = {}
+            _cur_ma = {}
+            for _item in _about_base:
+                _cur_a[_item["code"]] = _item["a"]
+                _cur_ma[_item["code"]] = _item["ma10"]
+            # 昨日的名单在今日“已上穿”判定需要全部股票的今日 A/MA10，不仅快上穿名单——近似：用今日快上穿名单反推不足，这里用 sig_history 重算
+            _today_a_ma = {}
+            for _c2, _v2 in sig_history.items():
+                if len(_v2) < 15:
+                    continue
+                _mv2 = _mv_map.get(_c2)
+                if not _mv2:
+                    continue
+                _A2 = [v / _mv2 for v in _v2]
+                _today_a_ma[_c2] = (_A2[-1], sum(_A2[-10:]) / 10)
+            _prev_day = None
+            for _d in sorted(_hist.keys()):
+                if _d < _today_s:
+                    _prev_day = _d
+            _promo_rows = []
+            if _prev_day:
+                _prev_list = _hist.get(_prev_day, {}).get("list") or []
+                _promoted = []
+                for _p in _prev_list:
+                    _t = _today_a_ma.get(_p["code"])
+                    if _t and _t[0] > _t[1]:
+                        _promoted.append(_p)
+                _promo_rows.append({
+                    "date": _prev_day, "prev": len(_prev_list),
+                    "promoted": len(_promoted),
+                    "rate": round(len(_promoted) / len(_prev_list) * 100, 1) if _prev_list else None,
+                    "list": _promoted[:30],
+                })
+            # 历史成功率：对存档的每天，检查其后一天名单的晋级（近邻近似）
+            result["cross_promotion"] = _promo_rows
+            with open(os.path.join(BASE, "cross_promotion.json"), "w", encoding="utf-8") as f:
+                json.dump({"updated_at": result["updated_at"], "rows": _promo_rows}, f, ensure_ascii=False)
+        except Exception as e:
+            print("cross_promotion err:", str(e)[:100])
     except Exception as e:
         print("about_to_cross err:", str(e)[:100])
 
