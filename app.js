@@ -1132,6 +1132,7 @@ function renderAll() {
   renderSummary();
   renderSources();
   renderBullBear();
+  renderAboutToCross();
   renderMeta();
   renderMain();
   renderTrio();
@@ -1142,6 +1143,28 @@ function renderAll() {
 }
 
 let BB_DATA = null;
+
+function renderAboutToCross() {
+  const el = document.getElementById("aboutCrossBox");
+  if (!el) return;
+  const list = (D && D.about_to_cross) || [];
+  if (!list.length) {
+    el.innerHTML = "<span style='color:var(--muted);'>今日暂无快上穿候选（活跃SZ 接近 MA10 的股票）。</span>";
+    return;
+  }
+  let html = `<table><thead><tr><th>代码</th><th>名称</th><th>现价</th><th>涨跌</th><th>活跃SZ(亿)</th><th>MA10(亿)</th><th>距上穿</th></tr></thead><tbody>`;
+  list.forEach(x => {
+    const p = x.pct != null ? (x.pct > 0 ? "+" : "") + Number(x.pct).toFixed(2) + "%" : "—";
+    const price = x.price != null ? Number(x.price).toFixed(2) : "—";
+    const cls = x.pct != null && x.pct >= 0 ? "up" : "down";
+    html += `<tr><td>${x.code}</td><td>${x.name}</td><td>${price}</td>
+      <td class="${cls}">${p}</td>
+      <td>${(x.a / 1e8).toFixed(1)}</td><td>${(x.ma10 / 1e8).toFixed(1)}</td>
+      <td style="color:#c0392b;"><b>${x.gap_pct}%</b></td></tr>`;
+  });
+  html += "</tbody></table>";
+  el.innerHTML = html;
+}
 
 function renderBullBear() {
   const el = document.getElementById("bullBearBox");
