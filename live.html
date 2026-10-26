@@ -395,12 +395,15 @@ function renderCrossPromotion() {
         el.innerHTML = "<span style='color:var(--muted);'>暂无晋级统计（从明天开始累积：今天名单 → 明天验证上穿）。</span>";
         return;
       }
-      let html = "<div style='max-height:260px;overflow-y:auto;'>";
+      let html = "<div style='max-height:300px;overflow-y:auto;'>";
       rows.forEach(r => {
         const rate = r.rate != null ? r.rate + "%" : "—";
+        const spRate = r.sp_rate != null ? r.sp_rate + "%" : "—";
         html += `<div style="padding:6px 0;border-bottom:1px dashed var(--border);">
-          <b>${r.date}</b> 名单 ${r.prev} 只 → 次日晋级 <b style="color:#c0392b;">${r.promoted} 只</b>（成功率 <b style="color:#c0392b;">${rate}</b>）
-          <div style="font-size:12px;color:var(--muted);margin-top:3px;">晋级：${(r.list || []).map(x => x.name).join("、") || "无"}</div>
+          <b>${r.date}</b> 基础名单 ${r.prev} 只 → 晋级 <b style="color:#c0392b;">${r.promoted} 只</b>（<b style="color:#c0392b;">${rate}</b>）
+          <div style="font-size:12.5px;margin-top:2px;">🎯 共振名单 ${r.sp_prev} 只 → 晋级 <b style="color:#c0392b;">${r.sp_promoted} 只</b>（<b style="color:#c0392b;">${spRate}</b>）</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:3px;">基础晋级：${(r.list || []).map(x => x.name).join("、") || "无"}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px;">共振晋级：${(r.sp_list || []).map(x => x.name).join("、") || "无"}</div>
         </div>`;
       });
       html += "</div>";
