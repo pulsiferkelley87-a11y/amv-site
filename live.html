@@ -82,8 +82,12 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
     <div id="nearSupportBox" style="font-size:13px;"></div>
   </div>
   <div class="card">
-    <h2>⚡ 快上穿十日线 <span style="font-size:12px;color:var(--muted);font-weight:normal;">活跃SZ 接近 MA10（盘后复盘，点击看个股）</span></h2>
+    <h2>⚡ 快上穿十日线 <span style="font-size:12px;color:var(--muted);font-weight:normal;">活跃度 A 即将上穿 MA10（盘后复盘，点击看个股）</span></h2>
     <div id="aboutCrossBox" style="font-size:13px;"></div>
+  </div>
+  <div class="card">
+    <h2>🎯 快上穿×支撑共振 <span style="font-size:12px;color:var(--muted);font-weight:normal;">即将上穿 + 回踩支撑（Z哥 B1 埋伏点，点击看个股）</span></h2>
+    <div id="aboutCrossSupportBox" style="font-size:13px;"></div>
   </div>
   <div class="card">
     <h2>个股信号（逐股递推·日频）
@@ -262,6 +266,7 @@ function renderAll(j) {
   renderFlow();
   renderNearSupport();
   renderAboutToCross();
+  renderAboutToCrossSupport();
   renderSignals();
   renderLHB();
   renderLeader();
@@ -344,6 +349,34 @@ function renderTemp() {
       </svg>`;
     })
     .catch(() => { el.innerHTML = "<span style='color:var(--muted);'>加载失败。</span>"; });
+}
+
+function renderAboutToCrossSupport() {
+  const el = document.getElementById("aboutCrossSupportBox");
+  if (!el) return;
+  fetch("about_to_cross_support.json?v=" + new Date().getTime())
+    .then(r => r.json())
+    .then(j => {
+      const list = j.list || [];
+      if (!list.length) {
+        el.innerHTML = "<span style='color:var(--muted);'>暂无快上穿×支撑共振候选（收盘后自动更新）。</span>";
+        return;
+      }
+      let html = `<div style="font-size:11px;color:var(--muted);">更新 ${(j.updated_at || "").slice(0, 10)}｜点击看个股</div><table><thead><tr><th>代码</th><th>名称</th><th>现价</th><th>涨跌</th><th>活跃度A</th><th>MA10</th><th>距上穿</th><th>预计</th><th>距支撑</th></tr></thead><tbody>`;
+      list.forEach(x => {
+        const p = x.pct != null ? (x.pct > 0 ? "+" : "") + Number(x.pct).toFixed(2) + "%" : "—";
+        const price = x.price != null ? Number(x.price).toFixed(2) : "—";
+        const cls = x.pct != null && x.pct >= 0 ? "up" : "down";
+        html += `<tr style="cursor:pointer;" onclick="showSignal('${x.code}')"><td>${x.code}</td><td>${x.name}</td><td>${price}</td>
+          <td class="${cls}">${p}</td>
+          <td>${Number(x.a).toFixed(3)}</td><td>${Number(x.ma10).toFixed(3)}</td>
+          <td style="color:#c0392b;"><b>${x.gap_pct}%</b></td><td>${x.days}天</td>
+          <td style="color:#2fa36b;"><b>${x.dist}%</b></td></tr>`;
+      });
+      html += "</tbody></table>";
+      el.innerHTML = html;
+    })
+    .catch(() => { el.innerHTML = "<span style='color:var(--muted);'>共振数据加载失败（收盘后自动更新）。</span>"; });
 }
 
 function renderAboutToCross() {
