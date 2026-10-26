@@ -1715,6 +1715,7 @@ def main():
             _turn_map[_c] = _s.get("turnover")
             _mv_map[_c] = _s.get("float_mv")
         _about = []
+        _about_base = []
         for _code, _vals in sig_history.items():
             if len(_vals) < 15:
                 continue
@@ -1751,34 +1752,40 @@ def main():
             days = gap_pct / growth if growth > 0 else 999
             if days > 3:
                 continue
-            # 支撑共振（Z哥：地利）——距有效支撑 <3% 且收盘未破支撑
-            _sw = _sw_map.get(_code)
-            if not _sw:
-                continue
-            _dist = _sw.get("dist")
-            if _dist is None or _dist >= 3:
-                continue
-            if _sw.get("close") and _sw["close"] <= _sw.get("support", 0):
-                continue
             # 穿越概率 = 收敛速度 × 动力强度
             converge = (gap2 - gap1) * 100
             power = min((X - a) / max(a, 0.001), 1.0)
             score = round(converge * power, 4)
             _stk = _spot_map.get(_code) or {}
-            _about.append({
+            _item = {
                 "code": _code, "name": _name_map.get(_code, _code),
                 "price": _stk.get("price"), "pct": _stk.get("pct"),
                 "a": round(a, 4), "ma10": round(ma10, 4),
                 "gap_pct": round(gap_pct, 2), "days": round(days, 1),
-                "support": _sw.get("support"), "dist": _dist,
                 "score": score,
-            })
-        # 排序：支撑位置优先（距支撑近的先）→ 穿越概率
-        _about.sort(key=lambda x: (x["dist"], -x["score"]))
-        result["about_to_cross"] = _about[:60]
+            }
+            _about_base.append(_item)
+            # 支撑共振版（地利）：距有效支撑 <3% 且收盘未破支撑
+            _sw = _sw_map.get(_code)
+            if _sw:
+                _dist = _sw.get("dist")
+                if _dist is not None and _dist < 3:
+                    if not (_sw.get("close") and _sw["close"] <= _sw.get("support", 0)):
+                        _item2 = dict(_item)
+                        _item2["support"] = _sw.get("support")
+                        _item2["dist"] = _dist
+                        _about.append(_item2)
+        # 基础版：按穿越概率排序
+        _about_base.sort(key=lambda x: (-x["score"], x["gap_pct"]))
+        result["about_to_cross"] = _about_base[:60]
         with open(os.path.join(BASE, "about_to_cross.json"), "w", encoding="utf-8") as f:
+            json.dump({"updated_at": result["updated_at"], "list": _about_base[:60]}, f, ensure_ascii=False)
+        # 共振版：支撑位置优先 → 穿越概率
+        _about.sort(key=lambda x: (x["dist"], -x["score"]))
+        result["about_to_cross_support"] = _about[:60]
+        with open(os.path.join(BASE, "about_to_cross_support.json"), "w", encoding="utf-8") as f:
             json.dump({"updated_at": result["updated_at"], "list": _about[:60]}, f, ensure_ascii=False)
-        print(f"about_to_cross: {len(_about)} 只快上穿（Z哥口径）")
+        print(f"about_to_cross: 基础 {len(_about_base)} 只 / 支撑共振 {len(_about)} 只（Z哥口径）")
     except Exception as e:
         print("about_to_cross err:", str(e)[:100])
 
