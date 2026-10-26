@@ -93,6 +93,10 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
     <div id="aboutCrossSupportBox" style="font-size:13px;"></div>
   </div>
   <div class="card full">
+    <h2>📈 上穿晋级统计 <span style="font-size:12px;color:var(--muted);font-weight:normal;">昨日快上穿名单 → 今日成功上穿复盘</span></h2>
+    <div id="crossPromoBox" style="font-size:13px;"></div>
+  </div>
+  <div class="card full">
     <h2>🐂🐻 A股牛熊识别系统 <span style="font-size:12px;color:var(--muted);font-weight:normal;">六大维度综合评分（-100~+100）：趋势25% + 广度20% + 量能15% + 宏观15% + 估值10% + 情绪15%</span></h2>
     <div id="bullBearBox"></div>
   </div>
@@ -200,7 +204,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
 // 时间戳动态加载，彻底绕过浏览器缓存；支持 gzip 解压的浏览器走压缩版（快）
 (function () {
   var ts = new Date().getTime();
-  document.write('<script src="app18.js?v=' + ts + '"><\/script>');
+  document.write('<script src="app19.js?v=' + ts + '"><\/script>');
   if (typeof DecompressionStream === "undefined") {
     document.write('<script src="app-data.js?v=' + ts + '"><\/script>');
   }
