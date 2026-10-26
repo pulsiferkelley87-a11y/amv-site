@@ -1134,6 +1134,7 @@ function renderAll() {
   renderBullBear();
   renderAboutToCross();
   renderAboutToCrossSupport();
+  renderCrossPromotion();
   renderMeta();
   renderMain();
   renderTrio();
@@ -1187,6 +1188,25 @@ function renderAboutToCrossSupport() {
       <td style="color:#c0392b;"><b>${x.gap_pct}%</b></td><td>${x.days}天</td></tr>`;
   });
   html += "</tbody></table>";
+  el.innerHTML = html;
+}
+
+function renderCrossPromotion() {
+  const el = document.getElementById("crossPromoBox");
+  if (!el) return;
+  const rows = (D && D.cross_promotion) || [];
+  if (!rows.length) {
+    el.innerHTML = "<span style='color:var(--muted);'>暂无晋级统计（从明天开始累积：今天名单 → 明天验证上穿）。</span>";
+    return;
+  }
+  let html = "";
+  rows.forEach(r => {
+    const rate = r.rate != null ? r.rate + "%" : "—";
+    html += `<div style="padding:6px 0;border-bottom:1px dashed var(--border);">
+      <b>${r.date}</b> 名单 ${r.prev} 只 → 次日晋级 <b style="color:#c0392b;">${r.promoted} 只</b>（成功率 <b style="color:#c0392b;">${rate}</b>）
+      <div style="font-size:12px;color:var(--muted);margin-top:3px;">晋级：${(r.list || []).map(x => x.name).join("、") || "无"}</div>
+    </div>`;
+  });
   el.innerHTML = html;
 }
 
