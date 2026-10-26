@@ -90,6 +90,10 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
     <div id="aboutCrossSupportBox" style="font-size:13px;"></div>
   </div>
   <div class="card">
+    <h2>📈 上穿晋级统计 <span style="font-size:12px;color:var(--muted);font-weight:normal;">昨日快上穿名单 → 今日成功上穿复盘</span></h2>
+    <div id="crossPromoBox" style="font-size:13px;"></div>
+  </div>
+  <div class="card">
     <h2>个股信号（逐股递推·日频）
       <span style="font-size:12px;color:var(--muted);font-weight:normal;">查个股：
         <input id="sigSearch" placeholder="代码或名称" style="padding:3px 8px;border:1px solid var(--border);border-radius:5px;width:150px;font-size:12.5px;">
@@ -267,6 +271,7 @@ function renderAll(j) {
   renderNearSupport();
   renderAboutToCross();
   renderAboutToCrossSupport();
+  renderCrossPromotion();
   renderSignals();
   renderLHB();
   renderLeader();
@@ -362,7 +367,7 @@ function renderAboutToCrossSupport() {
         el.innerHTML = "<span style='color:var(--muted);'>暂无快上穿×支撑共振候选（收盘后自动更新）。</span>";
         return;
       }
-      let html = `<div style="font-size:11px;color:var(--muted);">更新 ${(j.updated_at || "").slice(0, 10)}｜点击看个股</div><table><thead><tr><th>代码</th><th>名称</th><th>现价</th><th>涨跌</th><th>活跃度A</th><th>MA10</th><th>距上穿</th><th>预计</th><th>距支撑</th></tr></thead><tbody>`;
+      let html = `<div style="max-height:340px;overflow-y:auto;"><div style="font-size:11px;color:var(--muted);">更新 ${(j.updated_at || "").slice(0, 10)}｜点击看个股</div><table><thead><tr><th>代码</th><th>名称</th><th>现价</th><th>涨跌</th><th>活跃度A</th><th>MA10</th><th>距上穿</th><th>预计</th><th>距支撑</th></tr></thead><tbody>`;
       list.forEach(x => {
         const p = x.pct != null ? (x.pct > 0 ? "+" : "") + Number(x.pct).toFixed(2) + "%" : "—";
         const price = x.price != null ? Number(x.price).toFixed(2) : "—";
@@ -373,10 +378,35 @@ function renderAboutToCrossSupport() {
           <td style="color:#c0392b;"><b>${x.gap_pct}%</b></td><td>${x.days}天</td>
           <td style="color:#2fa36b;"><b>${x.dist}%</b></td></tr>`;
       });
-      html += "</tbody></table>";
+      html += "</tbody></table></div>";
       el.innerHTML = html;
     })
     .catch(() => { el.innerHTML = "<span style='color:var(--muted);'>共振数据加载失败（收盘后自动更新）。</span>"; });
+}
+
+function renderCrossPromotion() {
+  const el = document.getElementById("crossPromoBox");
+  if (!el) return;
+  fetch("cross_promotion.json?v=" + new Date().getTime())
+    .then(r => r.json())
+    .then(j => {
+      const rows = j.rows || [];
+      if (!rows.length) {
+        el.innerHTML = "<span style='color:var(--muted);'>暂无晋级统计（从明天开始累积：今天名单 → 明天验证上穿）。</span>";
+        return;
+      }
+      let html = "<div style='max-height:260px;overflow-y:auto;'>";
+      rows.forEach(r => {
+        const rate = r.rate != null ? r.rate + "%" : "—";
+        html += `<div style="padding:6px 0;border-bottom:1px dashed var(--border);">
+          <b>${r.date}</b> 名单 ${r.prev} 只 → 次日晋级 <b style="color:#c0392b;">${r.promoted} 只</b>（成功率 <b style="color:#c0392b;">${rate}</b>）
+          <div style="font-size:12px;color:var(--muted);margin-top:3px;">晋级：${(r.list || []).map(x => x.name).join("、") || "无"}</div>
+        </div>`;
+      });
+      html += "</div>";
+      el.innerHTML = html;
+    })
+    .catch(() => { el.innerHTML = "<span style='color:var(--muted);'>晋级统计加载失败。</span>"; });
 }
 
 function renderAboutToCross() {
@@ -390,7 +420,7 @@ function renderAboutToCross() {
         el.innerHTML = "<span style='color:var(--muted);'>暂无快上穿候选（收盘后自动更新）。</span>";
         return;
       }
-      let html = `<div style="font-size:11px;color:var(--muted);">更新 ${(j.updated_at || "").slice(0, 10)}｜点击看个股</div><table><thead><tr><th>代码</th><th>名称</th><th>现价</th><th>涨跌</th><th>活跃度A</th><th>MA10</th><th>距上穿</th><th>预计</th></tr></thead><tbody>`;
+      let html = `<div style="max-height:340px;overflow-y:auto;"><div style="font-size:11px;color:var(--muted);">更新 ${(j.updated_at || "").slice(0, 10)}｜点击看个股</div><table><thead><tr><th>代码</th><th>名称</th><th>现价</th><th>涨跌</th><th>活跃度A</th><th>MA10</th><th>距上穿</th><th>预计</th></tr></thead><tbody>`;
       list.forEach(x => {
         const p = x.pct != null ? (x.pct > 0 ? "+" : "") + Number(x.pct).toFixed(2) + "%" : "—";
         const price = x.price != null ? Number(x.price).toFixed(2) : "—";
@@ -400,7 +430,7 @@ function renderAboutToCross() {
           <td>${Number(x.a).toFixed(3)}</td><td>${Number(x.ma10).toFixed(3)}</td>
           <td style="color:#c0392b;"><b>${x.gap_pct}%</b></td><td>${x.days}天</td></tr>`;
       });
-      html += "</tbody></table>";
+      html += "</tbody></table></div>";
       el.innerHTML = html;
     })
     .catch(() => { el.innerHTML = "<span style='color:var(--muted);'>快上穿数据加载失败（收盘后自动更新）。</span>"; });
