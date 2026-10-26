@@ -1800,6 +1800,8 @@ def main():
             _hist[_today_s] = {
                 "list": [{"code": x["code"], "name": x["name"]} for x in _about_base[:60]],
                 "count": len(_about_base),
+                "support_list": [{"code": x["code"], "name": x["name"]} for x in _about[:60]],
+                "support_count": len(_about),
             }
             # 只保留最近 60 天
             _hist = dict(sorted(_hist.items())[-60:])
@@ -1832,11 +1834,21 @@ def main():
                     _t = _today_a_ma.get(_p["code"])
                     if _t and _t[0] > _t[1]:
                         _promoted.append(_p)
+                # 共振版单独统计
+                _sp_list = _hist.get(_prev_day, {}).get("support_list") or []
+                _sp_promoted = []
+                for _p in _sp_list:
+                    _t = _today_a_ma.get(_p["code"])
+                    if _t and _t[0] > _t[1]:
+                        _sp_promoted.append(_p)
                 _promo_rows.append({
                     "date": _prev_day, "prev": len(_prev_list),
                     "promoted": len(_promoted),
                     "rate": round(len(_promoted) / len(_prev_list) * 100, 1) if _prev_list else None,
                     "list": _promoted[:30],
+                    "sp_prev": len(_sp_list), "sp_promoted": len(_sp_promoted),
+                    "sp_rate": round(len(_sp_promoted) / len(_sp_list) * 100, 1) if _sp_list else None,
+                    "sp_list": _sp_promoted[:30],
                 })
             # 历史成功率：对存档的每天，检查其后一天名单的晋级（近邻近似）
             result["cross_promotion"] = _promo_rows
