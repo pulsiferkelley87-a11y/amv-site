@@ -1176,7 +1176,7 @@ function renderAboutToCrossSupport() {
     el.innerHTML = "<span style='color:var(--muted);'>今日暂无快上穿×支撑共振候选。</span>";
     return;
   }
-  let html = `<table><thead><tr><th>代码</th><th>名称</th><th>现价</th><th>涨跌</th><th>活跃度A</th><th>MA10</th><th>距上穿</th><th>预计</th><th>距支撑</th></tr></thead><tbody>`;
+  let html = `<table><thead><tr><th>代码</th><th>名称</th><th>现价</th><th>涨跌</th><th>活跃度A</th><th>MA10</th><th>距上穿</th><th>预计</th></tr></thead><tbody>`;
   list.forEach(x => {
     const p = x.pct != null ? (x.pct > 0 ? "+" : "") + Number(x.pct).toFixed(2) + "%" : "—";
     const price = x.price != null ? Number(x.price).toFixed(2) : "—";
@@ -1184,8 +1184,7 @@ function renderAboutToCrossSupport() {
     html += `<tr><td>${x.code}</td><td>${x.name}</td><td>${price}</td>
       <td class="${cls}">${p}</td>
       <td>${Number(x.a).toFixed(3)}</td><td>${Number(x.ma10).toFixed(3)}</td>
-      <td style="color:#c0392b;"><b>${x.gap_pct}%</b></td><td>${x.days}天</td>
-      <td style="color:#2fa36b;"><b>${x.dist}%</b></td></tr>`;
+      <td style="color:#c0392b;"><b>${x.gap_pct}%</b></td><td>${x.days}天</td></tr>`;
   });
   html += "</tbody></table>";
   el.innerHTML = html;
