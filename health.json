@@ -1,1 +1,1 @@
-{"updated_at": "2026-10-30 09:18:39", "sources": {"em": {"ok": false, "latency_ms": 2018}, "tdx": {"ok": true, "latency_ms": 504}, "tx": {"ok": true, "latency_ms": 1294}}, "cross_check": {"checked": 0, "matched": 0, "mismatches": []}}
+{"updated_at": "2026-10-30 15:18:40", "sources": {"em": {"ok": false, "latency_ms": 1354}, "tdx": {"ok": true, "latency_ms": 640}, "tx": {"ok": true, "latency_ms": 1468}}, "cross_check": {"checked": 0, "matched": 0, "mismatches": []}}
