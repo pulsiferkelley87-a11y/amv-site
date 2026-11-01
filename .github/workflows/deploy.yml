@@ -44,9 +44,54 @@ jobs:
 
       - uses: actions/configure-pages@v5
 
+      # ── 只把真正需要下发的文件放进 _site（不发布 463MB 构建输入）──
+      # 基于 DSH deploy.patch.yml，2026-11-02 hanaagent 复查修正：
+      #  * 去掉 --exclude 'index2.html'（跳转页必须发布，否则旧地址 404）
+      #  * 加 --exclude '_site'（防本地重复跑产物嵌套）
+      #  * 加 *.bak*（覆盖 .bak- 与 .bak2- 备份）、*.md、*.zip、*.bat
+      #  * data/ 整目录排除（kline 188MB + kline_chunks 1.44GB + data.json 9.7MB，
+      #    全部 html/js 无 data/ 路径引用）
+      # 核心保留：app21.js / app.js / app-data.js / app-data.js.gz / d2.js.gz /
+      #           echarts.min.js / live.html / index.html / index2.html
+      - name: Stage site (exclude build inputs)
+        run: |
+          set -e
+          mkdir -p _site
+          rsync -a \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'scripts' \
+            --exclude '__pycache__' \
+            --exclude '.venv' \
+            --exclude '.push_stage' \
+            --exclude '.tmp_untracked_backup' \
+            --exclude '_site' \
+            --exclude 'data/' \
+            --exclude '*.py' \
+            --exclude '*.pyc' \
+            --exclude '*.log' \
+            --exclude '*.bak*' \
+            --exclude '*.md' \
+            --exclude '*.zip' \
+            --exclude '*.bat' \
+            --exclude '.gh_token' \
+            --exclude '.cos_secret.json' \
+            --exclude '*.secret*' \
+            --exclude '*.token*' \
+            --exclude 'app[0-9].js' \
+            --exclude 'app1[0-9].js' \
+            --exclude 'app20.js' \
+            --exclude 'live[0-9]*.html' \
+            --exclude 'diag_*.html' \
+            ./ _site/
+          echo '--- _site 顶层 ---'
+          ls -1 _site
+          echo '--- 体积 ---'
+          du -sh _site
+
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
+          path: '_site'
 
       - name: Deploy to GitHub Pages
         id: deployment
