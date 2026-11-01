@@ -1,0 +1,39 @@
+User-agent: *
+Allow: /
+
+# 历史快照页（live2..live29 / app2..app21）不做索引，
+# 避免搜索引擎收录一堆内容几乎相同的重复页面。
+# 真正要收录的只有首页和 canonical 实盘页。
+Disallow: /live2.html
+Disallow: /live3.html
+Disallow: /live4.html
+Disallow: /live5.html
+Disallow: /live6.html
+Disallow: /live7.html
+Disallow: /live8.html
+Disallow: /live9.html
+Disallow: /live10.html
+Disallow: /live11.html
+Disallow: /live12.html
+Disallow: /live13.html
+Disallow: /live14.html
+Disallow: /live15.html
+Disallow: /live16.html
+Disallow: /live17.html
+Disallow: /live18.html
+Disallow: /live19.html
+Disallow: /live20.html
+Disallow: /live21.html
+Disallow: /live22.html
+Disallow: /live23.html
+Disallow: /live24.html
+Disallow: /live25.html
+Disallow: /live26.html
+Disallow: /live27.html
+Disallow: /live28.html
+Disallow: /live29.html
+
+Disallow: /index2.html
+Disallow: /diag_kline.html
+
+Sitemap: https://pulsiferkelley87-a11y.github.io/amv-site/sitemap.xml
