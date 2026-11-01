@@ -3,10 +3,34 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
+
 <title>活跃市值 0AMV 监测台</title>
-<script src="echarts.min.js"></script>
+
+<!-- ↓ 新增：描述 / 规范化 / 分享卡片 / 图标 / 主题色 -->
+<meta name="description" content="基于自研递推模型（与官方 0AMV 相关系数 0.9983）的 A 股活跃市值监测台：快上穿十日均线、支撑共振、上穿晋级统计，以及 0AMV / 0号指数 / 0DMV 三件套与牛熊六维评分。">
+<meta name="keywords" content="活跃市值,0AMV,0号指数,0DMV,活跃度,牛熊识别,A股,通达信">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<link rel="canonical" href="https://pulsiferkelley87-a11y.github.io/amv-site/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="活跃市值 0AMV 监测台">
+<meta property="og:title" content="活跃市值 0AMV 监测台">
+<meta property="og:description" content="自研递推活跃度模型，与官方 0AMV 相关系数 0.9983；快上穿、支撑共振、上穿晋级、牛熊六维评分。">
+<meta property="og:url" content="https://pulsiferkelley87-a11y.github.io/amv-site/">
+<meta property="og:locale" content="zh_CN">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="活跃市值 0AMV 监测台">
+<meta name="twitter:description" content="自研递推活跃度模型，与官方 0AMV 相关系数 0.9983。">
+
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#15171c" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f7f8fa" media="(prefers-color-scheme: light)">
+<meta name="color-scheme" content="light dark">
+
+<!-- 图表库改为 defer：不再阻塞首屏 -->
+<script defer src="echarts.min.js"></script>
 <style>
 :root{--bg:#f7f8fa;--card:#ffffff;--card2:#fcfcfd;--text:#1a1d24;--muted:#6b7280;--border:#e5e7eb;--accent:#3b6fe0;--red:#d64545;--green:#2fa36b;--blue:#3b6fe0;--amber:#b8860b;--soft:#f5f6f8;--soft-red:#fdf3f1;--soft-red2:#fdf6f4;--soft-red-bd:#f0c9c0;--soft-red-bd2:#f0cfc6;--soft-green:#f4faf5;--soft-green-bd:#cfe6d4;}
 [data-theme="dark"]{--bg:#15171c;--card:#1e222a;--card2:#1e222a;--text:#e8ebf2;--muted:#9098a8;--border:#2e3440;--soft:#23272f;--soft-red:#2b2225;--soft-red2:#2a2124;--soft-red-bd:#4a3335;--soft-red-bd2:#4a3438;--soft-green:#22302a;--soft-green-bd:#2f4a3d;}
@@ -49,6 +73,7 @@
   .tag.green { background: var(--green); } .tag.amber { background: var(--amber); }
   .tag.blue { background: var(--blue); } .tag.gray { background: var(--muted); }
   @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+</style>
 <style>
 
 
@@ -61,9 +86,19 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
 ::-webkit-scrollbar{width:8px;height:8px;}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
 ::-webkit-scrollbar-track{background:transparent;}
-</style></style>
+</style>
+<style>
+.skip-link{position:absolute;left:-9999px;top:0;z-index:9999;padding:8px 14px;background:var(--accent,#3b6fe0);color:#fff;border-radius:0 0 8px 0;font-size:13px;text-decoration:none;}
+.skip-link:focus{left:0;}
+</style>
 </head>
 <body>
+<a class="skip-link" href="#main">跳到主要内容</a>
+<noscript>
+  <div style="padding:12px 16px;background:#fdf3f1;border-bottom:1px solid #f0c9c0;color:#1a1d24;font-size:13px;">
+    本页图表与数据依赖 JavaScript，当前浏览器已禁用它；开启后可正常查看。
+  </div>
+</noscript>
 <header>
   <h1>活跃市值 0AMV 监测台 <a href="live.html?v=20261009" style="font-size:13px;color:var(--blue);text-decoration:none;">⚡ 实盘页</a></h1>
   <div class="meta" id="meta">加载中…</div>
@@ -75,7 +110,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
     <span id="histRange" style="color:var(--muted);"></span>
   </div>
 </header>
-<div class="wrap">
+<div class="wrap" id="main">
   <div class="card full">
     <h2>🔌 数据源状态</h2>
     <div id="srcBox" style="font-size:12.5px;"></div>
@@ -201,19 +236,24 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
   </div>
 </div>
 <script>
-// 时间戳动态加载，彻底绕过浏览器缓存；支持 gzip 解压的浏览器走压缩版（快）
+// 固定构建号加载：发版时改 BUILD_ID 即可，平时命中浏览器缓存。
+// （原实现每次刷新都取当前毫秒时间戳，导致 app21.js 与 app-data.js 每次重下）
 (function () {
-  var ts = new Date().getTime();
-  document.write('<script src="app21.js?v=' + ts + '"><\/script>');
+  var BUILD_ID = "20261101a";
+  // 旧浏览器（无 DecompressionStream）：先把数据落地，再跑主脚本。
+  // 原顺序会让 app21.js 末尾的顶层 load() 在 window.DATA 就绪前执行并提前返回，主图表空白。
   if (typeof DecompressionStream === "undefined") {
-    document.write('<script src="app-data.js?v=' + ts + '"><\/script>');
+    document.write('<script src="app-data.js?v=' + BUILD_ID + '"><\/script>');
   }
+  document.write('<script src="app21.js?v=' + BUILD_ID + '"><\/script>');
 })();
 </script>
-<button id="themeBtn" onclick="toggleTheme()" title="切换主题">🌙</button>
+<button id="themeBtn" onclick="toggleTheme()" title="切换主题" aria-label="切换深浅色主题" aria-pressed="false">🌙</button>
 <script>
 function setTheme(t){document.documentElement.setAttribute("data-theme",t);localStorage.setItem("amv-theme",t);var b=document.getElementById("themeBtn");if(b)b.textContent=t==="dark"?"☀️":"🌙";try{if(window.refreshCharts)window.refreshCharts();}catch(e){}try{if(window.renderStocksChart)window.renderStocksChart();}catch(e){}}
 function toggleTheme(){setTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");}
 (function(){var t=localStorage.getItem("amv-theme");if(!t){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}setTheme(t);})();
-</script></body>
+</script><script src="realtime-quote.js"></script>
+<script src="live-quote-bar.js"></script>
+</body>
 </html>
