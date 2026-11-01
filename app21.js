@@ -57,7 +57,15 @@ async function load() {
     } catch (e) { }
   }
   if (!D) D = window.DATA;
-  if (!D) return;
+  if (!D) {
+    // 现代浏览器 gz 拉取失败时的回退：改用 app-data.js（与 refreshAll 同一套链路）。
+    // d2.js.gz 与 app-data.js.gz 内容一致，故语义等价；失败时不重试，交给 autoRefreshData 兜底。
+    if (!window.__amvLoadFallback) {
+      window.__amvLoadFallback = true;
+      loadDataScript(function () { D = window.DATA; load(); }, function () {});
+    }
+    return;
+  }
   const snaps = D.history_snaps || {};
   const days = Object.keys(snaps).sort();
   if (days.length) {
