@@ -28,6 +28,10 @@ jobs:
         run: python scripts/update_cloud.py
         timeout-minutes: 50
         env:
+          # 全市场刷新：默认 500 会让其余 ~5000 只股票的 K 线长期停在旧日期，
+          # 导致个股活跃度/信号/温度计只覆盖一小撮股票。
+          # tdxhub 实测 77ms/只 + 0.15s 间隔，5576 只约 21 分钟，在 50 分钟预算内。
+          TOP_N: '6000'
           COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
           COS_SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
           COS_BUCKET: amv-live-1500351250
