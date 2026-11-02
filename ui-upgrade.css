@@ -1,0 +1,444 @@
+/* ============================================================
+   ui-upgrade.css —— 活跃市值 0AMV 监测台 · 视觉升级层
+   ------------------------------------------------------------
+   定位：纯附加。只覆盖样式，不改任何 HTML 结构与业务逻辑。
+   用法：<link rel="stylesheet" href="ui-upgrade.css"> 放在 </head> 前。
+   回滚：删掉那一行即可，页面立刻恢复原样。
+
+   设计原则：
+   1. 沿用站点已有的 --bg/--card/--border 等变量，不另起一套色板，
+      保证浅色/深色主题切换继续生效。
+   2. 用 :where() 降低选择器权重，尽量不靠 !important，
+      避免和行内样式硬碰（行内样式的按钮保持原样，只在必要时统一）。
+   3. 数字一律等宽+表格数字（tabular-nums），看盘时不跳动。
+   4. 尊重 prefers-reduced-motion。
+   ============================================================ */
+
+:root {
+  /* 间距与圆角标度 */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px;  --sp-4: 16px;  --sp-5: 24px;  --sp-6: 32px;
+  --r-sm: 6px;  --r-md: 10px;  --r-lg: 14px;  --r-pill: 999px;
+
+  /* 层次阴影（浅色） */
+  --sh-1: 0 1px 2px rgba(16, 24, 40, .04), 0 1px 3px rgba(16, 24, 40, .06);
+  --sh-2: 0 2px 4px rgba(16, 24, 40, .05), 0 8px 24px rgba(16, 24, 40, .07);
+  --sh-hover: 0 4px 10px rgba(16, 24, 40, .08), 0 12px 28px rgba(16, 24, 40, .08);
+
+  /* 字体 */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+               "PingFang SC", "Hiragino Sans GB", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+               "Liberation Mono", monospace;
+
+  /* 更柔和的中性色（浅色） */
+  --bg: #f6f7f9;
+  --card: #ffffff;
+  --card2: #fbfcfd;
+  --border: #e4e7ec;
+  --text: #16181d;
+  --muted: #667085;
+  --soft: #f4f6f8;
+
+  /* 涨跌色：略降饱和，长时间盯盘不刺眼 */
+  --red: #d0453c;
+  --green: #268f63;
+}
+
+[data-theme="dark"] {
+  --bg: #0f1217;
+  --card: #171b22;
+  --card2: #1a1f27;
+  --border: #262c36;
+  --text: #e6eaf2;
+  --muted: #8b95a7;
+  --soft: #1c2129;
+
+  --red: #f07167;
+  --green: #3fbf8a;
+
+  --sh-1: 0 1px 2px rgba(0, 0, 0, .5);
+  --sh-2: 0 2px 6px rgba(0, 0, 0, .45), 0 10px 30px rgba(0, 0, 0, .35);
+  --sh-hover: 0 4px 12px rgba(0, 0, 0, .5), 0 16px 36px rgba(0, 0, 0, .4);
+}
+
+/* ── 基础排版 ───────────────────────────────────────────── */
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.6;
+  letter-spacing: .01em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* 所有数字对齐看盘习惯：等宽、表格数字 */
+table, .meta, .note, code, kbd, samp { font-variant-numeric: tabular-nums; }
+
+::selection { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+
+/* 键盘可达性：只在键盘聚焦时显示焦点环 */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* ── 页头：吸附 + 毛玻璃 ────────────────────────────────── */
+header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--card); /* 回退：不支持 color-mix 时用纯色 */
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+
+header h1 {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+header .meta {
+  margin-top: var(--sp-2);
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.8;
+}
+
+/* ── 布局容器 ───────────────────────────────────────────── */
+.wrap {
+  max-width: 1240px;
+  padding: var(--sp-5) var(--sp-4) 64px;
+}
+
+.grid { gap: var(--sp-4); }
+
+/* ── 卡片：更克制的边框 + 悬停抬起 ──────────────────────── */
+.card {
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  box-shadow: var(--sh-1);
+  margin-bottom: var(--sp-4);
+  transition: box-shadow .18s ease, border-color .18s ease, transform .18s ease;
+}
+
+.card:hover {
+  box-shadow: var(--sh-2);
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--border));
+}
+
+.card h2 {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -.005em;
+  margin-bottom: var(--sp-3);
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.card .note {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted);
+  margin-bottom: var(--sp-3);
+}
+
+/* ── 图表容器 ───────────────────────────────────────────── */
+/* 高度保持与 ECharts 初始化时一致：改高度会让画布不重算，出现标题压字/右侧裁切 */
+.chart { height: 380px; }
+.chart.tall { height: 300px; }
+
+/* ── 表格：斑马纹 + 吸附表头 + 行高亮 ───────────────────── */
+.scroll { max-height: min(60vh, 560px); }
+
+table { font-size: 13px; }
+
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--card); /* 回退 */
+  background: color-mix(in srgb, var(--card) 94%, var(--soft));
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: .02em;
+  padding: var(--sp-2) var(--sp-2);
+}
+
+tbody td {
+  padding: 7px var(--sp-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+tbody tr:nth-child(even) { background: var(--soft); background: color-mix(in srgb, var(--soft) 55%, transparent); }
+tbody tr:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+tbody tr:last-child td { border-bottom: none; }
+
+/* 涨跌：加一点字重，纯颜色之外多一层信息 */
+.up { color: var(--red); font-weight: 600; }
+.down { color: var(--green); font-weight: 600; }
+
+/* ── 标签与按钮 ─────────────────────────────────────────── */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  height: 19px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  margin-right: var(--sp-1);
+}
+
+.modeBtn, .sectorBtn {
+  font-weight: 500;
+  transition: background .15s ease, border-color .15s ease,
+              color .15s ease, transform .1s ease;
+}
+
+.modeBtn:active, .sectorBtn:active { transform: translateY(1px); }
+
+.sectorBtn {
+  border-radius: var(--r-pill);
+  padding: 4px var(--sp-3);
+}
+
+.sectorBtn.active, .modeBtn.active {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 18%, transparent);
+}
+
+/* 行内样式按钮（历史遗留）只统一圆角与过渡，不改配色，避免与内联值打架 */
+button {
+  font-family: inherit;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+button:not([class]) { border-radius: var(--r-sm); }
+
+/* ── 表单控件 ───────────────────────────────────────────── */
+input, select, textarea {
+  font-family: inherit;
+  border-radius: var(--r-sm);
+  padding: 5px var(--sp-2);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+/* ── 主题切换按钮：与页头对齐，去掉突兀的浮层阴影 ────────── */
+#themeBtn {
+  top: var(--sp-4);
+  right: var(--sp-4);
+  width: 34px;
+  height: 34px;
+  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--sh-1);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+
+#themeBtn:hover { transform: rotate(12deg) scale(1.04); box-shadow: var(--sh-2); }
+
+/* ── 快讯条目 ───────────────────────────────────────────── */
+.newsItem { padding: 3px 0; border-bottom: 1px dashed color-mix(in srgb, var(--border) 55%, transparent); }
+.newsItem:last-child { border-bottom: none; }
+
+/* ── 滚动条：更细，深色下不刺眼 ─────────────────────────── */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 34%, transparent);
+  border-radius: var(--r-pill);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--muted) 55%, transparent); background-clip: padding-box; }
+
+/* ── 响应式 ─────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .wrap { padding-left: var(--sp-3); padding-right: var(--sp-3); }
+}
+
+@media (max-width: 900px) {
+  header { padding: var(--sp-3) var(--sp-4); }
+  header h1 { font-size: 17px; }
+  .card { padding: var(--sp-3) var(--sp-4); border-radius: var(--r-md); }
+  .card h2 { font-size: 14px; }
+  table { font-size: 12px; }
+  thead th, tbody td { padding: 6px; }
+}
+
+@media (max-width: 640px) {
+  header h1 { font-size: 16px; }
+  .grid { grid-template-columns: 1fr; }
+  /* 小屏表格：允许横向滚动，不再挤压换行 */
+  .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { min-width: 560px; }
+  #themeBtn { top: var(--sp-2); right: var(--sp-2); width: 30px; height: 30px; }
+}
+
+/* ── 无障碍：尊重减弱动效 ───────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  .card:hover { transform: none; }
+  #themeBtn:hover { transform: none; }
+}
+
+/* ── 打印：去掉阴影与吸附，省墨 ─────────────────────────── */
+@media print {
+  header { position: static; backdrop-filter: none; }
+  .card { box-shadow: none; border-color: #ccc; break-inside: avoid; }
+  #themeBtn, .modeBtn, .sectorBtns { display: none; }
+}
+
+
+/* ============================================================
+   组件层（2026-11-02 追加）：锚点导航 + 仪表盘骨架
+   两页共用；标记不存在时这些规则不会生效。
+   --header-h 由脚本实测页头高度后写入 :root，粘性元素靠它定位。
+   ============================================================ */
+
+/* ── 锚点导航（实盘页用） ───────────────────────────────── */
+.anchornav {
+  position: sticky;
+  top: var(--header-h, 61px);
+  z-index: 45;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: var(--sp-2) 0 var(--sp-3);
+  margin-bottom: var(--sp-2);
+  background: linear-gradient(to bottom, var(--bg) 74%, transparent);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.anchornav::-webkit-scrollbar { display: none; }
+
+.anchornav a {
+  flex: 0 0 auto;
+  padding: 5px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--card);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color .15s ease, border-color .15s ease, background .15s ease;
+}
+.anchornav a:hover { color: var(--text); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.anchornav a.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+/* 锚点跳转后给目标卡片一个短暂高亮，避免"跳过去不知道看哪" */
+.card.flash {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent), var(--sh-2);
+}
+
+/* ── KPI 数字块（首页仪表盘用） ─────────────────────────── */
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+.kpi {
+  position: relative;
+  overflow: hidden;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: var(--sp-3) var(--sp-4);
+  box-shadow: var(--sh-1);
+  transition: box-shadow .18s ease, border-color .18s ease;
+}
+.kpi:hover { box-shadow: var(--sh-hover); border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); }
+.kpi::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--accent); opacity: .85;
+}
+.kpi.up::before { background: var(--red); }
+.kpi.down::before { background: var(--green); }
+.kpi .lbl { font-size: 12px; color: var(--muted); letter-spacing: .02em; }
+.kpi .val {
+  font-size: 26px; font-weight: 700; line-height: 1.25; letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+}
+.kpi .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.kpi .val.up { color: var(--red); }
+.kpi .val.down { color: var(--green); }
+
+/* ── 标签栏（首页仪表盘用） ─────────────────────────────── */
+.tabbar {
+  position: sticky;
+  top: var(--header-h, 61px);
+  z-index: 44;
+  display: flex;
+  gap: var(--sp-1);
+  overflow-x: auto;
+  padding: var(--sp-2) 0 var(--sp-3);
+  margin-bottom: var(--sp-2);
+  background: linear-gradient(to bottom, var(--bg) 74%, transparent);
+  scrollbar-width: none;
+}
+.tabbar::-webkit-scrollbar { display: none; }
+
+.tabbtn {
+  flex: 0 0 auto;
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--muted);
+  border-radius: var(--r-pill);
+  padding: 6px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all .16s ease;
+}
+.tabbtn:hover { color: var(--text); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.tabbtn[aria-selected="true"] {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.tabbtn .cnt { margin-left: 6px; font-size: 11px; opacity: .75; font-variant-numeric: tabular-nums; }
+
+.panel[hidden] { display: none; }
+
+@media (max-width: 1000px) {
+  .kpis { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 640px) {
+  .kpis { grid-template-columns: 1fr; }
+  .kpi .val { font-size: 22px; }
+}
