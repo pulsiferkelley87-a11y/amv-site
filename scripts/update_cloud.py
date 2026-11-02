@@ -1700,16 +1700,53 @@ def main():
                 i = 0
                 while i < len(mk["date"]) and mk["date"][i] <= cutoff:
                     i += 1
-                combined = {
-                    "date": hist["date"] + mk["date"][i:],
-                    "amv": [round(v, 2) for v in hist["amv"]] +
-                           [round(v * s, 2) for v in mk["amv"][i:]],
-                }
+                tail_d = mk["date"][i:]
+                tail_v = mk["amv"][i:]
+                hist_last = hist["amv"][-1] if hist.get("amv") else None
+                if tail_v and hist_last:
+                    # 双端线性校正：接缝处乘 m0（让首点与 hist 末值连续），
+                    # 末点乘 m1=s（对齐官方最新值），中间按时间线性过渡。
+                    # 这样既不会在 9-30 出现跳变，也不会让整段尾部被单点放大。
+                    n = len(tail_v)
+                    m0 = (hist_last / tail_v[0]) if tail_v[0] else s
+                    m1 = s
+                    scaled = []
+                    for k, v in enumerate(tail_v):
+                        w = (k / (n - 1)) if n > 1 else 1.0
+                        scaled.append(round(v * (m0 + (m1 - m0) * w), 2))
+                    combined = {
+                        "date": hist["date"] + tail_d,
+                        "amv": [round(v, 2) for v in hist["amv"]] + scaled,
+                        "seam_scale": round(m0, 6),
+                        "scale": round(m1, 6),
+                    }
+                    print(f"  接缝校正: m0={m0:.6f} -> m1={m1:.6f}  尾部 {n} 天", flush=True)
+                else:
+                    combined = {
+                        "date": hist["date"] + tail_d,
+                        "amv": [round(v, 2) for v in hist["amv"]] +
+                               [round(v * s, 2) for v in tail_v],
+                    }
                 mk = combined
             elif s:
                 mk["amv"] = [round(v * s, 2) for v in mk["amv"]]
                 mk["scale"] = round(s, 6)
             result["amv_perstock"] = mk
+
+            # 滚动重建 amv_hist.json：只保留到"最新日 − TAIL_KEEP 天"，
+            # 尾部这几个交易日留给每天的实时计算。这样接缝永远只有 5 天，
+            # 双端校正的变形极小；也避免 hist 三周不更新导致接缝越拉越远。
+            try:
+                TAIL_KEEP = 5
+                _ds = mk.get("date") or []
+                _vs = mk.get("amv") or []
+                if len(_ds) > TAIL_KEEP + 100:
+                    _keep = len(_ds) - TAIL_KEEP
+                    with open(os.path.join(DATA_DIR, "amv_hist.json"), "w", encoding="utf-8") as f:
+                        json.dump({"date": _ds[:_keep], "amv": _vs[:_keep]}, f, ensure_ascii=False)
+                    print(f"  amv_hist 滚动重建: {_keep} 天（尾部 {TAIL_KEEP} 天留给重算）", flush=True)
+            except Exception as e:
+                print("  amv_hist 重建失败:", str(e)[:80], flush=True)
 
     # 6) 选股：方向 A 活跃度拐头（当日 + 历史 90 天，快照补齐当日）
     snap_map = build_snap_map()
