@@ -1717,8 +1717,8 @@ def main():
                     combined = {
                         "date": hist["date"] + tail_d,
                         "amv": [round(v, 2) for v in hist["amv"]] + scaled,
-                        "seam_scale": round(m0, 6),
-                        "scale": round(m1, 6),
+                        "seam_scale": float("%.4e" % m0),
+                        "scale": float("%.4e" % m1),
                     }
                     print(f"  接缝校正: m0={m0:.6f} -> m1={m1:.6f}  尾部 {n} 天", flush=True)
                 else:
@@ -1730,7 +1730,7 @@ def main():
                 mk = combined
             elif s:
                 mk["amv"] = [round(v * s, 2) for v in mk["amv"]]
-                mk["scale"] = round(s, 6)
+                mk["scale"] = float("%.4e" % s)
             result["amv_perstock"] = mk
 
             # 滚动重建 amv_hist.json：只保留到"最新日 − TAIL_KEEP 天"，
