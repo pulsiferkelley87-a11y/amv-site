@@ -332,26 +332,34 @@ function renderTemp() {
         el.innerHTML = "<span style='color:var(--muted);'>暂无数据。</span>";
         return;
       }
-      const W = 660, H = 170, P = 8;
+      const W = 660, H = 176, P = 10;
       const bw = (W - P * 2) / h.length;
-      const base = H / 2;
-      const half = H / 2 - 12;
+      const PT = 16;                 // 顶部留一条标题带，避免文字压在柱子上
+      const base = PT + (H - PT) / 2;
+      const half = (H - PT) / 2 - 10;
+      const fmtDate = d => String(d).length === 8
+        ? d.slice(0,4) + "-" + d.slice(4,6) + "-" + d.slice(6,8) : String(d);
       let bars = "";
       let maxV = 1;
-      h.forEach(x => { maxV = Math.max(maxV, x.up, x.down); });
+      let minN = Infinity;
+      h.forEach(x => { maxV = Math.max(maxV, x.up || 0, x.down || 0); });
+      h.forEach(x => { const n = (x.up || 0) + (x.down || 0); if (n < minN) minN = n; });
       h.forEach((x, i) => {
         const cx = P + i * bw + bw / 2;
-        const uh = (x.up / maxV) * half;
-        const dh = (x.down / maxV) * half;
+        const uh = ((x.up || 0) / maxV) * half;
+        const dh = ((x.down || 0) / maxV) * half;
         bars += `<rect x="${(cx - bw * 0.35).toFixed(1)}" y="${(base - uh).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${uh.toFixed(1)}" fill="#d64545" opacity="0.8"/>`;
         bars += `<rect x="${(cx - bw * 0.35).toFixed(1)}" y="${base.toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${dh.toFixed(1)}" fill="#2fa36b" opacity="0.8"/>`;
       });
       const first = h[0], last = h[h.length - 1];
+      const sample = minN === Infinity ? 0 : minN;
+      const sampled = sample > 0 && sample < 1500;   // 样本远小于全市场 → 如实标注
       el.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" style="background:var(--card2);border:1px solid var(--border);border-radius:6px;">
+        <line x1="${P}" y1="${PT}" x2="${W - P}" y2="${PT}" stroke="var(--border)" stroke-width="1"/>
         <line x1="${P}" y1="${base}" x2="${W - P}" y2="${base}" stroke="var(--border)" stroke-width="1"/>
         ${bars}
-        <text x="${P}" y="10" font-size="9" fill="var(--muted)">上：上涨家数（红）</text>
-        <text x="${P}" y="${H - 4}" font-size="9" fill="var(--muted)">下：下跌家数（绿）｜ ${first.date} ~ ${last.date}</text>
+        <text x="${P}" y="${PT - 5}" font-size="9" fill="var(--muted)">上：上涨家数（红）　下：下跌家数（绿）${sampled ? "　⚠ 抽样（每日约 " + sample + " 只，非全市场）" : ""}</text>
+        <text x="${P}" y="${H - 3}" font-size="9" fill="var(--muted)">${fmtDate(first.date)} ~ ${fmtDate(last.date)}　最新：涨 ${last.up} / 跌 ${last.down}</text>
       </svg>`;
     })
     .catch(() => { el.innerHTML = "<span style='color:var(--muted);'>加载失败。</span>"; });
