@@ -331,7 +331,7 @@ def fetch_kline_tdx(code, lmt=500):
     if not setcode:
         return None
     try:
-        rows = _tdxhub.kline_daily(code, setcode, want_num=lmt)
+        rows = _norm_rows(_tdxhub.kline_daily(code, setcode, want_num=lmt))  # 20261029 -> 2026-10-29
         _stat("tdx", bool(rows))
         return rows if rows else None
     except Exception:
@@ -442,18 +442,53 @@ def cross_check_spot(stocks, n=12):
     return out
 
 
+def _norm_date(d):
+    """统一日期格式：tdxhub 返回 20261029，东财/新浪返回 2026-10-29。
+    两种格式混进 day_map 会让同一交易日被拆成两个键，导致统计只覆盖一部分股票。"""
+    s = str(d or "")
+    if len(s) == 8 and s.isdigit():
+        return s[:4] + "-" + s[4:6] + "-" + s[6:8]
+    return s
+
+
+def _norm_rows(rows):
+    """把行日期归一化并按日期去重（后出现的覆盖先出现的，保持升序）。"""
+    if not rows:
+        return rows
+    acc = {}
+    for r in rows:
+        d = _norm_date(r.get("date"))
+        if not d:
+            continue
+        if r.get("date") != d:
+            r = dict(r)
+            r["date"] = d
+        acc[d] = r
+    return [acc[k] for k in sorted(acc)]
+
+
 def load_cache(code):
     p = os.path.join(KLINE_DIR, code + ".json")
     if os.path.exists(p):
         try:
             with open(p, encoding="utf-8") as f:
-                return json.load(f)
+                j = json.load(f)
         except (OSError, ValueError):
             return None
+        if isinstance(j, dict) and isinstance(j.get("rows"), list):
+            j["rows"] = _norm_rows(j["rows"])
+        elif isinstance(j, list):
+            j = _norm_rows(j)
+        return j
     # chunks 后备（打包上传的批量数据）
     for ch in _load_chunk_map().values():
         if code in ch:
-            return ch[code]
+            c = ch[code]
+            if isinstance(c, dict) and isinstance(c.get("rows"), list):
+                c["rows"] = _norm_rows(c["rows"])
+            elif isinstance(c, list):
+                c = _norm_rows(c)
+            return c
     return None
 
 
