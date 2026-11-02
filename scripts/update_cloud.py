@@ -467,6 +467,39 @@ def _norm_rows(rows):
     return [acc[k] for k in sorted(acc)]
 
 
+_KLINE_INDEX = None
+
+
+def _index_path():
+    return os.path.join(KLINE_DIR, "_updated_index.json")
+
+
+def _load_kline_index():
+    """每只股票最新更新时间，用于"最久没更新优先"的轮转刷新。"""
+    global _KLINE_INDEX
+    if _KLINE_INDEX is None:
+        try:
+            with open(_index_path(), encoding="utf-8") as f:
+                _KLINE_INDEX = json.load(f) or {}
+        except (OSError, ValueError):
+            _KLINE_INDEX = {}
+    return _KLINE_INDEX
+
+
+def _touch_kline_index(code, ts):
+    idx = _load_kline_index()
+    idx[code] = ts
+
+
+def _save_kline_index():
+    try:
+        idx = _load_kline_index()
+        with open(_index_path(), "w", encoding="utf-8") as f:
+            json.dump(idx, f, ensure_ascii=False, separators=(",", ":"))
+    except OSError:
+        pass
+
+
 def load_cache(code):
     p = os.path.join(KLINE_DIR, code + ".json")
     if os.path.exists(p):
@@ -516,6 +549,7 @@ def save_cache(code, rows):
     os.makedirs(KLINE_DIR, exist_ok=True)
     with open(os.path.join(KLINE_DIR, code + ".json"), "w", encoding="utf-8") as f:
         json.dump({"updated": date.today().isoformat(), "rows": rows}, f, ensure_ascii=False)
+    _touch_kline_index(code, date.today().isoformat())
 
 
 def sma(x, n):
@@ -1442,20 +1476,23 @@ def main():
         except ValueError:
             top_n = 500
         top500 = sorted(spot, key=lambda x: -(x.get("amount") or 0))[:top_n]
+        # 轮转刷新：TOP_BY=stalest 时优先挑"最久没更新"的股票，
+        # 这样每轮只刷 N 只也能在几轮内覆盖全市场（接口对全量刷不友好）。
+        if os.environ.get("TOP_BY", "amount").strip().lower() == "stalest":
+            _idx = _load_kline_index()
+            top500 = sorted(spot, key=lambda x: (_idx.get(x["code"], ""), -(x.get("amount") or 0)))[:top_n]
+            print(f"  TOP_BY=stalest，本轮目标 {len(top500)} 只", flush=True)
         # 涨停股优先拉取（保持连板数据最新）
         limit_stocks = [s for s in spot if s.get("pct") is not None and s["pct"] >= 9.5]
         limit_codes = {s["code"] for s in limit_stocks}
         fetch_list = limit_stocks + [s for s in top500 if s["code"] not in limit_codes]
         fetched = 0
         src_cnt = {}
-        for idx, s in enumerate(fetch_list):
-            if time.time() - t_fetch_start > 2400:
-                print("  fetch time budget reached", flush=True)
-                break
-            # 2026-11-02：tdxhub 提到首位。原顺序 em -> sina（em 风控时整批落空）。
-            # tdxhub 实测 77ms/只、与本地 vipdoc 2392 个交易日零差异，且不受东财风控影响。
-            src = None
+
+        def _fetch_one(s):
+            """单只股票的 K 线：tdxhub -> 东财 -> 新浪。只返回结果，不碰共享状态。"""
             kl = fetch_kline_tdx(s["code"])
+            src = None
             if kl and s.get("amount"):
                 ratio = (kl[-1]["amount"] or 0) / (s.get("amount") or 1)
                 if not (0.1 <= ratio <= 10.0):
@@ -1473,12 +1510,34 @@ def main():
                     kl = fetch_kline_sina(s["code"])
                     if kl:
                         src = "sina"
-            if kl:
-                save_cache(s["code"], kl)
-                fetched += 1
-                src_cnt[src] = src_cnt.get(src, 0) + 1
-            time.sleep(0.15)
+            return s["code"], kl, src
+
+        # 并发拉取：GitHub runner 在境外，到 tdxhub 的单只延迟约 280ms，
+        # 串行 5576 只要 40 分钟以上会撞上 step 超时；8 线程约 5 分钟。
+        # 写盘与计数仍在主线程串行，避免并发写文件。
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        try:
+            workers = int(os.environ.get("FETCH_WORKERS", "8"))
+        except ValueError:
+            workers = 8
+        deadline = t_fetch_start + 2400
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as _pool:
+            _futs = [_pool.submit(_fetch_one, s) for s in fetch_list]
+            for _fut in as_completed(_futs):
+                if time.time() > deadline:
+                    print("  fetch time budget reached", flush=True)
+                    break
+                try:
+                    _code, _kl, _src = _fut.result()
+                except Exception:
+                    continue
+                if _kl:
+                    save_cache(_code, _kl)
+                    fetched += 1
+                    src_cnt[_src] = src_cnt.get(_src, 0) + 1
+        print(f"  kline 并发拉取完成，{workers} 线程", flush=True)
         target_n = min(top_n, len(top500))
+        _save_kline_index()
         print(f"  kline 更新: {fetched}/{target_n}  来源 {src_cnt}", flush=True)
         # 阶段 2：全部 spot 股票用缓存计算递推贡献（chunks 已含全市场，快照补齐当日）
         snap_map = build_snap_map()
