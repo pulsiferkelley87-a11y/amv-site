@@ -1640,6 +1640,16 @@ def main():
                 _downs = sum(1 for x in _day["stocks"] if (x.get("pct") or 0) < 0)
                 if _ups + _downs > 100:
                     _bh[_d] = {"up": _ups, "down": _downs}
+            # 当日用全市场快照口径覆盖：与「市场情绪」显示同一个数，
+            # 否则同页两处会差几百只（K 线推算 vs 快照 pct）。
+            try:
+                if spot and snap_date:
+                    _su = sum(1 for s in spot if (s.get("pct") or 0) > 0)
+                    _sd_ = sum(1 for s in spot if (s.get("pct") or 0) < 0)
+                    if _su + _sd_ > 1000:
+                        _bh[_norm_date(snap_date)] = {"up": _su, "down": _sd_}
+            except Exception:
+                pass
             _bl = [{"date": _d, **v} for _d, v in sorted(_bh.items())][-250:]
             result["breadth_history"] = _bl
             with open(os.path.join(BASE, "breadth_history.json"), "w", encoding="utf-8") as f:
