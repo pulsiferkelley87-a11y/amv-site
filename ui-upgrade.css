@@ -179,6 +179,8 @@ thead th {
   padding: var(--sp-2) var(--sp-2);
 }
 
+.scroll thead th { top: 0; }  /* 滚动容器内部自成上下文，贴容器顶即可 */
+
 tbody td {
   padding: 7px var(--sp-2);
   border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
@@ -292,7 +294,7 @@ input:focus, select:focus, textarea:focus {
   .grid { grid-template-columns: 1fr; }
   /* 小屏表格：允许横向滚动，不再挤压换行 */
   .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  table { min-width: 560px; }
+  .scroll table { min-width: 520px; }
   #themeBtn { top: var(--sp-2); right: var(--sp-2); width: 30px; height: 30px; }
 }
 
