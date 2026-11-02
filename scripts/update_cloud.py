@@ -731,7 +731,7 @@ def compute_market_amv(official_dates, snap_map=None, snap_date=None):
             if fmap is not None:
                 mv_t *= fmap[k["date"]] / f_last
             d = k["date"]
-            if d in date_set:
+            if d:
                 sum_lamv[d] = sum_lamv.get(d, 0.0) + mv_t * A
 
     seen = set()
@@ -753,15 +753,14 @@ def compute_market_amv(official_dates, snap_map=None, snap_date=None):
             seen.add(code)
             process(code, cache)
     out_dates, out_vals = [], []
-    for d in official_dates:
-        if d in sum_lamv:
-            out_dates.append(d)
-            out_vals.append(round(sum_lamv[d], 2))
+    for d in sorted(sum_lamv):          # 所有有数据的交易日都输出，官方缺的日子也补上
+        out_dates.append(d)
+        out_vals.append(round(sum_lamv[d], 2))
     return {"date": out_dates, "amv": out_vals}
 
 
 def compute_stock_amv_reg(rows, float_mv):
-    """递推活跃度模型（报告版参数：D=0.5^(1.15/10)，激活率=换手率/1.1）。
+    """递推活跃度模型（参数：D=0.5^(1.25/10)≈0.9169，激活率=min(换手率小数/1.1,1)）。
     活跃SZ = 流通市值 × 活跃度递推。"""
     n = len(rows)
     amt = [k["amount"] for k in rows]
