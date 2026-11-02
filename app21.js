@@ -1302,7 +1302,7 @@ function loadBBHistory() {
         box.innerHTML = "";
         return;
       }
-      const W = 660, H = 140, PL = 40, PR = 8, PT = 8, PB = 18;
+      const W = 660, H = 156, PL = 40, PR = 16, PT = 24, PB = 18;  // PT 加大：标题带在绘图区之外
       const iw = W - PL - PR, ih = H - PT - PB;
       const x = i => PL + (i / (h.length - 1)) * iw;
       const y = v => PT + (1 - (v + 100) / 200) * ih;
@@ -1311,7 +1311,8 @@ function loadBBHistory() {
       let labels = "";
       h.forEach((p, i) => {
         if (i % 200 === 0 || i === h.length - 1) {
-          labels += `<text x="${x(i).toFixed(1)}" y="${H - 4}" font-size="9" fill="var(--muted)" text-anchor="middle">${p.date.slice(0, 4)}</text>`;
+          const anchor = i === 0 ? "start" : (i === h.length - 1 ? "end" : "middle");
+          labels += `<text x="${x(i).toFixed(1)}" y="${H - 4}" font-size="9" fill="var(--muted)" text-anchor="${anchor}">${p.date.slice(0, 4)}</text>`;
         }
       });
       box.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" style="background:var(--card2);border:1px solid var(--border);border-radius:6px;">
@@ -1322,7 +1323,7 @@ function loadBBHistory() {
         <text x="${PL - 4}" y="${y(35) + 3}" font-size="9" fill="#c0392b" text-anchor="end">+35</text>
         <text x="${PL - 4}" y="${y(-35) + 3}" font-size="9" fill="#2fa36b" text-anchor="end">-35</text>
         ${labels}
-        <text x="${PL}" y="10" font-size="9" fill="var(--muted)">牛熊趋势分数回测（仅趋势模块·官方0AMV vs 均线，约5年）</text>
+        <text x="${PL}" y="14" font-size="9" fill="var(--muted)">牛熊趋势分数回测（仅趋势模块·官方0AMV vs 均线，约5年）</text>
       </svg>`;
     })
     .catch(() => { if (box) box.innerHTML = ""; });
