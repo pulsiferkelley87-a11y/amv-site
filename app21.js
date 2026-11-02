@@ -428,14 +428,20 @@ function renderMain() {
   ];
   // −2.3% 事件标记（可开关，近 500 日窗口内）
   if (SHOW_DROP) {
+    // 标记必须挂在"默认可见"的系列上：官方 0AMV 在首次渲染时被 legendToggleSelect 关掉，
+    // 而 ECharts 不会渲染已取消选中系列的 markPoint，所以钉在原 series[0] 上永远看不见。
+    const selfMap = Object.create(null);
+    (ps.date || []).forEach((d, i) => { selfMap[d] = ps.amv[i]; });
+    const winLo = axis[Math.max(0, axis.length - 520)];   // 只标记当前缩放窗口附近，避免上千个钉
+    const winHi = axis[axis.length - 1];
     const dropPts = (D.drop_events || [])
-      .filter(e => axis[0] <= e.date && e.date <= axis[axis.length - 1])
-      .map(e => ({ coord: [e.date, o.amv[o.date.indexOf(e.date)]], value: e.chg + "%" }));
+      .filter(e => winLo <= e.date && e.date <= winHi && selfMap[e.date] != null)
+      .map(e => ({ coord: [e.date, selfMap[e.date]], value: e.chg + "%" }));
     if (dropPts.length) {
-      opt.series[0].markPoint = {
-        symbol: "pin", symbolSize: 26,
-        label: { show: true, fontSize: 9, formatter: p => p.data.value },
-        itemStyle: { color: "#c0392b" },
+      opt.series[1].markPoint = {
+        symbol: "circle", symbolSize: 5,          // 事件占全部交易日约 20%，用大图钉会糊成一片
+        label: { show: false },
+        itemStyle: { color: "#c0392b", opacity: 0.85 },
         data: dropPts,
       };
     }
