@@ -1792,8 +1792,20 @@ def main():
             if _today_amt > 0:
                 amt_series = list(amt_series)
                 amt_series[-1] = _today_amt
+        # 自研序列：全市场活跃SZ 日度合计（只取样本充足的日子），供趋势维度使用
+        self_series = []
+        try:
+            for _d in sorted(day_map):
+                _day = day_map[_d]
+                _vals = [r.get("amv") for r in _day["stocks"] if r.get("amv")]
+                if len(_vals) >= 1000:
+                    self_series.append((_d, float(sum(_vals))))
+        except Exception:
+            self_series = []
+        print(f"  自研序列: {len(self_series)} 天", flush=True)
         bb = compute_bull_bear(stocks_closes, amt_series,
-                               (up_n, down_n, lu_n, ld_n, max_board))
+                               sentiment_args=(up_n, down_n, lu_n, ld_n, max_board),
+                               self_series=self_series)
         bb["updated_at"] = result["updated_at"]
         # 最新交易日（快照/行情口径，休市日也准确）
         try:
