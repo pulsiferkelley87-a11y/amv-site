@@ -1412,18 +1412,39 @@ def main():
         limit_codes = {s["code"] for s in limit_stocks}
         fetch_list = limit_stocks + [s for s in top500 if s["code"] not in limit_codes]
         fetched = 0
+        src_cnt = {}
         for idx, s in enumerate(fetch_list):
             if time.time() - t_fetch_start > 2400:
                 print("  fetch time budget reached", flush=True)
                 break
-            kl = fetch_kline_em(s["code"])   # 东财优先（真实成交额/换手率）
-            if not kl:
-                kl = fetch_kline_sina(s["code"])  # 新浪兜底
+            # 2026-11-02：tdxhub 提到首位。原顺序 em -> sina（em 风控时整批落空）。
+            # tdxhub 实测 77ms/只、与本地 vipdoc 2392 个交易日零差异，且不受东财风控影响。
+            src = None
+            kl = fetch_kline_tdx(s["code"])
+            if kl and s.get("amount"):
+                ratio = (kl[-1]["amount"] or 0) / (s.get("amount") or 1)
+                if not (0.1 <= ratio <= 10.0):
+                    kl = None          # 量纲异常，丢弃 tdx 结果再往下试
+                elif s.get("float_mv"):
+                    for k in kl:
+                        k["turnover"] = (k["amount"] / s["float_mv"] * 100) if s["float_mv"] else None
+            if kl:
+                src = "tdx"
+            else:
+                kl = fetch_kline_em(s["code"])
+                if kl:
+                    src = "em"
+                else:
+                    kl = fetch_kline_sina(s["code"])
+                    if kl:
+                        src = "sina"
             if kl:
                 save_cache(s["code"], kl)
                 fetched += 1
+                src_cnt[src] = src_cnt.get(src, 0) + 1
             time.sleep(0.15)
-        print(f"  sina kline 更新: {fetched}/{min(500, len(top500))}", flush=True)
+        target_n = min(top_n, len(top500))
+        print(f"  kline 更新: {fetched}/{target_n}  来源 {src_cnt}", flush=True)
         # 阶段 2：全部 spot 股票用缓存计算递推贡献（chunks 已含全市场，快照补齐当日）
         snap_map = build_snap_map()
         snap_date = get_latest_trade_date()
