@@ -31,7 +31,9 @@ jobs:
           # 全市场刷新：默认 500 会让其余 ~5000 只股票的 K 线长期停在旧日期，
           # 导致个股活跃度/信号/温度计只覆盖一小撮股票。
           # tdxhub 实测 77ms/只 + 0.15s 间隔，5576 只约 21 分钟，在 50 分钟预算内。
-          TOP_N: '6000'
+          TOP_N: '1500'          # 每轮 1500 只（约 11 分钟），配合 TOP_BY=stalest 几轮覆盖全市场
+          TOP_BY: 'stalest'      # 优先刷新最久没更新的股票，避免同一批始终不更新
+          FETCH_WORKERS: '8'     # 并发拉取；接口串行约 2.9s/只，8 线程约 0.43s/只
           COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
           COS_SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
           COS_BUCKET: amv-live-1500351250
