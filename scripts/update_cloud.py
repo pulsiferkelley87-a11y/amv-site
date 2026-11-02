@@ -1792,17 +1792,16 @@ def main():
             if _today_amt > 0:
                 amt_series = list(amt_series)
                 amt_series[-1] = _today_amt
-        # 自研序列：全市场活跃SZ 日度合计（只取样本充足的日子），供趋势维度使用
+        # 自研序列：直接取 amv_perstock —— 就是首页图上"活跃SZ(逐股递推·实测)"那条线，
+        # 由 compute_market_amv() 逐股递推后按日加总，含快照修正。趋势维度用它，
+        # 不再依赖外部指数，也不受官方序列滞后影响。
         self_series = []
         try:
-            for _d in sorted(day_map):
-                _day = day_map[_d]
-                _vals = [r.get("amv") for r in _day["stocks"] if r.get("amv")]
-                if len(_vals) >= 1000:
-                    self_series.append((_d, float(sum(_vals))))
+            _mk = result.get("amv_perstock") or {}
+            self_series = [(d, float(v)) for d, v in zip(_mk.get("date") or [], _mk.get("amv") or []) if v]
         except Exception:
             self_series = []
-        print(f"  自研序列: {len(self_series)} 天", flush=True)
+        print(f"  自研序列(amv_perstock): {len(self_series)} 天", flush=True)
         bb = compute_bull_bear(stocks_closes, amt_series,
                                sentiment_args=(up_n, down_n, lu_n, ld_n, max_board),
                                self_series=self_series)
