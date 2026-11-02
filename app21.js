@@ -386,39 +386,50 @@ function renderMain() {
   const ch = echarts.getInstanceByDom(dom) || echarts.init(dom);
   const opt = baseOption();
   opt.legend = { top: 0, data: ["官方 0AMV", "活跃SZ(逐股递推·实测)", "var1(成交额平滑)", "C5", "C13", "C34", "∞"] };
-  // 逐股递推序列对齐官方日期
+  // 日期轴 = 官方日期 ∪ 自研日期。官方序列来自手工维护的 JSON，会滞后数日；
+  // 自研线逐日都有值，若只用官方日期当轴，这根线会被截断在官方最后一天。
   const ps = D.amv_perstock || { date: [], amv: [] };
-  const psMap = {};
-  for (let i = 0; i < ps.date.length; i++) psMap[ps.date[i]] = ps.amv[i];
-  const psAligned = o.date.map(d => (d in psMap ? psMap[d] : null));
-  opt.xAxis = { type: "category", data: o.date };
+  const dateSet = Object.create(null);
+  (o.date || []).forEach(d => { dateSet[d] = 1; });
+  (ps.date || []).forEach(d => { dateSet[d] = 1; });
+  const axis = Object.keys(dateSet).sort();
+  const alignTo = (srcDates, vals) => {
+    const m = Object.create(null);
+    (srcDates || []).forEach((d, i) => { m[d] = (vals && vals[i] !== undefined) ? vals[i] : null; });
+    return axis.map(d => (d in m ? m[d] : null));
+  };
+  const axOff = alignTo(o.date, o.amv);
+  const axSelf = alignTo(ps.date, ps.amv);
+  const axMa10 = alignTo(o.date, o.ma10 || []);
+  const axMa80 = alignTo(o.date, o.ma80 || []);
+  opt.xAxis = { type: "category", data: axis };
   opt.yAxis = { type: "value", scale: true };
   opt.dataZoom = [
     { type: "inside", xAxisIndex: 0 },
     { type: "slider", xAxisIndex: 0, bottom: 5, height: 16 },
   ];
   {
-    const total = o.date.length;
+    const total = axis.length;
     const st = Math.max(0, (1 - 500 / total) * 100);
     opt.dataZoom[0].start = st; opt.dataZoom[0].end = 100;
     opt.dataZoom[1].start = st; opt.dataZoom[1].end = 100;
   }
   opt.series = [
-    line(o.amv, "官方 0AMV", COLORS.official, 2.5),
-    { name: "活跃SZ(逐股递推·实测)", type: "line", data: psAligned, showSymbol: false,
+    line(axOff, "官方 0AMV", COLORS.official, 2.5),
+    { name: "活跃SZ(逐股递推·实测)", type: "line", data: axSelf, showSymbol: false,
       lineStyle: { width: 2.5, color: "#16a085" }, itemStyle: { color: "#16a085" } },
-    line(o.ma10 || [], "MA10", "#e67e22", 1.2),
-    line(o.ma80 || [], "MA80(80天周期)", "#2980b9", 1.2),
-    line(s.var1, "var1(成交额平滑)", COLORS.var1, 1),
-    line(s.c5, "C5", COLORS.c5, 1),
-    line(s.c13, "C13", COLORS.c13, 1),
-    line(s.c34, "C34", COLORS.c34, 1),
-    line(s.cinf, "∞", COLORS.cinf, 1),
+    line(axMa10, "MA10", "#e67e22", 1.2),
+    line(axMa80, "MA80(80天周期)", "#2980b9", 1.2),
+    line(alignTo(o.date, s.var1), "var1(成交额平滑)", COLORS.var1, 1),
+    line(alignTo(o.date, s.c5), "C5", COLORS.c5, 1),
+    line(alignTo(o.date, s.c13), "C13", COLORS.c13, 1),
+    line(alignTo(o.date, s.c34), "C34", COLORS.c34, 1),
+    line(alignTo(o.date, s.cinf), "∞", COLORS.cinf, 1),
   ];
   // −2.3% 事件标记（可开关，近 500 日窗口内）
   if (SHOW_DROP) {
     const dropPts = (D.drop_events || [])
-      .filter(e => o.date[0] <= e.date && e.date <= o.date[o.date.length - 1])
+      .filter(e => axis[0] <= e.date && e.date <= axis[axis.length - 1])
       .map(e => ({ coord: [e.date, o.amv[o.date.indexOf(e.date)]], value: e.chg + "%" }));
     if (dropPts.length) {
       opt.series[0].markPoint = {
@@ -452,7 +463,7 @@ function renderTrio() {
     { type: "slider", xAxisIndex: 0, bottom: 5, height: 16 },
   ];
   {
-    const total = o.date.length;
+    const total = axis.length;
     const st = Math.max(0, (1 - 500 / total) * 100);
     opt.dataZoom[0].start = st; opt.dataZoom[0].end = 100;
     opt.dataZoom[1].start = st; opt.dataZoom[1].end = 100;
@@ -479,7 +490,7 @@ function renderRatio() {
     { type: "slider", xAxisIndex: 0, bottom: 5, height: 16 },
   ];
   {
-    const total = o.date.length;
+    const total = axis.length;
     const st = Math.max(0, (1 - 500 / total) * 100);
     opt.dataZoom[0].start = st; opt.dataZoom[0].end = 100;
     opt.dataZoom[1].start = st; opt.dataZoom[1].end = 100;
