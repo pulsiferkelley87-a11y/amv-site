@@ -367,20 +367,27 @@ def fetch_kline_tx(code, lmt=500):
 
 
 def fetch_kline(code, spot_amount=None, float_mv=None):
-    """三级兜底：东财 -> tdxhub（精确） -> 腾讯（近似）。带量纲校验 + 换手率近似。"""
+    """三级兜底：tdxhub（精确） -> 东财 -> 腾讯（近似）。带量纲校验 + 换手率近似。
+
+    2026-11-02 调整优先级：原顺序为 东财 -> tdxhub -> 腾讯，但 app-data 的 source_health
+    显示东财失败率约 86%（em ok=74 / fail=458），而 tdxhub 实测 11ms/只、全市场约 1 分钟、
+    与本地 vipdoc 交叉验证 2392 个交易日零差异，故把 tdxhub 提到首位。
+    TDX 不可用（导入失败）时自动退回原顺序。
+    """
+    if TDX_AVAILABLE:
+        kl = fetch_kline_tdx(code)
+        if kl and spot_amount:
+            ratio = (kl[-1]["amount"] or 0) / (spot_amount or 1)
+            if 0.1 <= ratio <= 10.0:
+                if float_mv:
+                    for k in kl:
+                        k["turnover"] = (k["amount"] / float_mv * 100) if float_mv else None
+                return kl, "tdx"
+        elif kl:
+            return kl, "tdx"
     kl = fetch_kline_em(code)
     if kl:
         return kl, "em"
-    kl = fetch_kline_tdx(code)
-    if kl and spot_amount:
-        ratio = (kl[-1]["amount"] or 0) / (spot_amount or 1)
-        if not (0.1 <= ratio <= 10.0):
-            return None, "tdx_rejected"
-        if float_mv:
-            for k in kl:
-                k["turnover"] = (k["amount"] / float_mv * 100) if float_mv else None
-    if kl:
-        return kl, "tdx"
     kl = fetch_kline_tx(code)
     if kl and spot_amount:
         # 量纲校验放宽（腾讯数据股本变化时量纲漂移，0.1~10 倍均可接受）
