@@ -11,26 +11,43 @@ K线周期编码（PBFXT 实测）:
 setcode: '1'=沪 '0'=深 '2'=北
 """
 import json
+import time
+
 
 import requests
+
+_SESSION = requests.Session()  # 连接复用：全市场数千次请求时省掉重复握手
 
 DEFAULT_ENDPOINT = "http://tdxhub.icfqs.com:7615/TQLEX"
 TIMEOUT = 15
 
 
-def _post(endpoint, body, token=None, timeout=TIMEOUT):
-    """POST JSON 到 TQLEX，返回解析后的 JSON；TQLEX 错误抛异常。"""
+def _post(endpoint, body, token=None, timeout=TIMEOUT, attempts=2):
+    """POST JSON 到 TQLEX；网络错误重试一次，业务错误立即抛。'
+
+    返回解析后的 JSON；非 JSON 响应原样返回文本。
+    """
     headers = {"Content-Type": "application/json"}
     if token:
         headers["token"] = token
-    r = requests.post(endpoint, data=json.dumps(body), headers=headers, timeout=timeout)
-    text = r.text
-    if not r.ok or text.startswith("E|"):
-        raise RuntimeError("tdxhub error (status=%s): %s" % (r.status_code, text[:300]))
-    try:
-        return r.json()
-    except ValueError:
-        return text
+    payload = json.dumps(body)
+    last = None
+    for attempt in range(max(1, attempts)):
+        try:
+            r = _SESSION.post(endpoint, data=payload, headers=headers, timeout=timeout)
+        except requests.RequestException as e:
+            last = e
+            if attempt < attempts - 1:
+                time.sleep(0.5 * (attempt + 1))
+            continue
+        text = r.text
+        if not r.ok or text.startswith("E|"):
+            raise RuntimeError("tdxhub error (status=%s): %s" % (r.status_code, text[:300]))
+        try:
+            return r.json()
+        except ValueError:
+            return text
+    raise RuntimeError("tdxhub request failed after %d attempts: %s" % (attempts, last))
 
 
 def _head(target="0"):
