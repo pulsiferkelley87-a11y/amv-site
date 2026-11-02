@@ -477,7 +477,7 @@ function renderTrio() {
     { type: "slider", xAxisIndex: 0, bottom: 5, height: 16 },
   ];
   {
-    const total = axis.length;
+    const total = o.date.length;
     const st = Math.max(0, (1 - 500 / total) * 100);
     opt.dataZoom[0].start = st; opt.dataZoom[0].end = 100;
     opt.dataZoom[1].start = st; opt.dataZoom[1].end = 100;
@@ -504,7 +504,7 @@ function renderRatio() {
     { type: "slider", xAxisIndex: 0, bottom: 5, height: 16 },
   ];
   {
-    const total = axis.length;
+    const total = o.date.length;
     const st = Math.max(0, (1 - 500 / total) * 100);
     opt.dataZoom[0].start = st; opt.dataZoom[0].end = 100;
     opt.dataZoom[1].start = st; opt.dataZoom[1].end = 100;
