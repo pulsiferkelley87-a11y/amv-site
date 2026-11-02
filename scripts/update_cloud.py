@@ -992,6 +992,26 @@ def get_latest_trade_date():
     return str(d)
 
 
+def get_last_closed_trade_date():
+    """最近一个**已收盘**的交易日（北京时间）。
+
+    与 get_latest_trade_date 的区别：后者用于"要不要把当日快照注入序列"，
+    未收盘时返回 None 是对的；而牛熊的归属日、当天锁定判断需要一个确定的日期——
+    凌晨 00:15 跑批时，最近的已收盘交易日是"昨天"，不是 None。
+    """
+    import datetime
+    now = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
+    d = now.date()
+    if now.hour < 15 or (now.hour == 15 and now.minute < 5):
+        d -= datetime.timedelta(days=1)          # 未收盘 → 归到上一日
+    wd = d.weekday()
+    if wd == 5:
+        d -= datetime.timedelta(days=1)          # 周六 → 周五
+    elif wd == 6:
+        d -= datetime.timedelta(days=2)          # 周日 → 周五
+    return str(d)
+
+
 def build_snap_map():
     """快照补齐映射：code -> {date, close, amount, turnover}（当日全市场）。"""
     snap = {}
@@ -1753,7 +1773,7 @@ def main():
             raise RuntimeError(f"skip bull_bear (spot 残缺 {len(spot)} 只)")
         if os.environ.get("TOP_N") == "300":
             raise RuntimeError("skip bull_bear (hourly light 不重算牛熊)")
-        _today = time.strftime("%Y-%m-%d", time.localtime())
+        _today = get_last_closed_trade_date()   # 与 trade_date 同口径
         try:
             _old = json.load(open(os.path.join(BASE, "bull_bear.json"), encoding="utf-8"))
             if (_old.get("trade_date") or "") == _today and (_old.get("scores") or {}).get("sentiment"):
@@ -1807,7 +1827,7 @@ def main():
         bb["updated_at"] = result["updated_at"]
         # 最新交易日（快照/行情口径，休市日也准确）
         try:
-            bb["trade_date"] = get_latest_trade_date()
+            bb["trade_date"] = get_last_closed_trade_date()
         except Exception:
             pass
         result["bull_bear"] = bb
