@@ -288,6 +288,7 @@
       if (btns[t.key]) btns[t.key].setAttribute("aria-selected", t.key === key ? "true" : "false");
       panels[t.key].hidden = (t.key !== key);
     });
+    if (key !== "sector" && typeof undockStockCard === "function") undockStockCard();  /* 离开板块页 → 表格归位 */
     /* 面板刚显示，容器才有尺寸，此时再让表格/图表重算 */
     requestAnimationFrame(function () { resizeCharts(panels[key]); });
     setTimeout(function () { resizeCharts(panels[key]); }, 320);
@@ -317,28 +318,42 @@
     window.addEventListener("load", function () { setTimeout(hideOthers, 1200); });
   }
 
-  /* ── ⑥ 点板块 → 成分股落在「个股」页，自动切过去并滚到表格 ──────────
-     app21.js 的 showSectorStocks() 会把成分股写进 #stockTable，
-     但那张表在「个股」面板里；用户在「板块」面板点击时会以为没反应。
-     这里监听表格内容变化，只有当前就停在「板块」页时才自动切换，
-     避免页面加载时 Top50 初始渲染把用户强行弹到别的标签。 */
+  /* ── ⑥ 点板块 → 成分股就地展开在「板块」页 ─────────────────────────
+     app21.js 的 showSectorStocks() 把成分股写进 #stockTable，那张卡原本在
+     「个股」页。这里不跳页，而是把整张卡临时挪到「板块」页的图表下方，
+     离开「板块」页时再挪回原位——挪节点而不是克隆，行的点击事件一并保留。 */
   var stockTable = document.getElementById("stockTable");
+  var stockCard = stockTable ? stockTable.closest(".card") : null;
+  var stockHome = null;      /* 记录原位置，用于归位 */
+  var docked = false;
+
+  function dockStockCard() {
+    if (!stockCard || docked) return;
+    if (!stockHome) stockHome = { parent: stockCard.parentNode, next: stockCard.nextSibling };
+    panels.sector.appendChild(stockCard);
+    docked = true;
+  }
+
+  function undockStockCard() {
+    if (!stockCard || !docked || !stockHome) return;
+    if (stockHome.next && stockHome.next.parentNode === stockHome.parent) {
+      stockHome.parent.insertBefore(stockCard, stockHome.next);
+    } else {
+      stockHome.parent.appendChild(stockCard);
+    }
+    docked = false;
+  }
+
+  var pending = null;
   if (stockTable && window.MutationObserver) {
-    var pending = null;
     var mo = new MutationObserver(function () {
       clearTimeout(pending);
       pending = setTimeout(function () {
-        if (current !== "sector") return;                    /* 只响应"在板块页点了" */
+        if (current !== "sector") return;                       /* 只在板块页就地展开 */
         if ((stockTable.textContent || "").trim().length < 20) return;
-        activate("stock", true);
-        var card = stockTable.closest(".card");
-        if (card) {
-          var y = card.getBoundingClientRect().top + window.pageYOffset
-            - (header ? header.getBoundingClientRect().height : 0) - 12;
-          window.scrollTo({ top: Math.max(0, y), behavior: "auto" });
-          card.classList.add("flash");
-          setTimeout(function () { card.classList.remove("flash"); }, 1500);
-        }
+        var title = (document.getElementById("stockTableTitle") || {}).textContent || "";
+        if (title.indexOf("全市场") >= 0) { undockStockCard(); return; }  /* 返回全市场 → 收起 */
+        dockStockCard();
       }, 160);
     });
     mo.observe(stockTable, { childList: true, subtree: true, characterData: true });
@@ -358,10 +373,14 @@
       } catch (e) {}
       setTimeout(function () {
         var tbl = document.getElementById("stockTable");
-        var visible = panels.stock && !panels.stock.hidden;
+        var card = tbl ? tbl.closest(".card") : null;
+        var inSector = !!(card && panels.sector.contains(card));
+        var inStock = !!(card && panels.stock.contains(card));
         document.title = "SELFTEST sector=" + name
           + " rows=" + ((tbl && tbl.textContent || "").trim().length)
-          + " stockPanelVisible=" + visible;
+          + " cardInSector=" + inSector
+          + " cardInStock=" + inStock
+          + " stockPanelHidden=" + (panels.stock ? panels.stock.hidden : "?");
       }, 900);
     }, 4000);
   }
