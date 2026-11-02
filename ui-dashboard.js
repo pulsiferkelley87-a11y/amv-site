@@ -36,7 +36,7 @@
     [/牛熊|盘面总结|数据源状态|快讯/, "mkt"],
     [/板块|资金主线/, "sector"],
     [/官方\s*0AMV\s*叠加|三件套|活跃比例|周线|回测/, "hist"],
-    [/快上穿|支撑共振|晋级|个股信号|今日选股|个股贡献/, "stock"]
+    [/快上穿|支撑共振|晋级|个股信号|今日选股|贡献/, "stock"]   // 贡献 放在板块规则之后，板块贡献仍归板块
   ];
 
   var TABS = [
@@ -137,10 +137,29 @@
   wrap.insertBefore(panels.mkt, anchor);
 
   blocks.forEach(function (el) {
+    /* .grid 是双列容器：子元素同组就整体搬（保留并排），
+       分属不同组才拆开，避免"个股贡献"被"板块"顺带拖走。 */
+    if (el.classList && el.classList.contains("grid")) {
+      var kids = Array.prototype.slice.call(el.children);
+      var gs = {};
+      kids.forEach(function (k) { gs[groupOf(k) || "mkt"] = 1; });
+      var keys = Object.keys(gs);
+      if (keys.length <= 1) {
+        var only = keys[0] || "mkt";
+        if (!panels[only]) only = "mkt";
+        panels[only].appendChild(el);
+        return;
+      }
+      kids.forEach(function (k) {
+        var g2 = groupOf(k) || "mkt";
+        if (!panels[g2]) g2 = "mkt";
+        panels[g2].appendChild(k);
+      });
+      return;
+    }
     var g = groupOf(el) || "mkt";
     if (!panels[g]) g = "mkt";
     panels[g].appendChild(el);
-    counts[g] = (counts[g] || 0) + 1;
   });
 
   /* 面板顺序插到 .mkt 之后，保持标签顺序 */
@@ -150,6 +169,10 @@
     cursor = panels[t.key];
   });
 
+  /* 角标按实际卡片数（h2 个数）统计，避免 .grid 只算 1 个 */
+  TABS.forEach(function (t2) {
+    counts[t2.key] = panels[t2.key].querySelectorAll("h2").length;
+  });
   /* ── ③ 标签栏 ─────────────────────────────────────────── */
   var bar = document.createElement("div");
   bar.className = "tabbar";
@@ -229,6 +252,24 @@
       setTimeout(function () { refreshKpis(); }, ms);
     });
   })();
+  /* ── 诊断分支：仅在 ?diag=1 时生效，正常访问完全不受影响 ── */
+  if (/[?&]diag=1/.test(location.search)) {
+    setTimeout(function () {
+      var vw = document.documentElement.clientWidth;
+      var bad = [];
+      Array.prototype.forEach.call(document.querySelectorAll("body *"), function (el) {
+        var r = el.getBoundingClientRect();
+        if (r.width > vw + 1) {
+          var tag = el.tagName.toLowerCase();
+          var id = el.id ? "#" + el.id : "";
+          var cls = (typeof el.className === "string" && el.className) ? "." + el.className.trim().split(/\s+/)[0] : "";
+          bad.push(tag + id + cls + "=" + Math.round(r.width));
+        }
+      });
+      document.title = "DIAG vw=" + vw + " sw=" + document.documentElement.scrollWidth +
+        " n=" + bad.length + " :: " + bad.slice(0, 10).join(" | ");
+    }, 3500);
+  }
   /* ── ⑤ 切换与图表尺寸 ─────────────────────────────────── */
   function resizeCharts(root) {
     if (typeof echarts === "undefined" || !echarts.getInstanceByDom) return;
@@ -248,10 +289,16 @@
       panels[t.key].hidden = (t.key !== key);
     });
     /* 面板刚显示，容器才有尺寸，此时再让表格/图表重算 */
-    requestAnimationFrame(function () {
-      resizeCharts(panels[key]);
-    });
-    if (pushHash) history.replaceState(null, "", "#" + key);
+    requestAnimationFrame(function () { resizeCharts(panels[key]); });
+    setTimeout(function () { resizeCharts(panels[key]); }, 320);
+    if (pushHash) {
+      history.replaceState(null, "", "#" + key);
+      var barTop = bar.getBoundingClientRect().top + window.pageYOffset
+        - (header ? header.getBoundingClientRect().height : 0);
+      if (window.pageYOffset > barTop + 8) {
+        window.scrollTo({ top: barTop, behavior: "auto" });
+      }
+    }
   }
 
   /* 初始：全部先可见，等图表建好再隐藏，避免 0 尺寸初始化 */
