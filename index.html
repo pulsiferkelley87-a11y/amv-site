@@ -91,6 +91,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
 .skip-link{position:absolute;left:-9999px;top:0;z-index:9999;padding:8px 14px;background:var(--accent,#3b6fe0);color:#fff;border-radius:0 0 8px 0;font-size:13px;text-decoration:none;}
 .skip-link:focus{left:0;}
 </style>
+    <link rel="stylesheet" href="ui-upgrade.css">
 </head>
 <body>
 <a class="skip-link" href="#main">跳到主要内容</a>
@@ -255,5 +256,6 @@ function toggleTheme(){setTheme(document.documentElement.getAttribute("data-them
 (function(){var t=localStorage.getItem("amv-theme");if(!t){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}setTheme(t);})();
 </script><script src="realtime-quote.js"></script>
 <script src="live-quote-bar.js"></script>
+  <script src="ui-dashboard.js"></script>
 </body>
 </html>
