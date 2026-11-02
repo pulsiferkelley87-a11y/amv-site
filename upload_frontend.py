@@ -91,19 +91,35 @@ def upload(rel):
 def main():
     open(LOG, "w", encoding="utf-8").close()
     log("API 上传开始")
-    targets = ["app.js", "index.html", "app-data.js", "app-data.js.gz", "d2.js.gz", "echarts.min.js",
+    targets = ["app.js", "app21.js", "index.html", "index2.html", "app-data.js", "app-data.js.gz", "d2.js.gz", "echarts.min.js",
                "live.html", "live_data.json",
+               "realtime-quote.js", "live-quote-bar.js",
+               "favicon.svg", "manifest.json", "robots.txt", "sitemap.xml", "404.html", ".nojekyll",
+               "PATCH-NOTES.md",
                "scripts/update_cloud.py", "scripts/news_update.py",
                "scripts/live_update.py",
                ".github/workflows/daily.yml", ".github/workflows/news.yml",
                ".github/workflows/light.yml", ".github/workflows/live.yml",
+               ".github/workflows/deploy.yml",
                "dispatch_batch.py",
                "data/amv_hist.json", "stock_list.json", "data/data.json",
                "data/official_0amv.csv", "data/official_znz0.csv",
-               "tdx_pick_a.txt", "industry_map.json", "concept_blocks.json",
-               "live.html", "live_data.json"]
+               "tdx_pick_a.txt", "industry_map.json", "concept_blocks.json"]
+    # CI 生成的文件：由仓库里的 Actions 写入，绝不能用本地旧副本覆盖。
+    # live_data.json 每 15 分钟由 live.yml 刷新；app-data.js / d2.js.gz / stock_list.json
+    # 由 update_cloud.py 生成；concept_blocks.json 由 live_update.py 生成。
+    # 2026-11-02 事故：从旧本地目录跑本脚本，把线上 live_data.json 覆盖成了 10-15 的旧文件，
+    # 实盘页「市场情绪」因此显示 上涨 0 / 下跌 0 / 平盘 5575。
+    CI_MANAGED = {
+        "live_data.json", "app-data.js", "app-data.js.gz", "d2.js.gz",
+        "stock_list.json", "concept_blocks.json", "data/data.json",
+    }
     ok_all = True
+    skipped_ci = []
     for rel in targets:
+        if rel in CI_MANAGED:
+            skipped_ci.append(rel)
+            continue
         if not os.path.exists(os.path.join(BASE, *rel.split("/"))):
             log(f"skip missing: {rel}")
             continue
@@ -113,6 +129,8 @@ def main():
                        f"https://api.github.com/repos/{USER}/{REPO}/actions/workflows/daily.yml/dispatches",
                        {"ref": "main"})
         log(f"workflow dispatch: HTTP {st}")
+    if skipped_ci:
+        log("跳过 CI 管理文件: " + ", ".join(skipped_ci))
         log("全部成功")
         return 0
     log("有失败，未触发 workflow")
