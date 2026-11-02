@@ -19,6 +19,7 @@ let VIEW_RANGE = null;     // null = 最新；否则 [start, end]
 let RANGE_SORT = "amount"; // amount = 区间累计成交额；drag = 拖后腿榜（活跃市值变化升序）
 let SEC_TAB = "industry"; // industry = 行业榜；style = 风格榜
 let SHOW_DROP = true;    // −2.3% 事件标记开关
+let DROP_DIRTY = false;  // 开关刚变动过：本次渲染要用 replaceMerge 才能真正删掉旧 markPoint
 
 function checkDataFreshness() {
   // 数据比昨天旧 → 提示可能是网络缓存了旧数据
@@ -448,7 +449,14 @@ function renderMain() {
   }
   // 官方 0AMV 默认隐藏（不参与比对，点图例可叠加）——仅在首次初始化时执行一次
   opt.series[0].lineStyle.opacity = 0.9;
-  ch.setOption(opt);
+  // 只有开关刚变动时才整体替换 series（能真正移除 markPoint）；
+  // 平时仍用合并模式，保留缩放/图例等交互状态。
+  if (DROP_DIRTY) {
+    ch.setOption(opt, { replaceMerge: ["series"] });
+    DROP_DIRTY = false;
+  } else {
+    ch.setOption(opt);
+  }
   if (!mainLegendInit) {
     ch.dispatchAction({ type: "legendToggleSelect", name: "官方 0AMV" });
     mainLegendInit = true;
@@ -1470,6 +1478,7 @@ function queryCloudStatus(msg) {
 
 function toggleDrop() {
   SHOW_DROP = !SHOW_DROP;
+  DROP_DIRTY = true;   // setOption 默认合并，不整体替换的话旧 markPoint 会一直留着
   const btn = document.getElementById("btnDrop");
   if (btn) btn.textContent = SHOW_DROP ? "−2.3%标记：开" : "−2.3%标记：关";
   renderMain();
@@ -1489,3 +1498,34 @@ window.refreshCharts = renderAll;  // 主题切换后重绘图表（新配色）
 // 自动刷新：数据每 10 分钟、快讯每 5 分钟（静默，无需手动操作）
 setInterval(autoRefreshData, 600000);
 setInterval(autoRefreshNews, 300000);
+
+/* 自检：?selftest=drop 时验证 -2.3% 标记开关是否真的改变图上的 markPoint */
+if (/[?&]selftest=drop/.test(location.search)) {
+  setTimeout(function () {
+    try {
+      var dom = document.getElementById("chartMain");
+      var ch = echarts.getInstanceByDom(dom);
+      var mpOf = function () {
+        var o = ch.getOption();
+        var s1 = (o.series || [])[1] || {};
+        var mp = s1.markPoint;
+        if (!mp) return 0;
+        var arr = Array.isArray(mp) ? mp[0] : mp;
+        return (arr && arr.data) ? arr.data.length : 0;
+      };
+      var before = mpOf();
+      toggleDrop();                    // 关掉
+      setTimeout(function () {
+        var afterOff = mpOf();
+        toggleDrop();                  // 再打开
+        setTimeout(function () {
+          document.title = "SELFTEST drop before=" + before +
+            " afterOff=" + afterOff + " afterOn=" + mpOf() +
+            " showDrop=" + SHOW_DROP;
+        }, 400);
+      }, 400);
+    } catch (e) {
+      document.title = "SELFTEST drop ERROR " + e.message;
+    }
+  }, 5000);
+}
