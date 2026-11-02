@@ -317,7 +317,54 @@
     window.addEventListener("load", function () { setTimeout(hideOthers, 1200); });
   }
 
+  /* ── ⑥ 点板块 → 成分股落在「个股」页，自动切过去并滚到表格 ──────────
+     app21.js 的 showSectorStocks() 会把成分股写进 #stockTable，
+     但那张表在「个股」面板里；用户在「板块」面板点击时会以为没反应。
+     这里监听表格内容变化，只有当前就停在「板块」页时才自动切换，
+     避免页面加载时 Top50 初始渲染把用户强行弹到别的标签。 */
+  var stockTable = document.getElementById("stockTable");
+  if (stockTable && window.MutationObserver) {
+    var pending = null;
+    var mo = new MutationObserver(function () {
+      clearTimeout(pending);
+      pending = setTimeout(function () {
+        if (current !== "sector") return;                    /* 只响应"在板块页点了" */
+        if ((stockTable.textContent || "").trim().length < 20) return;
+        activate("stock", true);
+        var card = stockTable.closest(".card");
+        if (card) {
+          var y = card.getBoundingClientRect().top + window.pageYOffset
+            - (header ? header.getBoundingClientRect().height : 0) - 12;
+          window.scrollTo({ top: Math.max(0, y), behavior: "auto" });
+          card.classList.add("flash");
+          setTimeout(function () { card.classList.remove("flash"); }, 1500);
+        }
+      }, 160);
+    });
+    mo.observe(stockTable, { childList: true, subtree: true, characterData: true });
+  }
   /* 窗口变化时，只有可见面板需要重算 */
+  /* 自检：?selftest=sector 时模拟"点了一个板块"，把状态写进标题便于无头验证 */
+  if (/[?&]selftest=sector/.test(location.search)) {
+    setTimeout(function () {
+      try { activate("sector", false); } catch (e) {}   // 模拟用户正停在板块页
+      var name = null;
+      try {
+        var ch = (typeof echarts !== "undefined" && echarts.getInstanceByDom)
+          ? echarts.getInstanceByDom(document.getElementById("chartSectors")) : null;
+        var cats = ch ? ((ch.getOption().yAxis[0] || {}).data || []) : [];
+        name = cats.length ? cats[cats.length - 1] : null;    /* 取 y 轴最后一个板块名 */
+        if (name && typeof window.showSectorStocks === "function") window.showSectorStocks(name);
+      } catch (e) {}
+      setTimeout(function () {
+        var tbl = document.getElementById("stockTable");
+        var visible = panels.stock && !panels.stock.hidden;
+        document.title = "SELFTEST sector=" + name
+          + " rows=" + ((tbl && tbl.textContent || "").trim().length)
+          + " stockPanelVisible=" + visible;
+      }, 900);
+    }, 4000);
+  }
   var t = null;
   window.addEventListener("resize", function () {
     clearTimeout(t);
