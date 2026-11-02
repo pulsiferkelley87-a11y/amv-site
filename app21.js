@@ -1309,10 +1309,14 @@ function loadBBHistory() {
       let d = "";
       h.forEach((p, i) => { d += (i ? "L" : "M") + x(i).toFixed(1) + " " + y(p.score).toFixed(1); });
       let labels = "";
+      let lastYear = "";  // 抽样点可能落在同一年，去重避免重复年份
       h.forEach((p, i) => {
         if (i % 200 === 0 || i === h.length - 1) {
+          const yr = p.date.slice(0, 4);
+          if (yr === lastYear) return;
+          lastYear = yr;
           const anchor = i === 0 ? "start" : (i === h.length - 1 ? "end" : "middle");
-          labels += `<text x="${x(i).toFixed(1)}" y="${H - 4}" font-size="9" fill="var(--muted)" text-anchor="${anchor}">${p.date.slice(0, 4)}</text>`;
+          labels += `<text x="${x(i).toFixed(1)}" y="${H - 4}" font-size="9" fill="var(--muted)" text-anchor="${anchor}">${yr}</text>`;
         }
       });
       box.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" style="background:var(--card2);border:1px solid var(--border);border-radius:6px;">
