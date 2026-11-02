@@ -148,6 +148,45 @@ def score_trend(indices_rows):
     return round(total / cnt, 1), details
 
 
+def score_trend_series(closes):
+    """自研序列（全市场活跃SZ 日度合计）的趋势打分。
+
+    与 score_trend 完全同一套判据，只是把"6 个外部指数取平均"换成
+    "一条自己的模型序列"：收盘 vs MA20/60/120/250、MA250 方向、60 日斜率。
+    这样趋势维度不再依赖指南针/交易所指数，也不受官方序列滞后影响。
+    """
+    if not closes or len(closes) < 120:
+        return 0, {}
+    cur = closes[-1]
+    m20, m60, m120, m250 = (ma(closes, 20), ma(closes, 60),
+                            ma(closes, 120), ma(closes, 250))
+    pts = 0
+    if m20 and m60 and m120:
+        pts += 40 if cur > m20 else -40
+        pts += 25 if cur > m60 else -25
+        pts += 20 if cur > m120 else -20
+        pts += 15 if (m250 and cur > m250) else (0 if m250 else 0)
+        if len(closes) >= 260 and m250:
+            m250_prev = ma(closes[:-20], 250)
+            if m250_prev and m250 > m250_prev:
+                pts += 15
+            elif m250_prev:
+                pts -= 15
+        s60 = slope(closes, 60)
+        if s60 is not None:
+            pts += 10 if s60 > 0 else -10
+    pts = max(-100, min(100, pts))
+    return round(pts, 1), {
+        "mode": "self",
+        "points": len(closes),
+        "close": round(cur, 1),
+        "ma20": round(m20, 1) if m20 else None,
+        "ma60": round(m60, 1) if m60 else None,
+        "ma120": round(m120, 1) if m120 else None,
+        "ma250": round(m250, 1) if m250 else None,
+    }
+
+
 def score_breadth(stocks_rows):
     """模块2 市场广度：站上各均线的股票占比。stocks_rows: {code: [closes]}。"""
     counts = {20: 0, 60: 0, 120: 0, 250: 0}
@@ -258,14 +297,26 @@ def compute_bb_history(official_rows):
     return out[-1300:]
 
 
-def compute_bull_bear(stocks_rows, market_amount_series, sentiment_args):
+def compute_bull_bear(stocks_rows, market_amount_series, sentiment_args, self_series=None):
     """主计算。"""
     indices_rows = {}
     for code, name in INDICES_BB:
         rows = fetch_index_daily(code)
         if rows:
             indices_rows[code] = rows
-    trend, trend_details = score_trend(indices_rows)
+    idx_trend, idx_details = score_trend(indices_rows)
+
+    # 趋势优先用自研序列（全市场活跃SZ 日度合计）；不足 120 点才退回指数口径。
+    self_closes = [c for _, c in (self_series or []) if c]
+    if len(self_closes) >= 120:
+        trend, trend_details = score_trend_series(self_closes)
+        trend_details["source"] = "self:活跃SZ合计"
+    else:
+        trend, trend_details = idx_trend, idx_details
+        trend_details = {"mode": "index", "indices": idx_details,
+                        "source": "fallback:指数（自研序列不足）"}
+    # 另一口径一并输出，便于对照（不参与总分）
+    trend_details["index_only_score"] = idx_trend
     breadth, breadth_details = score_breadth(stocks_rows)
     volume, volume_details = score_volume(market_amount_series)
     senti, senti_details = score_sentiment(*sentiment_args)
