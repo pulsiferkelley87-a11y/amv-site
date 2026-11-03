@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  actions: write   # 允许补跑 daily
   pages: write
   id-token: write
 
@@ -19,6 +20,46 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # GitHub 的 cron 在高峰期会被丢弃/延迟数小时（今天 daily 三次全丢，light 也少了十几轮）。
+      # 这里每 15 分钟对一次账：bull_bear 的归属日落后于"最近已收盘交易日"就补跑一次 daily。
+      - name: Catch up daily when bull_bear is stale
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys, urllib.request
+          from datetime import datetime, timedelta, timezone
+          repo = os.environ["GITHUB_REPOSITORY"]
+          tok = os.environ["GH_TOKEN"]
+          now = datetime.now(timezone.utc) + timedelta(hours=8)   # 北京
+          d = now.date()
+          if now.hour < 15 or (now.hour == 15 and now.minute < 5):
+              d -= timedelta(days=1)
+          if d.weekday() == 5:
+              d -= timedelta(days=1)
+          elif d.weekday() == 6:
+              d -= timedelta(days=2)
+          want = str(d)
+          try:
+              have = json.load(open("bull_bear.json", encoding="utf-8")).get("trade_date") or ""
+          except Exception:
+              have = ""
+          print("bull_bear want=%s have=%s" % (want, have))
+          if have >= want:
+              print("已是最新，跳过"); sys.exit(0)
+          hdr = {"Authorization": "Bearer " + tok, "Accept": "application/vnd.github+json", "User-Agent": "amv-catchup"}
+          req = urllib.request.Request("https://api.github.com/repos/%s/actions/workflows/daily.yml/runs?status=in_progress" % repo, headers=hdr)
+          with urllib.request.urlopen(req, timeout=30) as r:
+              n = len(json.loads(r.read().decode()).get("workflow_runs") or [])
+          if n:
+              print("已有 %d 个 daily 在跑，跳过" % n); sys.exit(0)
+          hdr2 = dict(hdr); hdr2["Content-Type"] = "application/json"
+          req2 = urllib.request.Request("https://api.github.com/repos/%s/actions/workflows/daily.yml/dispatches" % repo,
+                                         data=json.dumps({"ref": "main"}).encode(), method="POST", headers=hdr2)
+          with urllib.request.urlopen(req2, timeout=30) as r:
+              print("已补跑 daily，HTTP", r.status)
+          PY
 
       - uses: actions/setup-python@v5
         with:
