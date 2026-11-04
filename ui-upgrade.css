@@ -444,3 +444,21 @@ input:focus, select:focus, textarea:focus {
   .kpis { grid-template-columns: 1fr; }
   .kpi .val { font-size: 22px; }
 }
+
+/* 个股分时弹窗 */
+.intra-modal{position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;
+  padding:16px;background:rgba(15,18,24,.55);backdrop-filter:blur(2px)}
+.intra-box{width:min(780px,100%);background:var(--card);border:1px solid var(--border);border-radius:14px;
+  box-shadow:0 18px 50px rgba(0,0,0,.32);overflow:hidden}
+.intra-head{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:11px 15px;border-bottom:1px solid var(--border);font-size:14px}
+.intra-head .up{color:#c0392b;font-weight:600}
+.intra-head .down{color:#1e9e6a;font-weight:600}
+.intra-date{margin-left:8px;font-size:12px;color:#8b93a1}
+.intra-close{border:0;background:transparent;font-size:22px;line-height:1;cursor:pointer;color:#8b93a1}
+.intra-close:hover{color:#c0392b}
+tbody tr{cursor:pointer}
+@media (max-width:600px){
+  .intra-box{border-radius:12px}
+  #intraChart{height:280px !important}
+}
