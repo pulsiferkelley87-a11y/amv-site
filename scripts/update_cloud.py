@@ -1820,9 +1820,9 @@ def main():
                     if _ld >= 1 and _dates[_i]:
                         day_boards.setdefault(_dates[_i], {})[s["code"]] = _ld
                 if amv_r:
-                    _ind = s.get("industry")
+                    _ind = _indmap.get(s["code"]) or s.get("industry") or "—"
                     if not _ind or _ind == "—":
-                        _ind = _indmap.get(s["code"]) or "—"
+                        _ind = _indmap.get(s["code"]) or s.get("industry") or "—"
                     sig = compute_signals(kseries_r or [], kl)
                     row = {
                         "code": s["code"], "name": s["name"], "industry": _ind,
