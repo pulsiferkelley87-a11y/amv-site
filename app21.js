@@ -43,7 +43,8 @@ async function load() {
     "https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com",
   ];
   const localUrl = "d2.js.gz?v=" + new Date().getTime();
-  const urls = COS_HOSTS.map(h => h + "/d2.js.gz").concat([localUrl]);
+  // 带时间戳绕过 CDN 缓存：实测 COS 边缘曾一直发 18 天前的旧副本
+  const urls = COS_HOSTS.map(h => h + "/d2.js.gz?t=" + Date.now()).concat([localUrl]);
 
   // 3 秒还没数据就把标题改成"正在下载数据"，避免用户以为卡死
   const slowTimer = setTimeout(function () {
@@ -61,7 +62,16 @@ async function load() {
         const stream = new Blob([buf]).stream().pipeThrough(ds);
         const txt = await new Response(stream).text();
         const obj = JSON.parse(txt.slice(txt.indexOf("{")).replace(/;\s*$/, ""));
-        if (obj && obj.updated_at) { D = obj; break; }
+        if (!obj || !obj.updated_at) continue;
+        // 防陈旧：COS 镜像可能长期没同步（实测曾停在 18 天前），
+        // 此时宁可走慢的 GitHub，也不能把过期数据当最新显示。
+        const _t = Date.parse(String(obj.updated_at).replace(" ", "T"));
+        const _age = isNaN(_t) ? 0 : (Date.now() - _t);
+        if (_age > 3 * 24 * 3600 * 1000) {
+          console.warn("[amv] 跳过陈旧数据源:", u, obj.updated_at);
+          continue;
+        }
+        D = obj; break;
       } catch (e) { /* 换下一个源 */ }
     }
     if (D && !D.bull_bear) {
