@@ -462,3 +462,75 @@ tbody tr{cursor:pointer}
   .intra-box{border-radius:12px}
   #intraChart{height:280px !important}
 }
+
+/* ===== 视觉增强 v2 ===== */
+
+/* 1) KPI 卡片：悬停上浮 + 数值呼吸（不改布局，只动 transform/shadow） */
+.kpi {
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+  will-change: transform;
+}
+.kpi:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(16, 22, 34, .10), var(--sh-hover);
+}
+.kpi .val { transition: color .2s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .kpi, .kpi:hover { transition: none; transform: none; }
+}
+
+/* 2) 深色模式：提高层次与对比（卡片浮起、边框更清晰、次要文字提亮） */
+[data-theme="dark"] {
+  --bg: #12141a;
+  --card: #1b1f27;
+  --card2: #1b1f27;
+  --soft: #222732;
+  --border: #343b49;
+  --text: #eef1f7;
+  --muted: #a2abbb;
+  --sh-1: 0 1px 2px rgba(0, 0, 0, .5);
+  --sh-hover: 0 8px 22px rgba(0, 0, 0, .45);
+}
+[data-theme="dark"] .kpi:hover {
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .55);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+[data-theme="dark"] table th { background: #20252f; }
+[data-theme="dark"] table tbody tr:hover { background: #232935; }
+[data-theme="dark"] .kpi .lbl,
+[data-theme="dark"] .kpi .sub { color: #aab3c2; }
+
+/* 3) 移动端：tab 栏吸底 + 内容留白，避免被遮住 */
+@media (max-width: 720px) {
+  .tabbar {
+    /* 祖先建立了包含块，position:fixed 会相对祖先而不是视口定位；
+       sticky + bottom:0 能贴住可视区底部，且不受这个限制 */
+    position: sticky;
+    top: auto;
+    bottom: 0;
+    left: 0; right: 0;
+    z-index: 900;
+    margin: 0;
+    height: 54px;
+    align-items: center;
+    padding: 4px 10px calc(4px + env(safe-area-inset-bottom, 0px));
+    background: color-mix(in srgb, var(--card) 92%, transparent);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+    overflow-x: auto;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+  body { padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px)); }
+  .tabbtn {
+    flex: 0 0 auto;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 14px;
+  }
+  /* 分时弹窗在小屏上贴边 */
+  .intra-modal { padding: 0; align-items: flex-end; }
+  .intra-box { width: 100%; border-radius: 14px 14px 0 0; }
+}
