@@ -37,26 +37,44 @@ function checkDataFreshness() {
 }
 
 async function load() {
-  // 优先拉 gzip 压缩版（手机快 3 倍+）；不支持或失败回退 window.DATA
+  // 数据文件约 2.5-2.7 MB。实测：GitHub Pages 从国内拉要 20-60 秒（经常超时），
+  // 腾讯 COS 镜像同一文件只要 0.6-0.9 秒。所以先在 COS 上试多个域，全部失败才回 GitHub Pages。
+  const COS_HOSTS = [
+    "https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com",
+  ];
+  const localUrl = "d2.js.gz?v=" + new Date().getTime();
+  const urls = COS_HOSTS.map(h => h + "/d2.js.gz").concat([localUrl]);
+
+  // 3 秒还没数据就把标题改成"正在下载数据"，避免用户以为卡死
+  const slowTimer = setTimeout(function () {
+    const mt = document.getElementById("metaTime");
+    if (mt && !D) mt.textContent = "正在下载行情数据（约 2.5 MB），国内网络建议等 10-30 秒…";
+  }, 3000);
+
   if (typeof DecompressionStream !== "undefined") {
-    try {
-      const r = await fetch("d2.js.gz?v=" + new Date().getTime());
-      if (r.ok) {
+    for (const u of urls) {
+      try {
+        const r = await fetch(u, { cache: "no-store" });
+        if (!r.ok) continue;
         const buf = await r.arrayBuffer();
         const ds = new DecompressionStream("gzip");
         const stream = new Blob([buf]).stream().pipeThrough(ds);
         const txt = await new Response(stream).text();
-        D = JSON.parse(txt.slice(txt.indexOf("{")).replace(/;\s*$/, ""));
-        if (!D.bull_bear) {
-          try {
-            const r2 = await fetch("bull_bear.json?v=" + new Date().getTime());
-            D.bull_bear = await r2.json();
-          } catch (e2) { }
-        }
-        checkDataFreshness();
+        const obj = JSON.parse(txt.slice(txt.indexOf("{")).replace(/;\s*$/, ""));
+        if (obj && obj.updated_at) { D = obj; break; }
+      } catch (e) { /* 换下一个源 */ }
+    }
+    if (D && !D.bull_bear) {
+      for (const base of COS_HOSTS.concat([""])) {
+        try {
+          const r2 = await fetch(base + "/bull_bear.json?v=" + new Date().getTime());
+          if (r2.ok) { D.bull_bear = await r2.json(); break; }
+        } catch (e2) { }
       }
-    } catch (e) { }
+    }
+    if (D) checkDataFreshness();
   }
+  clearTimeout(slowTimer);
   if (!D) D = window.DATA;
   if (!D) {
     // 现代浏览器 gz 拉取失败时的回退：改用 app-data.js（与 refreshAll 同一套链路）。
