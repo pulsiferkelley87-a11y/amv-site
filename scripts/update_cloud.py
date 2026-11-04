@@ -1933,6 +1933,17 @@ def main():
                 except (OSError, ValueError):
                     hist = None
             if hist and hist.get("date") and s:
+                # 历史段水平自校准：hist 与官方必须同口径。
+                # 若偏离超过 5%，整体按比例重标定（只改水平、不改形状），
+                # 否则一次口径变更就会把错误水平冻结进去，后面再怎么校正都只作用于尾部。
+                _om_h = {r["date"]: r["amv"] for r in official}
+                _common_h = [(d, v) for d, v in zip(hist["date"], hist["amv"]) if d in _om_h and v]
+                if _common_h:
+                    _d0, _v0 = _common_h[-1]
+                    _off = _om_h[_d0] / _v0
+                    if abs(_off - 1) > 0.05:
+                        hist["amv"] = [round(v * _off, 2) for v in hist["amv"]]
+                        print(f"  amv_hist 水平重标定 ×{_off:.4f}（对齐官方 {_d0}）", flush=True)
                 cutoff = hist["date"][-1]
                 i = 0
                 while i < len(mk["date"]) and mk["date"][i] <= cutoff:
@@ -1940,24 +1951,32 @@ def main():
                 tail_d = mk["date"][i:]
                 tail_v = mk["amv"][i:]
                 hist_last = hist["amv"][-1] if hist.get("amv") else None
+                # 锚点索引：缩放的终点必须落在「最后一个与官方重合的交易日」，
+                # 而不是尾部最后一天——否则锚点错位一天，整段会被系统性抬高/压低。
+                anchor = None
+                for _k, _d in enumerate(tail_d):
+                    if _d in _om_h:
+                        anchor = _k
                 if tail_v and hist_last:
-                    # 双端线性校正：接缝处乘 m0（让首点与 hist 末值连续），
-                    # 末点乘 m1=s（对齐官方最新值），中间按时间线性过渡。
-                    # 这样既不会在 9-30 出现跳变，也不会让整段尾部被单点放大。
-                    n = len(tail_v)
                     m0 = (hist_last / tail_v[0]) if tail_v[0] else s
                     m1 = s
+                    _end = anchor if anchor is not None else (len(tail_v) - 1)
                     scaled = []
-                    for k, v in enumerate(tail_v):
-                        w = (k / (n - 1)) if n > 1 else 1.0
-                        scaled.append(round(v * (m0 + (m1 - m0) * w), 2))
+                    for _k, _v in enumerate(tail_v):
+                        if _end <= 0:
+                            _m = m1
+                        else:
+                            _w = min(1.0, _k / _end)
+                            _m = m0 + (m1 - m0) * _w
+                        scaled.append(round(_v * _m, 2))
                     combined = {
                         "date": hist["date"] + tail_d,
                         "amv": [round(v, 2) for v in hist["amv"]] + scaled,
                         "seam_scale": float("%.4e" % m0),
                         "scale": float("%.4e" % m1),
+                        "anchor_idx": _end,
                     }
-                    print(f"  接缝校正: m0={m0:.6f} -> m1={m1:.6f}  尾部 {n} 天", flush=True)
+                    print(f"  接缝校正: m0={m0:.4e} -> m1={m1:.4e} 尾部 {len(tail_v)} 天 锚点#{_end}", flush=True)
                 else:
                     combined = {
                         "date": hist["date"] + tail_d,
