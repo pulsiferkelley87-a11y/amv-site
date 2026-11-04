@@ -92,3 +92,7 @@ for path in files:
         print("upload failed %s: %s" % (name, str(e)[:150]))
 
 print("COS upload done: %d uploaded, %d skipped (live_data.json)" % (uploaded, skipped))
+# 静默失败是致命的：密钥失效时镜像会停更几十天而 workflow 仍显示绿色。
+if uploaded == 0 and len(files) > 1:
+    print("!! COS 全部上传失败——检查 COS_SECRET_ID / COS_SECRET_KEY 是否已失效", flush=True)
+    sys.exit(1)
