@@ -655,6 +655,64 @@ def cos_put_support_watch(sw_list, updated_at):
 FUND = {}   # code -> 通达信基本面（流通股本/上市日期/行业码/净利润…），见 fetch_fundamentals.py
 
 
+def fetch_intraday(codes, workers=8):
+    """抓当日分时（TQLEX period=0 = 5 分钟线，每日 48 条）。
+
+    返回 {code: {name,date,now,avg,bars:[[秒, 价, 量], ...]}}，供前端画个股分时图。
+    失败或没有当日数据就跳过该股票，不影响主流程。
+    """
+    if not _tdxhub or not codes:
+        return {}
+    from concurrent.futures import ThreadPoolExecutor
+
+    def one(code):
+        sc = _tdxhub.setcode_of(code)
+        try:
+            r = _tdxhub.kline_raw(code, sc, period=0, want_num=60, startxh=0)
+        except Exception:
+            return None
+        if not isinstance(r, dict):
+            return None
+        at = r.get("AttachInfo") or {}
+        hq = str(at.get("HqDate") or "")
+        bars, avgs = [], []
+        cum_a = cum_v = 0.0
+        for it in (r.get("ListItem") or []):
+            f = it.get("Item") or []
+            if len(f) < 9 or str(f[0]) != hq:
+                continue
+            try:
+                px = round(float(f[5]), 3)
+                amt = float(f[6])
+                vol = float(f[8])
+            except (TypeError, ValueError):
+                continue
+            cum_a += amt
+            cum_v += vol
+            bars.append([int(f[1]), px, vol])
+            avgs.append(round(cum_a / cum_v, 3) if cum_v else None)
+        if not bars:
+            return None
+        # 昨收：用来算真实涨跌幅（分时首根不是昨收）
+        pre = None
+        try:
+            kl = _tdxhub.kline_daily(code, sc, want_num=3)
+            if kl and len(kl) >= 2:
+                pre = kl[-2].get("close")
+        except Exception:
+            pre = None
+        return {"name": at.get("Name"), "date": hq, "now": at.get("Now"),
+                "avg": at.get("fAverage"), "pre": pre,
+                "bars": bars, "avgs": avgs}
+
+    out = {}
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        for code, res in zip(codes, pool.map(one, codes)):
+            if res:
+                out[code] = res
+    return out
+
+
 def load_fundamentals():
     """读 data/fundamentals.json；缺失时返回空字典（不影响主流程）。"""
     global FUND
@@ -1811,6 +1869,17 @@ def main():
     result["picks"] = picks
     result["picks_history"] = build_picks_history(hist_raw)
     result["picks_updated_at"] = result["updated_at"]
+
+    # 6.5) 个股分时（贡献榜前 40 + 选股前 20，去重后最多 60 只）
+    try:
+        _ic = [x.get("code") for x in (result.get("stocks_amv") or [])[:40] if x.get("code")]
+        _ic += [p.get("code") for p in (picks or [])[:20] if p.get("code")]
+        _ic = list(dict.fromkeys(_ic))[:60]
+        result["intraday"] = fetch_intraday(_ic)
+        print("  分时: %d 只（目标 %d）" % (len(result.get("intraday") or {}), len(_ic)), flush=True)
+    except Exception as _e:
+        result["intraday"] = {}
+        print("  分时失败:", str(_e)[:70], flush=True)
 
     # 7) 通达信概念板块榜（活跃SZ排序 + 拐头强度）
     result["concept_boards"] = compute_concept_boards(
