@@ -731,6 +731,127 @@ def load_fundamentals():
     return FUND
 
 
+def compute_valuation(fund=None):
+    """全市场估值：今日用基本面表全量算，历史用 K 线回溯，取分位。
+
+    聚合 PE = Σ流通市值 / Σ净利润（等价于流通市值加权 PE 的调和平均）；
+    今日数据来自 fundamentals.json（5577 只全覆盖），不受 K 线轮转覆盖度影响；
+    历史序列来自 K 线缓存，只保留覆盖度 ≥70% 的交易日，避免稀疏日污染分位。
+    分位低＝便宜＝看多。
+    """
+    fund = fund if fund is not None else FUND
+    if not fund:
+        return {}
+
+    # ① 今日：全量口径
+    mv_now = eps_mv_now = bps_mv_now = 0.0
+    for code, r in fund.items():
+        try:
+            ltgb = float(r.get("ltgb") or 0)
+            pe = float(r.get("pe") or 0)
+            px = float(r.get("px") or 0)
+            bps = float(r.get("mgjzc") or 0)
+        except (TypeError, ValueError):
+            continue
+        if ltgb <= 0 or pe <= 0 or px <= 0:
+            continue
+        mv = ltgb * px
+        mv_now += mv
+        eps_mv_now += mv / pe * 1e0 * pe / pe   # mv/pe = 净利润
+        if bps > 0:
+            bps_mv_now += bps * ltgb
+    pe_today = (mv_now / eps_mv_now) if eps_mv_now > 0 else None
+    pb_today = (mv_now / bps_mv_now) if bps_mv_now > 0 else None
+
+    # ② 历史：K 线回溯（按覆盖度过滤稀疏日）
+    per_mv, per_eps, per_bps, cnt = {}, {}, {}, {}
+    seen = set()
+    def process(cache, code):
+        if code in seen:
+            return
+        seen.add(code)
+        rows = (cache.get("rows") or [])[-260:]
+        if len(rows) < 30:
+            return
+        f2 = fund.get(code)
+        if not f2:
+            return
+        try:
+            ltgb = float(f2.get("ltgb") or 0)
+            pe = float(f2.get("pe") or 0)
+            bps = float(f2.get("mgjzc") or 0)
+        except (TypeError, ValueError):
+            return
+        if ltgb <= 0 or pe <= 0:
+            return
+        closes = [k.get("close") or 0 for k in rows]
+        if not closes or closes[-1] <= 0:
+            return
+        eps = closes[-1] / pe
+        if eps <= 0:
+            return
+        for i, k in enumerate(rows):
+            c = closes[i]
+            if c <= 0:
+                continue
+            d = k.get("date")
+            per_mv[d] = per_mv.get(d, 0.0) + ltgb * c
+            per_eps[d] = per_eps.get(d, 0.0) + eps * ltgb
+            cnt[d] = cnt.get(d, 0) + 1
+            if bps > 0:
+                per_bps[d] = per_bps.get(d, 0.0) + bps * ltgb
+
+    if os.path.isdir(KLINE_DIR):
+        for fn in os.listdir(KLINE_DIR):
+            if not fn.endswith(".json"):
+                continue
+            try:
+                with open(os.path.join(KLINE_DIR, fn), encoding="utf-8") as f3:
+                    process(json.load(f3), fn[:-5])
+            except (OSError, ValueError):
+                continue
+    for ch in _load_chunk_map().values():
+        for code, cache in ch.items():
+            process(cache, code)
+
+    pe_hist, pb_hist, hist_dates = [], [], []
+    if cnt:
+        mx = max(cnt.values())
+        thr = mx * 0.7
+        for d in sorted(per_mv)[-250:]:
+            if cnt.get(d, 0) < thr or not per_eps.get(d):
+                continue
+            pe_hist.append(per_mv[d] / per_eps[d])
+            hist_dates.append(d)
+            if per_bps.get(d):
+                pb_hist.append(per_mv[d] / per_bps[d])
+
+    if pe_today is None and pe_hist:
+        pe_today = pe_hist[-1]
+    if pb_today is None and pb_hist:
+        pb_today = pb_hist[-1]
+    if pe_today is None or len(pe_hist) < 20:
+        return {}
+
+    def pct_rank(series, cur):
+        less = sum(1 for v in series if v < cur)
+        return round(less / max(1, len(series)) * 100, 1)
+
+    pe_pct = pct_rank(pe_hist, pe_today)
+    pb_pct = pct_rank(pb_hist, pb_today) if (pb_hist and pb_today) else None
+    s_pe = max(-100, min(100, (50 - pe_pct) * 2))
+    s_pb = max(-100, min(100, (50 - pb_pct) * 2)) if pb_pct is not None else s_pe
+    score = max(-100, min(100, round(s_pe * 0.6 + s_pb * 0.4)))
+    out = {"mode": "fundamental",
+           "pe": round(pe_today, 2), "pe_pct": pe_pct,
+           "pb": round(pb_today, 2) if pb_today else None, "pb_pct": pb_pct,
+           "days": len(pe_hist), "score_pe": round(s_pe), "score_pb": round(s_pb),
+           "score": score, "asof": hist_dates[-1] if hist_dates else ""}
+    print("  估值: PE %.2f（分位 %.1f%%）PB %s（分位 %s）→ %+d  样本 %d 天" % (
+        pe_today, pe_pct, out["pb"], pb_pct, score, len(pe_hist)), flush=True)
+    return out
+
+
 def fund_float_mv(code, close):
     """用通达信流通股本(万股)×收盘价算流通市值；无数据返回 None。"""
     r = FUND.get(code)
@@ -1481,6 +1602,8 @@ def main():
             {"code": s["code"], "name": s["name"], "amount": s["amount"],
              "float_mv": s["float_mv"], "turnover": s["turnover"], "pct": s["pct"],
              "industry": s.get("industry"), "amount_pct": s["amount_pct"],
+             "ipo": (FUND.get(s["code"]) or {}).get("ipo"),
+             "pe": (FUND.get(s["code"]) or {}).get("pe"),
              "score": s.get("score")}
             for s in valid
         ]
@@ -1703,6 +1826,8 @@ def main():
                     sig = compute_signals(kseries_r or [], kl)
                     row = {
                         "code": s["code"], "name": s["name"], "industry": _ind,
+                        "ipo": (FUND.get(s["code"]) or {}).get("ipo"),
+                        "pe": (FUND.get(s["code"]) or {}).get("pe"),
                         "amount": s.get("amount"), "float_mv": s.get("float_mv"),
                         "turnover": s.get("turnover"), "pct": s.get("pct"),
                         "amount_pct": s.get("amount_pct"), "amv": amv_r,
@@ -1983,9 +2108,10 @@ def main():
         except Exception:
             self_series = []
         print(f"  自研序列(amv_perstock): {len(self_series)} 天", flush=True)
+        _val = compute_valuation(FUND)
         bb = compute_bull_bear(stocks_closes, amt_series,
                                sentiment_args=(up_n, down_n, lu_n, ld_n, max_board),
-                               self_series=self_series)
+                               self_series=self_series, valuation=_val)
         bb["updated_at"] = result["updated_at"]
         # 最新交易日（快照/行情口径，休市日也准确）
         try:
