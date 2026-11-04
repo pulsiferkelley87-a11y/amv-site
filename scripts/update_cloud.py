@@ -904,6 +904,7 @@ def compute_market_amv(official_dates, snap_map=None, snap_date=None):
     D = 0.5 ** (1.25 / 10.0)
     date_set = set(official_dates)
     sum_lamv = {}
+    cnt_lamv = {}   # 每天参与汇总的股票数：用于覆盖度归一化
 
     def process(code, cache):
         rows = cache.get("rows") or []
@@ -950,6 +951,7 @@ def compute_market_amv(official_dates, snap_map=None, snap_date=None):
             d = k["date"]
             if d:
                 sum_lamv[d] = sum_lamv.get(d, 0.0) + mv_t * A
+                cnt_lamv[d] = cnt_lamv.get(d, 0) + 1
 
     seen = set()
     if os.path.isdir(KLINE_DIR):
@@ -973,7 +975,7 @@ def compute_market_amv(official_dates, snap_map=None, snap_date=None):
     for d in sorted(sum_lamv):          # 所有有数据的交易日都输出，官方缺的日子也补上
         out_dates.append(d)
         out_vals.append(round(sum_lamv[d], 2))
-    return {"date": out_dates, "amv": out_vals}
+    return {"date": out_dates, "amv": out_vals, "n": [cnt_lamv.get(d, 0) for d in out_dates]}
 
 
 def compute_stock_amv_reg(rows, float_mv):
@@ -1922,6 +1924,14 @@ def main():
         mk = compute_market_amv(off_dates, snap_map, snap_date)
         if mk and mk["date"]:
             om = {r["date"]: r["amv"] for r in official}
+            # 覆盖度归一化：compute_market_amv 只累加"当天有数据的股票"，
+            # 早期日子参与股票少会让活跃SZ显得低，形成假的上升斜坡（实测三周虚增 46%）。
+            # 按「当日参与数 / 窗口最大参与数」放大，消除覆盖度带来的水平漂移。
+            _nn = mk.get("n") or []
+            if _nn and max(_nn) > 0:
+                _nmax = max(_nn)
+                mk["amv"] = [round(v * (_nmax / n) if n else v, 2) for v, n in zip(mk["amv"], _nn)]
+                print(f"  覆盖度归一化: 最大参与 {_nmax} 只，末日 %d 只" % (_nn[-1] if _nn else 0), flush=True)
             common = [(d, v) for d, v in zip(mk["date"], mk["amv"]) if d in om]
             s = om[common[-1][0]] / common[-1][1] if common and common[-1][1] else None
             hist = None
@@ -1993,7 +2003,7 @@ def main():
             # 尾部这几个交易日留给每天的实时计算。这样接缝永远只有 5 天，
             # 双端校正的变形极小；也避免 hist 三周不更新导致接缝越拉越远。
             try:
-                TAIL_KEEP = 5
+                TAIL_KEEP = 250   # 近期 250 个交易日每次全量重算：冻结会把旧的缩放漂移固化进去
                 _ds = mk.get("date") or []
                 _vs = mk.get("amv") or []
                 if len(_ds) > TAIL_KEEP + 100:
