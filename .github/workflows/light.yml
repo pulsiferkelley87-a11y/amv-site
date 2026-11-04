@@ -24,6 +24,11 @@ jobs:
       - name: Install deps
         run: pip install requests
 
+      # 与 daily 同口径：不然 light 用 ltsz、daily 用股本，活跃SZ 会每小时跳一次。
+      - name: Fetch fundamentals
+        run: python scripts/fetch_fundamentals.py --workers 10 || echo "fundamentals fetch failed, continue"
+        timeout-minutes: 10
+
       - name: Light update (snapshot + top300 kline + recompute)
         env:
           TOP_N: '300'
