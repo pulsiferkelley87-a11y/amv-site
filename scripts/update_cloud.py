@@ -866,6 +866,115 @@ def fund_float_mv(code, close):
     return ltgb * 1e4 * close
 
 
+def compute_market_amv_panel(official_dates, snap_map=None, snap_date=None, min_cov=0.95):
+    """固定样本面板版递推汇总：只统计窗口内几乎每个交易日都有数据的股票。
+
+    为什么需要它：直接按日求和时，早期日子有数据的股票少（K 线缓存长度不一），
+    合计天然偏低，再按天数放大就会造出假的上升/下跌斜坡（实测虚增 46%）。
+    面板法固定股票集合，逐日可比，形态才是真实的。
+
+    返回 {"date": [...], "amv": [...], "n": 面板只数}
+    """
+    D = 0.5 ** (1.25 / 10.0)
+    date_set = set(official_dates)
+    items, seen = [], set()
+
+    def collect(code, cache):
+        if code in seen:
+            return
+        seen.add(code)
+        rows = (cache.get("rows") or [])[-260:]
+        if len(rows) < 30:
+            return
+        if snap_map:
+            rows = augment_rows(code, rows, snap_map, snap_date)
+        if len(rows) < 30:
+            return
+        items.append((code, rows))
+
+    if os.path.isdir(KLINE_DIR):
+        for fn in os.listdir(KLINE_DIR):
+            if not fn.endswith(".json"):
+                continue
+            try:
+                with open(os.path.join(KLINE_DIR, fn), encoding="utf-8") as f:
+                    collect(fn[:-5], json.load(f))
+            except (OSError, ValueError):
+                continue
+    for ch in _load_chunk_map().values():
+        for code, cache in ch.items():
+            collect(code, cache)
+
+    if not items:
+        return None
+
+    # ① 窗口与每只股票的覆盖率
+    per_days = {}
+    all_days = set()
+    for code, rows in items:
+        ds = set(k.get("date") for k in rows)
+        per_days[code] = ds
+        all_days |= ds
+    # 窗口固定为最近 250 个交易日：这里是"并集"而不是全历史，
+    # 否则长短不一的缓存会把分母拉大，几乎没有股票能达标。
+    win_all = sorted(all_days)
+    window = win_all[-250:]
+    if len(window) < 60:
+        return None
+    wset = set(window)
+    need = len(window) * min_cov
+    panel = set(c for c, ds in per_days.items() if len(ds & wset) >= need)
+    if len(panel) < 300:
+        need = len(window) * 0.85            # 退回 85% 覆盖率
+        panel = set(c for c, ds in per_days.items() if len(ds & wset) >= need)
+    print(f"  面板判定: 窗口 {len(window)} 天，覆盖率门槛 {need:.0f} 天，命中 {len(panel)} 只 / 共 {len(items)} 只", flush=True)
+    if len(panel) < 200:
+        print("  !! 面板股票不足 200，放弃面板口径", flush=True)
+        return None
+    print(f"  面板: {len(panel)} 只 / 共 {len(items)} 只，窗口 {len(window)} 天", flush=True)
+
+    # ② 只累加面板股票（并记录当日有数据的股票数）
+    sum_lamv, cnt_day, date_set = {}, {}, set(official_dates) | set(window)
+    mv_map = load_mv_map([])
+    for code, rows in items:
+        if code not in panel:
+            continue
+        closes = [k.get("close") or 0.0 for k in rows]
+        if not closes or closes[-1] <= 0:
+            continue
+        mv_now = fund_float_mv(code, closes[-1]) or mv_map.get(code) or 0
+        if not mv_now:
+            continue
+        fac = None
+        fmap = None
+        A = None
+        for i, k in enumerate(rows):
+            t = k.get("turnover")
+            mv_t = mv_now * (closes[i] / closes[-1]) if closes[-1] else mv_now
+            if t is None:
+                t = (k.get("amount") / mv_t * 100) if mv_t else 0.0
+            t = t / 100.0
+            a = min(t / 1.1, 1.0)
+            A = a if A is None else D * A + a * (1.0 - A)
+            d = k.get("date")
+            if d in date_set:
+                sum_lamv[d] = sum_lamv.get(d, 0.0) + mv_t * A
+                cnt_day[d] = cnt_day.get(d, 0) + 1
+
+    # ③ 当日覆盖度过滤：面板里只有部分股票有数据的日子会显得"暴跌"，
+    #    这些日子直接剔除，而不是留在序列里污染均线。
+    thr = len(panel) * 0.95
+    out_d, out_v = [], []
+    for d in sorted(sum_lamv):
+        if d in date_set and cnt_day.get(d, 0) >= thr:
+            out_d.append(d)
+            out_v.append(round(sum_lamv[d], 2))
+    dropped = len(sum_lamv) - len(out_d)
+    if dropped > 0:
+        print(f"  面板剔除 {dropped} 个覆盖不足的交易日（<{thr:.0f} 只）", flush=True)
+    return {"date": out_d, "amv": out_v, "n": len(panel)}
+
+
 def load_mv_map(spot):
     """流通市值映射：优先本地 stock_list（新浪口径，亿元->元），否则 spot 快照。"""
     mv_map = {}
@@ -1968,6 +2077,27 @@ def main():
                         hist = json.load(f)
                 except (OSError, ValueError):
                     hist = None
+            # 面板口径：用固定样本重算近 250 天，替代"冻结+事后缩放"。
+            # 只改这一段历史，之前用官方序列、之��用模型外推，接缝由下面的逻辑衔接。
+            try:
+                _panel = compute_market_amv_panel(off_dates, snap_map, snap_date)
+            except Exception as _pe:
+                _panel = None
+                print("  面板口径失败:", str(_pe)[:80], flush=True)
+            if _panel and len(_panel.get("date") or []) >= 60:
+                _cp = [(d, v) for d, v in zip(_panel["date"], _panel["amv"]) if d in om and om[d]]
+                if _cp:
+                    _dA, _vA = _cp[-1]
+                    _k = om[_dA] / _vA
+                    _pd = [_d for _d in sorted(om) if _d < _panel["date"][0]]
+                    _pv = [om[_d] for _d in _pd]
+                    for _d, _v in zip(_panel["date"], _panel["amv"]):
+                        _pd.append(_d)
+                        _pv.append(round(_v * _k, 2))
+                    hist = {"date": _pd, "amv": _pv}
+                    print(f"  自研历史: 面板口径 {len(_panel['date'])} 天（{_panel['n']} 只），"
+                          f"锚定官方 {_dA} 系数 {_k:.4e}", flush=True)
+
             if hist and hist.get("date") and s:
                 # 历史段水平自校准：hist 与官方必须同口径。
                 # 若偏离超过 5%，整体按比例重标定（只改水平、不改形状），
