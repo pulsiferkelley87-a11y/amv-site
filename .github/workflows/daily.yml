@@ -24,6 +24,12 @@ jobs:
       - name: Install deps
         run: pip install requests
 
+      # 基本面（流通股本/上市日期/行业/PE/资金流）：全市场约 45 秒，云端直连通达信 TQLEX。
+      # 失败不阻塞主流程——update_cloud 会退回新浪 ltsz 口径。
+      - name: Fetch fundamentals
+        run: python scripts/fetch_fundamentals.py --workers 10 || echo "fundamentals fetch failed, continue"
+        timeout-minutes: 10
+
       - name: Update data
         run: python scripts/update_cloud.py
         timeout-minutes: 50
