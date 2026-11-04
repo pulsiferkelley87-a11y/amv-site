@@ -1076,6 +1076,21 @@ function renderStockRows(rows) {
   const isAmv = MODE === "reg";
   const amvField = "amv";
   const amvPctField = "amv_pct";
+  // 上市日期：20200716 -> 20-07（年-月），太新（<1年）标红提示次新
+  const ipoTxt = v => {
+    const d = String(v || "").trim();
+    if (!/^\d{8}$/.test(d)) return "—";
+    const age = (Date.now() - Date.parse(d.slice(0,4)+"-"+d.slice(4,6)+"-"+d.slice(6,8))) / 31557600000;
+    const txt = d.slice(2,4) + "-" + d.slice(4,6);
+    return age < 1 ? `<span style="color:#c0392b">${txt}</span>` : txt;
+  };
+  // PE：亏损或缺失显示 "—"，>80 视为极高估值
+  const peTxt = v => {
+    const pe = Number(v);
+    if (!isFinite(pe) || pe <= 0) return "—";
+    const color = pe > 80 ? "#c0392b" : (pe > 40 ? "#b8860b" : "");
+    return color ? `<span style="color:${color}">${pe.toFixed(1)}</span>` : pe.toFixed(1);
+  };
   const scoreCell = s => {
     if (s.score == null) return "—";
     const sc = Number(s.score);
@@ -1083,7 +1098,7 @@ function renderStockRows(rows) {
     return `<span style="color:${color};font-weight:700;">${sc.toFixed(0)}</span>`;
   };
   let html = `<table><thead><tr>
-    <th>#</th><th>代码</th><th>名称</th><th>行业</th><th>评分</th>` +
+    <th>#</th><th>代码</th><th>名称</th><th>行业</th><th>上市</th><th>PE</th><th>评分</th>` +
     (isAmv ? `<th>活跃市值(亿)</th><th>占比</th>` : "") +
     `<th>活跃SZ(亿)</th><th>流通市值(亿)</th><th>换手率</th><th>涨跌幅</th></tr></thead><tbody>`;
   rows.forEach((s, i) => {
