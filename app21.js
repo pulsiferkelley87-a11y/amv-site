@@ -1529,3 +1529,123 @@ if (/[?&]selftest=drop/.test(location.search)) {
     }
   }, 5000);
 }
+
+/* ===== 个股分时弹窗 =====
+   数据来自 app-data 的 D.intraday{code:{name,date,now,avg,bars:[[秒,价,量]]}}，
+   后端每天抓一次（贡献榜前 40 + 选股前 20）。点任意表格里带 6 位代码的行即可打开。 */
+let _intraCh = null;
+
+function _intraModal() {
+  let m = document.getElementById("intraModal");
+  if (m) return m;
+  m = document.createElement("div");
+  m.id = "intraModal";
+  m.className = "intra-modal";
+  m.innerHTML = '<div class="intra-box">' +
+    '<div class="intra-head"><span id="intraTitle">分时</span>' +
+    '<button class="intra-close" type="button" aria-label="关闭">×</button></div>' +
+    '<div id="intraChart" style="width:100%;height:340px"></div></div>';
+  document.body.appendChild(m);
+  m.querySelector(".intra-close").addEventListener("click", closeIntraday);
+  m.addEventListener("click", function (e) { if (e.target === m) closeIntraday(); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") closeIntraday();
+  });
+  return m;
+}
+
+function closeIntraday() {
+  const m = document.getElementById("intraModal");
+  if (m) m.style.display = "none";
+}
+
+function openIntraday(code) {
+  const it = (D.intraday || {})[code];
+  const m = _intraModal();
+  const title = m.querySelector("#intraTitle");
+  if (!it) {
+    title.textContent = code + " · 暂无分时数据（仅收录贡献榜前 40 与选股前 20）";
+    m.style.display = "flex";
+    return;
+  }
+  m.style.display = "flex";
+  const now = it.now != null ? Number(it.now) : null;
+  const pre = it.pre != null ? Number(it.pre) : null;      // 昨收：涨跌幅基准
+  const first = it.bars.length ? it.bars[0][1] : null;
+  const chg = (now != null && pre) ? (now / pre - 1) * 100
+            : ((now != null && first) ? (now / first - 1) * 100 : null);
+  const cls = chg == null ? "" : (chg >= 0 ? "up" : "down");
+  title.innerHTML = '<b>' + (it.name || "") + '</b> ' + code +
+    (now != null ? ' <span class="' + cls + '">' + now.toFixed(2) +
+      (chg != null ? ' ' + (chg >= 0 ? "+" : "") + chg.toFixed(2) + '%' : '') + '</span>' : '') +
+    ' <span class="intra-date">' + (it.date || "") + '</span>';
+
+  const xs = it.bars.map(function (b) {
+    const s = b[0];
+    const h = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60);
+    return (h < 10 ? "0" : "") + h + ":" + (mm < 10 ? "0" : "") + mm;
+  });
+  const ys = it.bars.map(function (b) { return b[1]; });
+  const vols = it.bars.map(function (b) { return b[2]; });
+  const avg = it.avg != null ? Number(it.avg) : null;
+  // 均价线：优先用后端算好的累计 VWAP（逐笔累计成交额/成交量），没有再退回单值
+  const avgs = (it.avgs && it.avgs.length === it.bars.length) ? it.avgs : xs.map(function () { return avg; });
+  const color = (chg != null && chg < 0) ? "#1e9e6a" : "#c0392b";
+
+  const dom = document.getElementById("intraChart");
+  const ch = _intraCh || echarts.init(dom);
+  _intraCh = ch;
+  ch.setOption({
+    animation: false,
+    grid: [{ left: 56, right: 56, top: 16, height: 200 }, { left: 56, right: 56, top: 236, height: 56 }],
+    axisPointer: { link: [{ xAxisIndex: "all" }] },
+    tooltip: { trigger: "axis", axisPointer: { type: "cross" } },
+    xAxis: [
+      { type: "category", data: xs, boundaryGap: false, axisLabel: { fontSize: 10 } },
+      { type: "category", data: xs, gridIndex: 1, boundaryGap: false, axisLabel: { show: false } },
+    ],
+    yAxis: [
+      { scale: true, splitLine: { lineStyle: { opacity: 0.4 } }, axisLabel: { fontSize: 10 } },
+      { gridIndex: 1, splitLine: { show: false }, axisLabel: { show: false } },
+    ],
+    series: [
+      { name: "价格", type: "line", data: ys, showSymbol: false,
+        lineStyle: { width: 1.8, color: color }, itemStyle: { color: color },
+        areaStyle: { opacity: 0.08, color: color },
+        markLine: pre ? { silent: true, symbol: "none",
+          lineStyle: { type: "dashed", color: "#8b93a1", width: 1 },
+          label: { formatter: pre.toFixed(2), position: "insideEndTop", fontSize: 10, color: "#8b93a1" },
+          data: [{ yAxis: pre }] } : undefined },
+      { name: "均价", type: "line", data: avgs, showSymbol: false,
+        lineStyle: { width: 1, type: "dashed", color: "#e67e22" } },
+      { name: "成交量", type: "bar", xAxisIndex: 1, yAxisIndex: 1, data: vols,
+        itemStyle: { color: "rgba(120,140,180,.55)" } },
+    ],
+  }, { notMerge: true });
+}
+
+/* 表格行点击：找行内第一个 6 位数字当成股票代码 */
+document.addEventListener("click", function (e) {
+  const tr = e.target && e.target.closest ? e.target.closest("tr") : null;
+  if (!tr || (tr.closest && tr.closest("#intraModal"))) return;
+  const tds = tr.querySelectorAll("td");
+  for (let i = 0; i < tds.length; i++) {
+    const t = (tds[i].textContent || "").trim();
+    if (/^\d{6}$/.test(t) && D && D.intraday && D.intraday[t]) {
+      openIntraday(t);
+      return;
+    }
+  }
+});
+
+/* 调试/分享：?intra=600000 直接打开某只股票的分时 */
+(function () {
+  const mm = /[?&]intra=(\d{6})/.exec(location.search);
+  if (!mm) return;
+  const code = mm[1];
+  let tries = 0;
+  const t = setInterval(function () {
+    if (typeof D !== "undefined" && D && D.intraday) { clearInterval(t); openIntraday(code); }
+    else if (++tries > 40) clearInterval(t);
+  }, 400);
+})();
