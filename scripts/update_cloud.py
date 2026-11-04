@@ -1610,7 +1610,33 @@ def main():
             for s in valid
         ]
         result["all_stocks"] = all_stocks
-        result["market_totals"] = {"amount": tot_amt, "float_mv": tot_mv, "count": len(valid)}
+        # 成交额守卫：快照可能只拿到部分股票，此时合计会偏低，
+        # 看起来像"市场缩量"其实是数据缺失。少于 5000 只就改用 live 快照的分时合计，
+        # 并打上 amount_source / partial 标记，前端可据此提示。
+        _mt = {"amount": tot_amt, "float_mv": tot_mv, "count": len(valid)}
+        if len(valid) < 5000:
+            _live_amt = None
+            for _lp in (os.path.join(BASE, "live_data.json"), os.path.join(DATA_DIR, "live_data.json")):
+                if not os.path.exists(_lp):
+                    continue
+                try:
+                    with open(_lp, encoding="utf-8") as _lf:
+                        _ld = json.load(_lf)
+                    _ls = _ld.get("stocks") or []
+                    _sum = sum((x.get("amount") or 0) for x in _ls)
+                    if len(_ls) >= 5000 and _sum > 0:
+                        _live_amt = _sum
+                except (OSError, ValueError):
+                    _live_amt = None
+                break
+            if _live_amt and _live_amt > tot_amt:
+                _mt["snapshot_amount"] = tot_amt
+                _mt["amount"] = _live_amt
+                _mt["amount_source"] = "live_fallback"
+            else:
+                _mt["partial"] = True
+            print("  !! 快照仅 %d 只，成交额改用 live 兜底: %.4f 万亿" % (len(valid), _mt["amount"] / 1e12), flush=True)
+        result["market_totals"] = _mt
         # 交叉验证：tdxhub 抽查东财快照 top12（数据链核对）
         result["cross_check"] = cross_check_spot(
             sorted(valid, key=lambda x: -(x.get("amount") or 0)))
