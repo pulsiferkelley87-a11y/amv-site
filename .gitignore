@@ -20,3 +20,5 @@ upload_log.txt
 index.py
 index_news.py
 *.zip
+
+data/fundamentals.json      # 每次跑批现抓，不入库（1.2MB/次）
