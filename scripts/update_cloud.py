@@ -652,6 +652,41 @@ def cos_put_support_watch(sw_list, updated_at):
         print("support_watch COS 上传失败:", str(e)[:80])
 
 
+FUND = {}   # code -> 通达信基本面（流通股本/上市日期/行业码/净利润…），见 fetch_fundamentals.py
+
+
+def load_fundamentals():
+    """读 data/fundamentals.json；缺失时返回空字典（不影响主流程）。"""
+    global FUND
+    p = os.path.join(DATA_DIR, "fundamentals.json")
+    if not os.path.exists(p):
+        p = os.path.join(BASE, "fundamentals.json")
+    if not os.path.exists(p):
+        FUND = {}
+        return FUND
+    try:
+        with open(p, encoding="utf-8") as f:
+            FUND = json.load(f).get("stocks") or {}
+    except (OSError, ValueError):
+        FUND = {}
+    print(f"  基本面表: {len(FUND)} 只", flush=True)
+    return FUND
+
+
+def fund_float_mv(code, close):
+    """用通达信流通股本(万股)×收盘价算流通市值；无数据返回 None。"""
+    r = FUND.get(code)
+    if not r:
+        return None
+    try:
+        ltgb = float(r.get("ltgb") or 0)
+    except (TypeError, ValueError):
+        return None
+    if ltgb <= 0 or not close or close <= 0:
+        return None
+    return ltgb * 1e4 * close
+
+
 def load_mv_map(spot):
     """流通市值映射：优先本地 stock_list（新浪口径，亿元->元），否则 spot 快照。"""
     mv_map = {}
@@ -695,7 +730,10 @@ def compute_market_amv(official_dates, snap_map=None, snap_date=None):
         rows = cache.get("rows") or []
         if snap_map:
             rows = augment_rows(code, rows, snap_map, snap_date)
-        mv_now = mv_map.get(code) or 0
+        closes0 = [k.get("close") or 0.0 for k in rows]
+        # 流通市值优先用「通达信流通股本 × 收盘」：比新浪 ltsz 快照精确，
+        # 且 ltsz 缺失的股票也能补上，覆盖率更高。
+        mv_now = fund_float_mv(code, closes0[-1] if closes0 else 0) or mv_map.get(code) or 0
         if len(rows) < 60 or not mv_now:
             return
         closes = [k.get("close") or 0.0 for k in rows]
@@ -1316,6 +1354,7 @@ def fetch_sectors_fallback(spot):
 
 
 def main():
+    load_fundamentals()
     # 北京时间（云端 runner 是 UTC，需 +8）
     bj = datetime.utcnow() + timedelta(hours=8)
     result = {"updated_at": bj.strftime("%Y-%m-%d %H:%M:%S"), "errors": []}
@@ -1579,7 +1618,9 @@ def main():
                 kl = kl.get("rows")
                 kl = augment_rows(s["code"], kl, snap_map, snap_date)
             if kl:
-                amv_r, kdates_r, kseries_r = compute_stock_amv_reg(kl, s.get("float_mv"))
+                _close_last = (kl[-1].get("close") or 0) if kl else 0
+                _fmv = fund_float_mv(s["code"], _close_last) or s.get("float_mv")
+                amv_r, kdates_r, kseries_r = compute_stock_amv_reg(kl, _fmv)
                 stocks_closes[s["code"]] = [r.get("close") or 0.0 for r in kl]
                 if kseries_r:
                     _valid = [round(v, 1) for v in kseries_r[-60:] if v is not None and v > 0]
