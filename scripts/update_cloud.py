@@ -1927,7 +1927,7 @@ def main():
             # 覆盖度归一化：compute_market_amv 只累加"当天有数据的股票"，
             # 早期日子参与股票少会让活跃SZ显得低，形成假的上升斜坡（实测三周虚增 46%）。
             # 按「当日参与数 / 窗口最大参与数」放大，消除覆盖度带来的水平漂移。
-            _nn = mk.get("n") or []
+            _nn = []   # 已停用：窗口内早期日子参与股票少，放大会造出假的上升斜坡
             if _nn and max(_nn) > 0:
                 _nmax = max(_nn)
                 mk["amv"] = [round(v * (_nmax / n) if n else v, 2) for v, n in zip(mk["amv"], _nn)]
@@ -2003,7 +2003,7 @@ def main():
             # 尾部这几个交易日留给每天的实时计算。这样接缝永远只有 5 天，
             # 双端校正的变形极小；也避免 hist 三周不更新导致接缝越拉越远。
             try:
-                TAIL_KEEP = 250   # 近期 250 个交易日每次全量重算：冻结会把旧的缩放漂移固化进去
+                TAIL_KEEP = 5   # 只重算最后 5 天；历史段靠"水平重标定"对齐官方
                 _ds = mk.get("date") or []
                 _vs = mk.get("amv") or []
                 if len(_ds) > TAIL_KEEP + 100:
