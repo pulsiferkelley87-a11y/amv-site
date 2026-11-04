@@ -6,6 +6,10 @@ on:
     - cron: '50 * * * *'   # 每小时第 50 分兑底（GitHub 调度常漏）
   workflow_dispatch: {}
 
+concurrency:
+  group: amv-data
+  cancel-in-progress: false
+
 permissions:
   contents: write
   pages: write
