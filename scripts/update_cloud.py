@@ -1486,6 +1486,18 @@ def main():
         result["self"] = ind
 
     # 4) 逐股递推口径（实测版，相关 0.9983）：新浪自动拉取 + 全部 spot 股票参与排名
+    # 行业兜底表：腾讯/新浪快照不带行业（一律 "—"），东财又常被风控拦。
+    # industry_map.json 由通达信 tdxhy.cfg + tdxzs.cfg 逆向生成，覆盖全市场。
+    _indmap = {}
+    for _p in (os.path.join(DATA_DIR, "industry_map.json"), os.path.join(BASE, "industry_map.json")):
+        if os.path.exists(_p):
+            try:
+                with open(_p, encoding="utf-8") as _f:
+                    _indmap = json.load(_f)
+            except (OSError, ValueError):
+                _indmap = {}
+            break
+    print(f"  行业兜底表: {len(_indmap)} 条", flush=True)
     amv_rows, amv_total, day_map = [], 0.0, {}
     if spot:
         # 阶段 1：前 N 只成交额股票更新当日 kline（N 由环境变量 TOP_N 控制，默认 500）
@@ -1586,9 +1598,12 @@ def main():
                     if _ld >= 1 and _dates[_i]:
                         day_boards.setdefault(_dates[_i], {})[s["code"]] = _ld
                 if amv_r:
+                    _ind = s.get("industry")
+                    if not _ind or _ind == "—":
+                        _ind = _indmap.get(s["code"]) or "—"
                     sig = compute_signals(kseries_r or [], kl)
                     row = {
-                        "code": s["code"], "name": s["name"], "industry": s.get("industry"),
+                        "code": s["code"], "name": s["name"], "industry": _ind,
                         "amount": s.get("amount"), "float_mv": s.get("float_mv"),
                         "turnover": s.get("turnover"), "pct": s.get("pct"),
                         "amount_pct": s.get("amount_pct"), "amv": amv_r,
@@ -1605,13 +1620,13 @@ def main():
                         _pc = kl[i - 1].get("close") if i > 0 else None
                         _pct = ((kl[i].get("close") or 0) / _pc - 1) * 100 if _pc else None
                         rec = {
-                            "code": s["code"], "name": s["name"], "industry": s.get("industry"),
+                            "code": s["code"], "name": s["name"], "industry": _ind,
                             "amount": kl[i].get("amount"), "turnover": kl[i].get("turnover"),
                             "amv": kseries_r[i] if i < len(kseries_r) and kseries_r[i] is not None else None,
                             "pct": round(_pct, 2) if _pct is not None else None,
                         }
                         day["stocks"].append(rec)
-                        ind = s.get("industry") or "—"
+                        ind = _ind
                         if rec.get("amv"):
                             day["sector_amv"][ind] = day["sector_amv"].get(ind, 0.0) + rec["amv"]
         print(f"  amv compute done={len(amv_rows)}", flush=True)
