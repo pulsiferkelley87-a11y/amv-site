@@ -71,6 +71,7 @@ def fetch_one(code):
         r = tdxhub.quotes(code, sc, opts=OPTS)
     except Exception as e:                      # 单只失败不影响整体
         return code, None, str(e)[:80]
+    hq = r.get("HQInfo") or {}
     cw = r.get("CwInfo") or {}
     ex = r.get("ExtInfo") or {}
     pr = r.get("ProInfo") or {}
@@ -78,6 +79,7 @@ def fetch_one(code):
     if not cw and not ex:
         return code, None, "empty"
     return code, {
+        "px": hq.get("Now"),                 # 最新价：用于算全市场聚合 PE
         "ltgb": cw.get("LTGB") or ex.get("LTGB"),
         "zgb": cw.get("ZGB") or ex.get("ZGB"),
         "ipo": str(cw.get("Start") or ""),
