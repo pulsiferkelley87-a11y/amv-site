@@ -297,7 +297,7 @@ def compute_bb_history(official_rows):
     return out[-1300:]
 
 
-def compute_bull_bear(stocks_rows, market_amount_series, sentiment_args, self_series=None):
+def compute_bull_bear(stocks_rows, market_amount_series, sentiment_args, self_series=None, valuation=None):
     """主计算。"""
     indices_rows = {}
     for code, name in INDICES_BB:
@@ -323,6 +323,9 @@ def compute_bull_bear(stocks_rows, market_amount_series, sentiment_args, self_se
     macro = load_macro()
     m_score = macro.get("macro_score")
     v_score = macro.get("valuation_score")
+    # 有真实 PE/PB 分位就用它（compute_valuation 产出），否则退回 macro.json 手填值
+    if valuation and valuation.get("score") is not None:
+        v_score = valuation["score"]
     total = (trend * 0.25 + breadth * 0.20 + volume * 0.15 +
              (m_score or 0) * 0.15 + (v_score or 0) * 0.10 + senti * 0.15)
     return {
@@ -337,6 +340,7 @@ def compute_bull_bear(stocks_rows, market_amount_series, sentiment_args, self_se
             "breadth": breadth_details,
             "volume": volume_details,
             "sentiment": senti_details,
+            "valuation": valuation or {"mode": "macro.json", "score": v_score},
             "macro_note": macro.get("note", "暂缺"),
             "macro_asof": macro.get("asof", ""),
         },
