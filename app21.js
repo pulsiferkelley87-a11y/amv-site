@@ -345,7 +345,9 @@ function renderMeta() {
     `(<span class="${cls}">${chg >= 0 ? "+" : ""}${chg}%</span>) ` +
     `活跃比例 <b>${(r * 100).toFixed(2)}%</b> ` +
     (D.market_totals
-      ? `｜ 全市场成交额 ${(D.market_totals.amount / 1e12).toFixed(2)} 万亿`
+      ? `｜ 全市场成交额 ${(D.market_totals.amount / 1e12).toFixed(2)} 万亿` +
+            (D.market_totals.amount_source === "live_fallback" ? "（快照不全，已用实时兜底）"
+             : (D.market_totals.partial ? "（快照不全，可能偏低）" : ""))
       : "") +
     (D.errors.length ? ` ｜ <span class="down">${D.errors.join("；")}</span>` : "");
   markStale(D.updated_at);
