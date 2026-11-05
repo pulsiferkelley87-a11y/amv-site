@@ -1427,6 +1427,8 @@ function renderMethodBox() {
   const upN = sig.filter(x => x.cross === "up").length;
   const downN = sig.filter(x => x.cross === "down").length;
   const mt = D.market_totals;
+  const allN = (D.all_stocks || []).length;
+  const mainlxN = (D.all_stocks || []).filter(x => x.mainlx != null).length;
 
   // 牛熊五档：只标当前落在哪一档，不预测
   const band = total == null ? "—"
@@ -1460,6 +1462,10 @@ function renderMethodBox() {
       "在「快上穿」基础上，要求现价高于最近支撑位且距离 <3%（普通版支撑距离阈值是 <5%）"],
     ["个股信号 上穿 / 下穿", upN + " / " + downN, "当日拐头数",
       "上穿：前一日 A<MA10 且当日 A≥MA10；下穿反之。分位 = 该股活跃度在自身近 250 日中的位置"],
+    ["今日选股 · 活跃度拐头", ((D.picks || []).length) + " 只", "最新交易日触发",
+      "A 上穿自身 MA10：前一日 A≤MA10 且当日 A>MA10；当日成交额>0；历史需 ≥70 根 K 线；同时记录 A 的连续上升天数"],
+    ["资金流覆盖", mainlxN + " / " + allN, "东财口径",
+      "主力净额为东财资金流字段；自由流通换手 = 成交额 ÷ 流通市值；取不到值的股票显示 —，不做插补"],
     ["沪深京成交额", mt ? (mt.amount / 1e12).toFixed(2) + " 万亿" : "—", "个股快照求和",
       "个股 amount 加总；与通达信 TOTALHQINFO(6) 逐项核对，偏差见上方「通达信口径核对」"],
   ];
@@ -1481,6 +1487,8 @@ function renderMethodBox() {
     (bb && bb.updated_at ? '　牛熊口径更新：' + esc(bb.updated_at) : '') +
     '</div>';
 }
+
+window.renderMethodBox = renderMethodBox;
 
 function esc(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -1545,7 +1553,6 @@ function renderAll() {
   renderAboutToCrossSupport();
   renderCrossPromotion();
   renderMeta();
-  try { renderMethodBox(); } catch (e) { }
   try { renderTdxCheck(); } catch (e) {
     const box = document.getElementById("tdxCheck");
     if (box) box.textContent = "通达信口径核对渲染失败：" + (e && e.message ? e.message : e);
