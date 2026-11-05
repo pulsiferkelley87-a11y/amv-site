@@ -350,18 +350,62 @@ function renderMeta() {
     : D.official_source === "csv_fallback"
       ? "本地 CSV 底表（指南针运行时缓存被锁）"
       : "上次 JSON";
+  const mt = D.market_totals;
+  const split = marketSplit();
+
   document.getElementById("meta").innerHTML =
     `<span id="metaTime">数据更新：${D.updated_at}</span> ｜ 官方序列来源：${src} ｜ 最新交易日 ${o.date[last]} ` +
     `0AMV <b>${amv.toLocaleString("zh-CN", { maximumFractionDigits: 1 })}</b> ` +
     `(<span class="${cls}">${chg >= 0 ? "+" : ""}${chg}%</span>) ` +
     `活跃比例 <b>${(r * 100).toFixed(2)}%</b> ` +
-    (D.market_totals
-      ? `｜ 全市场成交额 ${(D.market_totals.amount / 1e12).toFixed(2)} 万亿` +
-            (D.market_totals.amount_source === "live_fallback" ? "（快照不全，已用实时兜底）"
-             : (D.market_totals.partial ? "（快照不全，可能偏低）" : ""))
+    (mt
+      ? `｜ 沪深京成交额 <b>${(mt.amount / 1e12).toFixed(2)}</b> 万亿` +
+        (split ? `（沪 ${split.sh} ／ 深 ${split.sz} ／ 北 ${split.bj}）` : "（个股快照合计）") +
+        (mt.amount_source === "live_fallback" ? " <span class=\"down\">快照不全，已用实时兜底</span>"
+         : (mt.partial ? " <span class=\"down\">快照不全，可能偏低</span>" : ""))
       : "") +
     (D.errors.length ? ` ｜ <span class="down">${D.errors.join("；")}</span>` : "");
+
+  // 供 ui-dashboard.js 直接读取：KPI 条原来靠正则去刮这段 innerHTML，
+  // 一旦文案改一个字符（比如"全市场"→"沪深京"）就静默取不到值。
+  // __AMV_DATA 是给 fundamentals.js 用的：现代浏览器路径下数据走脚本内 let D，
+  // window.DATA 并不存在，外部脚本拿不到 all_stocks，只能由这里透出。
+  window.__AMV_DATA = D;
+  window.__AMV_META = {
+    updated_at: D.updated_at || "",
+    lastTradeDate: o.date[last] || "",
+    amv: amv,
+    amvPct: chg,
+    ratio: r * 100,
+    amount: mt ? mt.amount / 1e12 : null,
+    amountSource: mt ? (mt.amount_source || "") : "",
+    amountPartial: !!(mt && mt.partial),
+    byMarket: split,
+    fundamentalsUpdatedAt: D.fundamentals_updated_at || ""
+  };
   markStale(D.updated_at);
+}
+
+/* 沪深京成交额拆分：直接按代码前缀从个股快照里算，不改后端口径。
+   仅用于让"成交额"这个数字可被核对（沪 + 深 + 北 应等于合计）。
+   6/9=沪（含 900 B股），0/2/3=深（含 200 B股），4/8=北交所。 */
+function marketSplit() {
+  const list = (D && D.all_stocks) || [];
+  if (!list.length) return null;
+  let sh = 0, sz = 0, bj = 0, other = 0;
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i].amount;
+    if (!a) continue;
+    const c = String(list[i].code || "")[0];
+    if (c === "6" || c === "9") sh += a;
+    else if (c === "0" || c === "2" || c === "3") sz += a;
+    else if (c === "4" || c === "8") bj += a;
+    else other += a;
+  }
+  const t = sh + sz + bj + other;
+  if (!t) return null;
+  const w = v => (v / 1e12).toFixed(2);
+  return { sh: w(sh), sz: w(sz), bj: w(bj), other: w(other), total: w(t) };
 }
 
 function markStale(updatedAt) {
@@ -1169,31 +1213,87 @@ function toggleFlowSort() {
   if (b) b.textContent = FLOW_DESC ? "净流入 ↓" : "净流出 ↑";
   renderFlow();
 }
+function flowKey() {
+  const el = document.getElementById("flowKey");
+  const v = el ? el.value : "mainlx";
+  return ["mainlx", "m3", "m5", "m10", "ddx"].indexOf(v) >= 0 ? v : "mainlx";
+}
 function renderFlow() {
   const box = document.getElementById("flowBox");
   if (!box) return;
-  const list = (D.all_stocks || []).filter(s => s.mainlx != null && s.mainlx !== 0);
-  if (!list.length) { box.innerHTML = '<span style="color:var(--muted)">暂无资金流数据</span>'; return; }
-  list.sort((a, b) => FLOW_DESC ? b.mainlx - a.mainlx : a.mainlx - b.mainlx);
-  const rows = list.slice(0, 20);
-  const yi = v => (v == null ? "—" : ((v / 1e8 >= 0 ? "+" : "") + (v / 1e8).toFixed(2)));
+  const note = document.getElementById("flowNote");
+  const all = (D.all_stocks || []);
+  const key = flowKey();
+  const list = all.filter(s => s.mainlx != null && s.mainlx !== 0);
+
+  if (!list.length) {
+    // 空态必须说清"为什么空"：数据没发布 / 还没合并，和"真的一只都没有"是两回事。
+    const fu = (D && D.fundamentals_updated_at) || "";
+    const st = window.__AMV_FUND || {};
+    let why, hint;
+    if (!all.length) {
+      why = "行情主数据尚未加载完成";
+      hint = "稍等几秒，或点右上角「🔄 立即刷新」。";
+    } else if (fu) {
+      why = `基本面文件已加载（${fu}），但合并后没有可用的主力净流入字段`;
+      hint = "可能是 fundamentals.json 与当前快照的股票代码对不上，或该次抓取本身为空。";
+    } else if (st.state === "error") {
+      why = "基本面数据未发布或拉取失败：" + (st.error || "fundamentals.json 不可用");
+      hint = "面板依赖 <code>fundamentals.json</code>，它与行情主数据分开更新；缺它时其余页面不受影响。";
+    } else if (st.state === "loading") {
+      why = "基本面数据正在加载…";
+      hint = "这是独立的小文件（约 500 KB），通常 1-2 秒完成。";
+    } else {
+      why = "基本面数据尚未就绪";
+      hint = "跑一次 <code>scripts/fetch_fundamentals.py</code> 后由发布流程带上 <code>fundamentals.json</code> 即可。";
+    }
+    box.innerHTML = '<div style="color:var(--muted);line-height:1.8">暂无资金流数据 —— ' + why +
+      '。<br>' + hint + '</div>';
+    if (note) note.textContent = "";
+    return;
+  }
+
+  const val = s => {
+    const x = s[key];
+    return (x == null || !isFinite(x)) ? null : Number(x);
+  };
+  list.sort((a, b) => {
+    const x = val(a), y = val(b);
+    if (x == null) return 1;
+    if (y == null) return -1;
+    return FLOW_DESC ? y - x : x - y;
+  });
+  const rows = list.slice(0, 30);
+  const yi = v => (v == null ? "—" : (v / 1e8 >= 0 ? "+" : "") + (v / 1e8).toFixed(2));
   const cls = v => (v == null ? "" : (v >= 0 ? "up" : "down"));
+  const r3 = v => (v == null ? "—" : Number(v).toFixed(3));
+
   let html = '<table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>行业</th>' +
-    '<th>主力(亿)</th><th>5日(亿)</th><th>DDX</th><th>自由换手</th><th>标记</th><th>涨跌幅</th>' +
+    '<th>今日(亿)</th><th>3日</th><th>5日</th><th>10日</th><th>DDX</th><th>DDY</th>' +
+    '<th>自由换手</th><th>标记</th><th>涨跌幅</th>' +
     '</tr></thead><tbody>';
   rows.forEach((s, i) => {
     const pct = s.pct == null ? null : Number(s.pct);
     const pctTxt = pct == null ? "—" : (pct >= 0 ? "+" : "") + pct.toFixed(2) + "%";
     html += `<tr><td>${i + 1}</td><td>${s.code}</td><td>${s.name}</td><td>${s.industry || "—"}</td>` +
       `<td class="${cls(s.mainlx)}">${yi(s.mainlx)}</td>` +
+      `<td class="${cls(s.m3)}">${yi(s.m3)}</td>` +
       `<td class="${cls(s.m5)}">${yi(s.m5)}</td>` +
-      `<td>${s.ddx == null ? "—" : Number(s.ddx).toFixed(3)}</td>` +
+      `<td class="${cls(s.m10)}">${yi(s.m10)}</td>` +
+      `<td>${r3(s.ddx)}</td><td>${r3(s.ddy)}</td>` +
       `<td>${s.fturn == null ? "—" : Number(s.fturn).toFixed(2) + "%"}</td>` +
       `<td>${s.tags || ""}</td>` +
       `<td class="${pct == null ? "" : (pct >= 0 ? "up" : "down")}">${pctTxt}</td></tr>`;
   });
   html += "</tbody></table>";
   box.innerHTML = html;
+
+  if (note) {
+    const fu = (D && D.fundamentals_updated_at) || "未知";
+    const keyName = { mainlx: "今日主力净流入", m3: "3日累计", m5: "5日累计", m10: "10日累计", ddx: "DDX 大单动向" }[key];
+    const pos = list.filter(s => (val(s) || 0) > 0).length;
+    note.textContent = `覆盖 ${list.length} 只（净流入为正 ${pos} 只）｜ 排序口径：${keyName}｜ 基本面时点：${fu}`;
+  }
 }
 
 function esc(s) {
@@ -1266,6 +1366,9 @@ function renderAll() {
   renderSectors();
   renderStocks();
   renderFlow();
+  // 整包数据刷新（autoRefreshData / 主题切换）会把 D 换成新对象，
+  // 外部合并进来的基本面字段随之丢失。让 fundamentals.js 重新贴一次。
+  try { if (typeof window.__AMV_FUND_APPLY === "function") window.__AMV_FUND_APPLY(); } catch (e) { }
 }
 
 let BB_DATA = null;
