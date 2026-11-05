@@ -1511,12 +1511,19 @@ function renderMethodsLive() {
 
   let blkLeaderN = 0;
   try {
+    /* 与 renderLeader 同一口径：优先 signals，缺了就取 limit_up_list 的 limit_days */
+    const ld6 = Object.create(null);
+    Object.keys(sigs).forEach(k => { const s = sigs[k]; if (s && s.limit_days) ld6[normCode(k)] = s.limit_days; });
+    (LD.limit_up_list || []).forEach(s => {
+      const c = normCode(s.code);
+      if (s.limit_days != null) ld6[c] = Math.max(ld6[c] || 0, s.limit_days || 0);
+    });
     Object.keys(MEMBERS || {}).forEach(blk => {
       const codes = MEMBERS[blk] || [];
       let best = 0;
       for (let i = 0; i < codes.length; i++) {
-        const sg = sig6[normCode(codes[i])];
-        if (sg && (sg.limit_days || 0) > best) best = sg.limit_days || 0;
+        const ld = ld6[normCode(codes[i])] || 0;
+        if (ld > best) best = ld;
       }
       if (best >= 1) blkLeaderN++;
     });
@@ -1559,7 +1566,7 @@ function renderMethodsLive() {
       PROMO ? (PROMO.prev + " → " + PROMO.promoted) : "—",
       PROMO && PROMO.rate != null ? "晋级率 " + PROMO.rate + "%" : "次日复盘",
       "拿昨日快上穿名单，看今日有多少只 A 真的站上了 MA10；共振名单单独统计，两者分开算"],
-    ["龙头 · 补涨识别", sigEmpty ? "未就绪" : (blkLeaderN + " 个板块有连板股"), sigEmpty ? "依赖个股信号" : "连板口径",
+    ["龙头 · 补涨识别", blkLeaderN + " 个板块有连板股", "连板口径",
       "每个板块取连板天数最高的成分股作为该板块最强；连板 ≥1 才入选；同一只股属多个板块时只保留连板最高的那条；1 板进「首板候选」，≥2 板进「持续连板」"],
     ["高切低监测", "炸板 " + brokeN + " / 首板 " + firstN, "情绪切换",
       "高位退潮 = 当日炸板名单；低位接力 = 今日首板（连板天数 = 1）名单；两者只是并列展示，不构成因果判断"],
@@ -1582,17 +1589,31 @@ function renderMethodsLive() {
 
 function renderLeader() {
   const el = document.getElementById("leaderBox");
-  if (!el || !LD || !LD.signals) return;
-  const sigs = LD.signals;
+  if (!el || !LD) return;
+  const sigs = LD.signals || {};
+  /* 连板天数（limit_days）真正挂在 limit_up_list 上，signals 里没有这个字段。
+     原实现只查 signals，所以永远挑不出"板块最强股"，龙头卡一直是空的。
+     这里把两个来源合成一张 6 位码索引表，以 limit_up_list 为准。 */
+  const ld6 = Object.create(null);
+  Object.keys(sigs).forEach(k => {
+    const s = sigs[k];
+    if (s && s.limit_days) ld6[normCode(k)] = s.limit_days;
+  });
+  (LD.limit_up_list || []).forEach(s => {
+    const c = normCode(s.code);
+    if (s.limit_days != null) ld6[c] = Math.max(ld6[c] || 0, s.limit_days || 0);
+  });
   let leaders = [];
   Object.keys(MEMBERS).forEach(blk => {
     const codes = MEMBERS[blk] || [];
     let best = null;
     codes.forEach(c => {
-      const sig = sigs[c] || sigs[c.slice(2)];
-      if (!sig) return;
-      if (!best || (sig.limit_days || 0) > (best.limit_days || 0)) {
-        best = Object.assign({ code: c }, sig);
+      const key = normCode(c);
+      const sig = sigs[c] || sigs[c.slice(2)] || sigs[key] || {};
+      const ld = ld6[key] || 0;
+      if (ld < 1) return;
+      if (!best || ld > (best.limit_days || 0)) {
+        best = Object.assign({ code: c }, sig, { limit_days: ld });
       }
     });
     if (best && (best.limit_days || 0) >= 1) {
