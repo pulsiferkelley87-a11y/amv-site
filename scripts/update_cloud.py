@@ -2116,6 +2116,15 @@ def main():
                     i += 1
                 tail_d = mk["date"][i:]
                 tail_v = mk["amv"][i:]
+                # 尾部同样要过滤覆盖度：某天只有部分股票刷新时，全量求和会塌下去，
+                # 在图上表现为"单日暴跌 59%"。只保留参与数达标的交易日。
+                _nmap = dict(zip(mk["date"], mk.get("n") or []))
+                _ok = [(d, v) for d, v in zip(tail_d, tail_v) if _nmap.get(d, 0) >= 5000]
+                if _ok and len(_ok) < len(tail_d):
+                    print(f"  尾部剔除 {len(tail_d)-len(_ok)} 个覆盖不足的交易日", flush=True)
+                if _ok:
+                    tail_d = [d for d, _ in _ok]
+                    tail_v = [v for _, v in _ok]
                 hist_last = hist["amv"][-1] if hist.get("amv") else None
                 # 锚点索引：缩放的终点必须落在「最后一个与官方重合的交易日」，
                 # 而不是尾部最后一天——否则锚点错位一天，整段会被系统性抬高/压低。
