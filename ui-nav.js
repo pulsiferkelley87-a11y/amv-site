@@ -30,7 +30,10 @@
   /* 2. 取标题纯文本：h2 里常带 <span> 说明，只要主标题 */
   function titleOf(h2) {
     var clone = h2.cloneNode(true);
-    Array.prototype.forEach.call(clone.children, function (c) {
+    // 注意：clone.children 是「活的」HTMLCollection，一边 forEach 一边 remove 会跳过元素。
+    // 原来每个 h2 只有一个 span 所以没暴露；标题里加了口径徽标（第二个 span）后就漏了，
+    // 导航会被撑成"通达信口径核对 对应公式 TOTAL…"。先快照成数组再逐个删。
+    Array.prototype.slice.call(clone.children).forEach(function (c) {
       if (c.tagName === "SPAN" || c.tagName === "A") c.remove();
     });
     return clone.textContent.replace(/\s+/g, " ").trim();
