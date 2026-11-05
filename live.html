@@ -1205,9 +1205,53 @@ function showDayIntraday(dateStr) {
   const bars = KL_TRENDS.byDate[d];
   const first = KL_TRENDS.dates[0], lastD = KL_TRENDS.dates[KL_TRENDS.dates.length - 1];
   if (!bars || !bars.length) {
+    // 腾讯只给最近 5 个交易日；更早的走「云端通达信缓存」（GitHub Actions 取数 → COS）
+    const c6 = normCode(KL_TRENDS_SYM || LAST_KLINE_CODE || "");
+    if (c6 && !el.__cosTried) {
+      el.__cosTried = d;
+      el.innerHTML = '<span style="font-size:11.5px;color:var(--muted);">查云端通达信缓存 ' + d + '…</span>';
+      const u = "https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com/minute/" +
+        c6 + "/" + d.replace(/-/g, "") + "/p7.json?_=" + Date.now();
+      fetch(u, { cache: "no-store" })
+        .then(r => r.ok ? r.json() : null)
+        .then(j => {
+          if (j && j.bars && j.bars.length) {
+            // 云端数据字段是 {t,o,h,l,c,amt,vol}，转成绘图用的 {t,price,avg,dvol,vol,amt}
+            const conv = j.bars.map(b => ({
+              t: b.t, price: b.c, vol: b.vol, dvol: b.vol, amt: b.amt,
+              avg: (b.vol > 0 && b.amt > 0) ? b.amt / (b.vol * 100) : b.c
+            }));
+            const o0 = conv[0].price, c0 = conv[conv.length - 1].price;
+            const hi = Math.max.apply(null, conv.map(x => x.price));
+            const lo = Math.min.apply(null, conv.map(x => x.price));
+            const vtot = conv.reduce((a, x) => a + (x.dvol || 0), 0);
+            const atot = conv.reduce((a, x) => a + (x.amt || 0), 0);
+            el.innerHTML =
+              '<div style="font-size:12px;margin:6px 0 4px;">📈 <b>' + d + '</b> 分时 ' +
+              '<span class="cb cb-tdx">通达信云端</span> ' +
+              '<span style="color:var(--muted);">（' + conv.length + ' 根）</span> ｜ ' +
+              '开 ' + o0.toFixed(2) + ' ｜ 收 <b class="' + (c0 >= o0 ? "up" : "down") + '">' + c0.toFixed(2) + '</b> ｜ ' +
+              '高 ' + hi.toFixed(2) + ' ｜ 低 ' + lo.toFixed(2) + ' ｜ ' +
+              '量 ' + (vtot / 1e4).toFixed(1) + ' 万手 ｜ 额 ' + (atot / 1e8).toFixed(2) + ' 亿</div>' +
+              dayIntraSVG(conv, null) +
+              '<div style="font-size:11px;color:var(--muted);margin-top:3px;">' +
+              '数据由云端（GitHub Actions）用通达信 TQLEX 取数后缓存在 COS，手机/电脑打开都直接读，不经过任何本机进程。</div>';
+          } else {
+            el.innerHTML = '<span style="font-size:11.5px;color:var(--muted);">' +
+              "「" + d + "」云端也还没有缓存。腾讯只提供最近 5 个交易日（" + first + " ~ " + lastD + "），" +
+              "更早的日期需要在云端跑一次取数（GitHub Actions → minute.yml）才会出现。" +
+              "不会用日K数据伪造分时。</span>";
+          }
+        })
+        .catch(() => {
+          el.innerHTML = '<span style="font-size:11.5px;color:var(--muted);">' +
+            "「" + d + "」云端缓存读取失败（网络或 CORS）。腾讯只提供最近 5 个交易日：" + first + " ~ " + lastD + "。</span>";
+        });
+      return;
+    }
     el.innerHTML = '<span style="font-size:11.5px;color:var(--muted);">' +
-      "「" + d + "」的分时取不到 —— 免费源（腾讯 day/query）只提供最近 5 个交易日：" +
-      first + " ~ " + lastD + "。更早的日内数据需要 L2 历史行情，本站没有接入，也不会用日K数据伪造分时。</span>";
+      "「" + d + "」的分时取不到 —— 腾讯只提供最近 5 个交易日：" +
+      first + " ~ " + lastD + "，云端也还没缓存这一天。</span>";
     return;
   }
 
