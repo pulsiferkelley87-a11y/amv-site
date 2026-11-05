@@ -54,6 +54,17 @@ jobs:
               n = len(json.loads(r.read().decode()).get("workflow_runs") or [])
           if n:
               print("已有 %d 个 daily 在跑，跳过" % n); sys.exit(0)
+          # 限流：1 小时内已经触发过就不再补。否则 pending 会被新触发反复顶掉，
+          # 一轮都跑不完（实测 12 分钟内连开 8 次、全部取消）。
+          reqr = urllib.request.Request(
+              "https://api.github.com/repos/%s/actions/workflows/daily.yml/runs?per_page=10" % repo, headers=hdr)
+          with urllib.request.urlopen(reqr, timeout=30) as r:
+              _runs = json.loads(r.read().decode()).get("workflow_runs") or []
+          _now = datetime.now(timezone.utc)
+          _recent = [x for x in _runs
+                     if (_now - datetime.fromisoformat(x["created_at"].replace("Z", "+00:00"))).total_seconds() < 3600]
+          if _recent:
+              print("1 小时内已有 %d 次 daily 运行，本轮不补跑" % len(_recent)); sys.exit(0)
           hdr2 = dict(hdr); hdr2["Content-Type"] = "application/json"
           req2 = urllib.request.Request("https://api.github.com/repos/%s/actions/workflows/daily.yml/dispatches" % repo,
                                          data=json.dumps({"ref": "main"}).encode(), method="POST", headers=hdr2)
