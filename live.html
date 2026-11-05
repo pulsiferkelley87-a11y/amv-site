@@ -157,7 +157,12 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
       <div class="scroll" id="blkList"></div>
     </div>
     <div class="card">
-      <h2>个股实时 <button class="tab" onclick="backToStkList()" style="float:right;">返回全市场</button></h2>
+      <h2>个股实时
+        <span style="float:right;">
+          <button class="tab" onclick="exportStkCsv()" title="导出当前榜单为 CSV（Excel 可直接打开）">⬇ CSV</button>
+          <button class="tab" onclick="backToStkList()">返回全市场</button>
+        </span>
+      </h2>
       <div class="tabs">
         <button class="tab active" onclick="setStkTab('up', event)">涨幅榜</button>
         <button class="tab" onclick="setStkTab('down', event)">跌幅榜</button>
@@ -1707,7 +1712,50 @@ function renderStocks() {
   });
   html += "</tbody></table>";
   document.getElementById("stkList").innerHTML = html;
+  window.__LAST_STK = list;   // 供「导出 CSV」复用，避免导出逻辑再抄一遍筛选/排序
 }
+
+/* 把当前榜单导出为 CSV。带 BOM，Excel 直接双击能正确识别中文。 */
+function exportStkCsv() {
+  const rows = window.__LAST_STK || ((LD && LD.stocks) || []);
+  if (!rows.length) { alert("当前没有可导出的数据"); return; }
+  const head = ["代码", "名称", "现价", "涨跌幅%", "成交额(亿)", "换手率%", "流通市值(亿)", "主力净额(亿)", "DDX"];
+  const esc = v => {
+    const s = v == null ? "" : String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = [head.join(",")];
+  rows.forEach(s => {
+    lines.push([
+      normCode(s.code), s.name,
+      s.price != null ? s.price.toFixed(2) : "",
+      s.pct != null ? s.pct.toFixed(2) : "",
+      s.amount != null ? (s.amount / 1e8).toFixed(2) : "",
+      s.turnover != null ? s.turnover.toFixed(2) : "",
+      s.float_mv != null ? (s.float_mv / 1e4).toFixed(0) : "",
+      s.mainlx != null ? (s.mainlx / 1e8).toFixed(2) : "",
+      s.ddx != null ? s.ddx : "",
+    ].map(esc).join(","));
+  });
+  const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  const d = new Date();
+  const tag = ["up", "down", "amount", "turnover", "flow"].indexOf(STK_TAB) >= 0 ? STK_TAB : "list";
+  a.href = URL.createObjectURL(blob);
+  a.download = `amv-${tag}-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+}
+
+/* "/" 快捷聚焦搜索框（不在输入框里时才生效） */
+document.addEventListener("keydown", function (e) {
+  if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  const box = document.getElementById("stkSearch") || document.getElementById("sigSearch");
+  if (box) { e.preventDefault(); box.focus(); box.select && box.select(); }
+});
 
 function setBlkTab(t, ev) {
   BLK_TAB = t;
