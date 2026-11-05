@@ -190,6 +190,10 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
     <div class="scroll" id="pickTable"></div>
   </div>
   <div class="card full">
+    <h2>💰 主力资金流 <span style="font-size:12px;color:var(--muted);font-weight:normal;">通达信主力净流入 · 5 日累计 · DDX 大单动向</span><button id="btnFlow" onclick="toggleFlowSort()" style="float:right;padding:2px 10px;border:1px solid var(--border);border-radius:5px;background:var(--card);color:var(--text);font-size:12px;cursor:pointer;">净流入 ↓</button></h2>
+    <div id="flowBox" style="font-size:12.5px;"></div>
+  </div>
+  <div class="card full">
     <h2>个股信号面板 · 逐股递推实测公式
       <span style="float:right;font-size:12px;color:var(--muted);font-weight:normal;">基于自研递推模型（与官方相关 0.9983）：活跃SZ 相对自身 MA10 偏离 + 250 日分位 + 拐头方向</span>
     </h2>
@@ -240,7 +244,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
 // 固定构建号加载：发版时改 BUILD_ID 即可，平时命中浏览器缓存。
 // （原实现每次刷新都取当前毫秒时间戳，导致 app21.js 与 app-data.js 每次重下）
 (function () {
-  var BUILD_ID = "20261105a";
+  var BUILD_ID = "20261105b";
   // 旧浏览器（无 DecompressionStream）：先把数据落地，再跑主脚本。
   // 原顺序会让 app21.js 末尾的顶层 load() 在 window.DATA 就绪前执行并提前返回，主图表空白。
   if (typeof DecompressionStream === "undefined") {
