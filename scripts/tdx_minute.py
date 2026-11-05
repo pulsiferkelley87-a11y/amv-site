@@ -35,10 +35,13 @@ MAX_PAGES = 80      # 最多往回翻 80 页（≈230 个交易日），防止�
 def setcode_of(code: str) -> int:
     """'1'=沪 '0'=深 '2'=北（与 tdxhub.setcode_of 一致，这里显式化便于阅读）"""
     c = str(code)
+    # 顺序很重要：北交所要先判。
+    # 原来沪市那一行里有个裸 "9"，会把 92xxxx（北交所）吞成沪市，
+    # 结果北交所股票一律取不到数据（Setcode 错，接口返回空）。
+    if c.startswith(("92", "4", "8", "43", "83", "87")):
+        return 2
     if c.startswith(("60", "68", "5", "9", "11", "13")):
         return 1
-    if c.startswith(("4", "8", "92", "43", "83", "87")):
-        return 2
     return 0
 
 
@@ -70,8 +73,31 @@ def fetch_day(code, date_str, verbose=False, period=7):
     """
     date_str = str(date_str).replace("-", "")
     sc = setcode_of(code)
+
+    # 快路径：最新一个交易日必然在第一页（700 根 ≈ 2.9 天）。
+    # 批量预热时天天都命中这条，175 只从"每只翻 7 页"降到"每只 1 次请求"。
+    first = _page(code, sc, 0, period)
+    if not first:
+        return {"code": str(code), "date": date_str, "bars": []}
+    ds0 = [str(r[0]) for r in first]
+    if min(ds0) <= date_str <= max(ds0):
+        found0 = {}
+        for r in first:
+            if str(r[0]) == date_str:
+                b = _to_bar(r)
+                found0[b["t"]] = b
+        if verbose:
+            print("  快路径：目标日就在第 1 页，%d 根" % len(found0))
+        return {"code": str(code), "date": date_str,
+                "bars": [found0[k] for k in sorted(found0.keys())]}
+
+    # 目标日晚于该股最新一根 → 当天停牌/未上市，直接判空。
+    # 少了这一条，停牌股会一路翻满 80 页才放弃，批量预热能被拖死。
+    if date_str > max(ds0):
+        return {"code": str(code), "date": date_str, "bars": []}
+
     found = {}
-    for page in range(MAX_PAGES):
+    for page in range(1, MAX_PAGES):
         rows = _page(code, sc, page * PAGE, period)
         if not rows:
             break
