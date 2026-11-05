@@ -1,0 +1,209 @@
+/* ============================================================================
+ * ui-resp.css —— 主页(index) 与 实盘页(live) 共用的响应式层
+ *
+ * 设计原则：
+ *   1. 只在窄屏生效，桌面端一律不动 —— 实盘页的桌面版是当前视觉最好的一版，
+ *      没理由为了"统一"去改它。
+ *   2. 只解决真实问题：横向溢出、控件被压扁、表格挤成一条、触摸目标太小、
+ *      弹窗盖不住。不做纯装饰性改动。
+ *   3. 用到的颜色/圆角全部带 fallback（var(--x, fallback)），
+ *      因为 live.html 没有引入 ui-upgrade.css 的 token。
+ *   4. 必须在两页最后加载，靠"后加载 + 同特异性"覆盖前面的规则，
+ *      避免到处写 !important。
+ *
+ * 断点：
+ *   ≤1024px  平板横屏 / 小笔记本：双列降到两列、表格允许横滚
+ *   ≤720px   手机横屏 / 竖屏大屏：KPI 2×2、指数 2×2、表头控件换行
+ *   ≤420px   小屏手机：进一步压缩字号与内边距
+ * ==========================================================================*/
+
+/* iOS 横屏会自作主张放大字号，关掉 */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* 图片/SVG/画布永远不超过容器（分时图是 viewBox 自适应的，这里兜底） */
+img, svg, canvas, video { max-width: 100%; }
+
+/* 长串（代码、URL、连续中文数字）要能断行，否则撑破容器 */
+body { overflow-wrap: break-word; }
+code, .meta, .note { overflow-wrap: anywhere; }
+
+/* ─────────────────────────── ≤1024px ─────────────────────────── */
+@media (max-width: 1024px) {
+  /* 表格一律允许横向滚动：窄屏下宁可左右拖，也不要压成看不清的一列 */
+  .scroll { overflow-x: auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .scroll > table { min-width: 620px; }
+
+  /* 触控目标：32px 是可点击的下限，桌面端保持原样 */
+  .tab, .modeBtn, .sectorBtn, header button, .card button {
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* ─────────────────────────── ≤720px ─────────────────────────── */
+@media (max-width: 720px) {
+  /* 兜底：任何情况下都不允许横向滚动条。
+     用 clip 而不是 hidden —— hidden 会把 html 变成滚动容器，sticky 顶栏会失效。 */
+  html { overflow-x: clip; }
+  body { max-width: 100%; overflow-x: clip; }
+  header, .wrap, .card { max-width: 100%; box-sizing: border-box; }
+
+  /* ── 头部：绝不横向溢出 ── */
+  header {
+    padding: 12px 14px 10px;
+    flex-wrap: wrap;                 /* live 用 flex 头部，允许折行 */
+    row-gap: 6px;
+  }
+  header h1 { font-size: 17px; line-height: 1.35; }
+  header .meta {
+    font-size: 11.5px;
+    line-height: 1.65;
+    margin-top: 4px;
+    white-space: normal;
+    word-break: break-word;
+  }
+  /* 实盘页的"更新时间"会挤出去，让它独占一行 */
+  header .time {
+    margin-left: 0;
+    width: 100%;
+    font-size: 11.5px;
+    line-height: 1.6;
+  }
+  header .back { font-size: 12.5px; }
+
+  /* 主题按钮别压住标题 */
+  #themeBtn {
+    top: 8px;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    font-size: 15px;
+  }
+
+  /* ── 主体留白 ── */
+  .wrap { padding: 10px; }
+  .card { padding: 10px 12px; margin-bottom: 10px; border-radius: 9px; }
+  .card h2 { font-size: 14px; line-height: 1.5; }
+
+  /* ── KPI：4 个一律 2×2，别一个占满一屏 ── */
+  .kpis {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .kpi { padding: 10px 12px; }
+  .kpi .val { font-size: 20px; line-height: 1.25; }
+  .kpi .lbl, .kpi .sub { font-size: 11px; line-height: 1.5; }
+
+  /* ── 指数卡：2 列（live 的 .indices 已有 900px 规则，这里补 720 的紧凑版） ── */
+  .indices { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .idx { padding: 10px 12px; }
+  .idx .n { font-size: 12px; }
+  .idx .p { font-size: 19px; margin: 3px 0; }
+  .idx .c { font-size: 13px; }
+
+  /* ── 卡片内的标签栏：横向滑动而不是换行堆成三排 ── */
+  .tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs > * { flex: 0 0 auto; }
+
+  /* ── 搜索框：别固定 180px 宽 ── */
+  .search, input[type="search"], #stkSearch, #sigSearch, #blkSearch {
+    width: 100% !important;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  /* ── 表格：字号降一档，行高收紧 ── */
+  table { font-size: 12px; }
+  th, td { padding: 5px 7px; }
+  .scroll { max-height: 62vh; }
+  .scroll > table { min-width: 660px; }   /* 列多，宁可横滚 */
+
+  /* ── 弹窗：手机上占满屏，别再留边距 ── */
+  #stkModal .box {
+    width: 100vw;
+    max-width: 100vw;
+    max-height: 100vh;
+    height: 100vh;
+    border-radius: 0;
+    padding: 12px;
+    box-sizing: border-box;
+  }
+  #stkModal .row { gap: 10px; }
+  #stkModal .col { min-width: 100%; }
+  #stkModal .hd .px { font-size: 18px; }
+
+  /* ── 主页的日期回看控件：整行 flex 换行，"从/到"与输入框绑在一起不拆 ── */
+  .datebar { gap: 6px; }
+  .datebar .dfield { flex: 0 1 auto; max-width: 100%; }
+  .datebar .dfield input[type="date"] {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .datebar button { flex: 0 0 auto; margin: 0; }
+  .datebar #histRange { flex: 1 1 100%; font-size: 11px; line-height: 1.6; }
+
+  /* ── 行情条（live-quote-bar.js 注入的 #rt-bar）：允许换行 + 时间独占一行 ── */
+  #rt-bar {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 6px 14px;
+    font-size: 12px;
+  }
+  #rt-bar .rt-time {
+    margin-left: 0;
+    width: 100%;
+    font-size: 11px;
+  }
+
+  /* ── 锚点导航（ui-nav.js 注入）在手机上更紧凑 ── */
+  .anchornav { gap: 6px; padding: 6px 10px; }
+  .anchornav a { font-size: 12px; padding: 4px 10px; }
+
+  /* ── 图表：手机上不要 380px 那么高 ── */
+  .chart { height: 260px; }
+  .chart.tall { height: 220px; }
+}
+
+/* ─────────────────────────── ≤420px ─────────────────────────── */
+@media (max-width: 420px) {
+  header h1 { font-size: 16px; }
+  .wrap { padding: 8px; }
+  .card { padding: 9px 10px; }
+  /* 4 个 KPI 在超小屏还是保持 2 列（1 列会太长），只压缩字号 */
+  .kpi .val { font-size: 18px; }
+  .kpi .lbl { font-size: 10.5px; }
+  .kpi .sub { font-size: 10px; line-height: 1.45; }
+  .indices { grid-template-columns: 1fr 1fr; }
+  .idx .p { font-size: 17px; }
+  table { font-size: 11.5px; }
+  th, td { padding: 4px 6px; }
+  .scroll > table { min-width: 620px; }
+}
+
+/* ── 打印：去掉交互元素，保留数据 ── */
+@media print {
+  #themeBtn, .anchornav, .rt-bar, .tabs, .skip-link { display: none !important; }
+  .card { break-inside: avoid; box-shadow: none; border: 1px solid #ddd; }
+}
+
+/* ── 尊重系统的"减少动态效果" ── */
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}
