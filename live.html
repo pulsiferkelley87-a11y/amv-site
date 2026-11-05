@@ -1301,6 +1301,66 @@ function pickBarAt(clientX, clientY) {
   if (d2) showDayIntraday(d2);
 }
 
+/* 十字光标：按「命中的那根蜡烛」取数，而不是用 x 坐标反推下标。
+   原来的实现按可见窗口算下标，但 renderKline 画图时两侧各多画 KL_PAD(15) 根预渲染缓冲，
+   于是光标永远偏 15 根 —— 提示里的开高低收是错的，竖线也不在鼠标那根上。
+   改成 elementFromPoint 命中 [data-d]，与预渲染缓冲、平移、缩放都无关。 */
+function klineCrossAt(clientX, clientY) {
+  const svg = document.getElementById("klineSvg");
+  const cross = document.getElementById("klineCross");
+  if (!svg || !cross) return;
+  const vb = svg.viewBox && svg.viewBox.baseVal;
+  const W = (vb && vb.width) || 660;
+  const H = (vb && vb.height) || 340;
+  const r = svg.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  const sy = ((clientY - r.top) / r.height) * H;
+
+  const el0 = document.elementFromPoint(clientX, clientY);
+  const node = el0 && el0.closest ? el0.closest("[data-d]") : null;
+  if (!node) { cross.style.display = "none"; return; }
+  const date = node.getAttribute("data-d");
+  const b = node.getBoundingClientRect();
+  const cx = ((b.left + b.width / 2 - r.left) / r.width) * W;
+
+  // 从 KL_DATA 里按日期定位那一根（拿开高低收量 + 涨跌）
+  let row = null, i = -1;
+  if (typeof KL_DATA !== "undefined" && KL_DATA) {
+    for (let k = KL_DATA.length - 1; k >= 0; k--) {
+      if (String(KL_DATA[k][0]) === String(date)) { row = KL_DATA[k]; i = k; break; }
+    }
+  }
+  if (!row) { cross.style.display = "none"; return; }
+
+  // 注意：三个数据源的行序都是 [日期, 开, 收, 高, 低, 量]
+  // 原来这里把 r[4] 当高、r[3] 当低，导致提示里"高 < 低"这种不可能的数字
+  const o = parseFloat(row[1]), c = parseFloat(row[2]);
+  const h = parseFloat(row[3]), l = parseFloat(row[4]), v = parseFloat(row[5]);
+  const prevC = i > 0 ? parseFloat(KL_DATA[i - 1][2]) : null;
+  const chg = prevC ? ((c / prevC - 1) * 100).toFixed(2) : "—";
+
+  cross.style.display = "";
+  const vLine = document.getElementById("crossV");
+  const hLine = document.getElementById("crossH");
+  if (vLine) { vLine.setAttribute("x1", cx.toFixed(1)); vLine.setAttribute("x2", cx.toFixed(1)); }
+  if (hLine) { hLine.setAttribute("y1", sy.toFixed(1)); hLine.setAttribute("y2", sy.toFixed(1)); }
+
+  const info = document.getElementById("crossInfo");
+  const infoX = cx > W * 0.55 ? cx - 160 : cx + 10;
+  if (info) { info.setAttribute("x", infoX.toFixed(1)); info.setAttribute("y", 8); }
+  const col = c >= o ? "#d64545" : "#2fa36b";
+  const txt = document.getElementById("crossText");
+  if (txt) {
+    txt.innerHTML =
+      '<tspan x="' + (infoX + 8).toFixed(1) + '" dy="0">' + date + ' 开 ' + o.toFixed(2) + '</tspan>' +
+      '<tspan x="' + (infoX + 8).toFixed(1) + '" dy="14">收 <tspan fill="' + col + '">' + c.toFixed(2) + '</tspan> 高 ' + h.toFixed(2) + '</tspan>' +
+      '<tspan x="' + (infoX + 8).toFixed(1) + '" dy="14">低 ' + l.toFixed(2) + ' 涨跌 <tspan fill="' + col + '">' + chg + '%</tspan></tspan>' +
+      '<tspan x="' + (infoX + 8).toFixed(1) + '" dy="14">量 ' + (v / 10000).toFixed(1) + '万手</tspan>';
+  }
+}
+window.klineCrossAt = klineCrossAt;
+
+
 /* K 线点击看分时：用「事件委托」挂在容器上，而不是绑在 svg 元素上。
    原因：repaint() 是用 innerHTML.replace 重建整个 <svg> 的，绑在 svg 上的
    onmouseup / ontouchend 会在第一次重绘（滚轮缩放、拖动、切周期）后全部丢失，
@@ -1333,6 +1393,16 @@ function bindKlineDelegation() {
     }
     handle(e.clientX, e.clientY);
   });
+  // 悬停十字光标：同样用委托，重绘（缩放/拖动/切周期）后不会失联
+  box.addEventListener("mousemove", function (e) {
+    if (e.buttons) return;                       // 拖动中不置光标
+    klineCrossAt(e.clientX, e.clientY);
+  });
+  box.addEventListener("mouseleave", function () {
+    const c = document.getElementById("klineCross");
+    if (c) c.style.display = "none";
+  });
+
   let tx = null, ty = null;
   box.addEventListener("touchstart", function (e) {
     if (e.touches && e.touches.length === 1) { tx = e.touches[0].clientX; ty = e.touches[0].clientY; }
@@ -1369,8 +1439,8 @@ function renderKline() {
   const m = rows.length;
   const bw = iw / m;
   const closes = rows.map(r => parseFloat(r[2]));
-  const highs = rows.map(r => parseFloat(r[4]));
-  const lows = rows.map(r => parseFloat(r[3]));
+  const highs = rows.map(r => parseFloat(r[3]));
+  const lows = rows.map(r => parseFloat(r[4]));
   const vols = rows.map(r => parseFloat(r[5]));
   const all = highs.concat(lows).filter(v => v > 0);
   const mn = Math.min.apply(null, all), mx = Math.max.apply(null, all);
@@ -1381,7 +1451,7 @@ function renderKline() {
   const vy = v => H - PB - (v / maxV) * volH;
   let candles = "", volbars = "";
   rows.forEach((r, i) => {
-    const o = parseFloat(r[1]), c = parseFloat(r[2]), h = parseFloat(r[4]), l = parseFloat(r[3]);
+    const o = parseFloat(r[1]), c = parseFloat(r[2]), h = parseFloat(r[3]), l = parseFloat(r[4]);
     if (o <= 0 || c <= 0) return;
     const up = c >= o;
     const col = up ? "#d64545" : "#2fa36b";
@@ -1389,7 +1459,7 @@ function renderKline() {
     candles += `<line x1="${cx}" y1="${y(h).toFixed(1)}" x2="${cx}" y2="${y(l).toFixed(1)}" stroke="${col}" stroke-width="1"/>`;
     const top = y(Math.max(o, c)), bot = y(Math.min(o, c));
     candles += `<rect data-d="${r[0]}" x="${(cx - bw * 0.35).toFixed(1)}" y="${top.toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${Math.max(1.2, bot - top).toFixed(1)}" fill="${col}"/>`;
-    volbars += `<rect x="${(cx - bw * 0.35).toFixed(1)}" y="${vy(vols[i]).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${(H - PB - vy(vols[i])).toFixed(1)}" fill="${col}" opacity="0.55"/>`;
+    volbars += `<rect data-d="${r[0]}" x="${(cx - bw * 0.35).toFixed(1)}" y="${vy(vols[i]).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${(H - PB - vy(vols[i])).toFixed(1)}" fill="${col}" opacity="0.55"/>`;
   });
   const maLine = (period, color) => {
     let d = "";
@@ -1502,38 +1572,9 @@ function bindKlineGestures() {
   };
 
   const showCross = (clientX, clientY) => {
-    const r = svg.getBoundingClientRect();
-    const sx = ((clientX - r.left) / r.width) * W;
-    const sy = ((clientY - r.top) / r.height) * H;
-    const start = Math.max(0, KL_VIEW.end - KL_VIEW.count + 1);
-    const rows = KL_DATA.slice(start, KL_VIEW.end + 1);
-    const m = rows.length;
-    if (!m) return;
-    const iw = W - PL - PR;
-    const bw = iw / m;
-    let idx = Math.floor((sx - PL) / bw);
-    idx = Math.max(0, Math.min(m - 1, idx));
-    const r0 = rows[idx];
-    const o = parseFloat(r0[1]), c = parseFloat(r0[2]), h = parseFloat(r0[4]), l = parseFloat(r0[3]), v = parseFloat(r0[5]);
-    const chg = idx > 0 ? ((c / parseFloat(rows[idx - 1][2]) - 1) * 100).toFixed(2) : "—";
-    const cx = PL + idx * bw + bw / 2;
-    const cross = document.getElementById("klineCross");
-    if (!cross) return;
-    cross.style.display = "";
-    document.getElementById("crossV").setAttribute("x1", cx);
-    document.getElementById("crossV").setAttribute("x2", cx);
-    document.getElementById("crossH").setAttribute("y1", sy);
-    document.getElementById("crossH").setAttribute("y2", sy);
-    const info = document.getElementById("crossInfo");
-    const infoX = cx > PL + 160 ? cx - 160 : cx + 8;
-    info.setAttribute("x", infoX);
-    info.setAttribute("y", 8);
-    const col = c >= o ? "#d64545" : "#2fa36b";
-    document.getElementById("crossText").innerHTML =
-      `<tspan x="${infoX + 8}" dy="0">${r0[0]} 开 ${o.toFixed(2)}</tspan>` +
-      `<tspan x="${infoX + 8}" dy="14">收 <tspan fill="${col}">${c.toFixed(2)}</tspan> 高 ${h.toFixed(2)}</tspan>` +
-      `<tspan x="${infoX + 8}" dy="14">低 ${l.toFixed(2)} 涨跌 <tspan fill="${col}">${chg}%</tspan></tspan>` +
-      `<tspan x="${infoX + 8}" dy="14">量 ${(v / 10000).toFixed(1)}万手</tspan>`;
+    // 统一走全局命中版 klineCrossAt：不再用 x 坐标反推下标
+    // （旧实现按可见窗口算，但画图时两侧各多画 KL_PAD=15 根预渲染缓冲，光标会偏 15 根）
+    klineCrossAt(clientX, clientY);
   };
 
   let rafId = null;
