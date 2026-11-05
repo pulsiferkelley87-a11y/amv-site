@@ -75,6 +75,18 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
     <div id="tempBox"></div>
   </div>
   <div class="card">
+    <h2>📐 通达信口径核对
+      <span style="font-size:12px;color:var(--muted);font-weight:normal;">对应公式 TOTALHQINFO(1..6)：上涨 / 下跌 / 涨停 / 跌停家数 · 总成交金额（亿元）</span>
+    </h2>
+    <div id="tdxLive" style="font-size:13px;"></div>
+  </div>
+  <div class="card">
+    <h2>🐂🐻 牛熊六维
+      <span style="font-size:12px;color:var(--muted);font-weight:normal;">趋势25% 广度20% 量能15% 宏观15% 估值10% 情绪15%</span>
+    </h2>
+    <div id="bbLive" style="font-size:13px;"></div>
+  </div>
+  <div class="card">
     <h2>💰 资金主线雷达 <span style="font-size:12px;color:var(--muted);font-weight:normal;">主力净流入板块（东财口径）→ 推理主线</span></h2>
     <div id="flowBox" class="scroll" style="font-size:13px;max-height:520px;"></div>
   </div>
@@ -109,9 +121,9 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
       <span id="favList"></span>
     </div>
     <div class="tabs">
-      <button class="tab active" onclick="setSigTab(\'up\', event)">🔼 拐头向上</button>
-      <button class="tab" onclick="setSigTab(\'down\', event)">🔽 拐头向下</button>
-      <button class="tab" onclick="setSigTab(\'hot\', event)">🔥 高位偏离</button>
+      <button class="tab active" onclick="setSigTab('up', event)">🔼 拐头向上</button>
+      <button class="tab" onclick="setSigTab('down', event)">🔽 拐头向下</button>
+      <button class="tab" onclick="setSigTab('hot', event)">🔥 高位偏离</button>
     </div>
     <div class="scroll" id="sigList" style="max-height:420px;"></div>
   </div>
@@ -136,10 +148,10 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
     <div class="card">
       <h2>板块实时（通达信口径）<span id="blkDetail" style="font-size:12px;color:var(--muted);float:right;"></span></h2>
       <div class="tabs">
-        <button class="tab active" onclick="setBlkTab(\'concept\', event)">概念</button>
-        <button class="tab" onclick="setBlkTab(\'style\', event)">风格</button>
-        <button class="tab" onclick="setBlkTab(\'up\', event)">领涨</button>
-        <button class="tab" onclick="setBlkTab(\'down\', event)">领跌</button>
+        <button class="tab active" onclick="setBlkTab('concept', event)">概念</button>
+        <button class="tab" onclick="setBlkTab('style', event)">风格</button>
+        <button class="tab" onclick="setBlkTab('up', event)">领涨</button>
+        <button class="tab" onclick="setBlkTab('down', event)">领跌</button>
         <input class="search" id="blkSearch" placeholder="搜索板块…" oninput="renderBlocks()">
       </div>
       <div class="scroll" id="blkList"></div>
@@ -147,10 +159,11 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
     <div class="card">
       <h2>个股实时 <button class="tab" onclick="backToStkList()" style="float:right;">返回全市场</button></h2>
       <div class="tabs">
-        <button class="tab active" onclick="setStkTab(\'up\', event)">涨幅榜</button>
-        <button class="tab" onclick="setStkTab(\'down\', event)">跌幅榜</button>
-        <button class="tab" onclick="setStkTab(\'amount\', event)">成交额榜</button>
-        <button class="tab" onclick="setStkTab(\'turnover\', event)">换手榜</button>
+        <button class="tab active" onclick="setStkTab('up', event)">涨幅榜</button>
+        <button class="tab" onclick="setStkTab('down', event)">跌幅榜</button>
+        <button class="tab" onclick="setStkTab('amount', event)">成交额榜</button>
+        <button class="tab" onclick="setStkTab('turnover', event)">换手榜</button>
+        <button class="tab" onclick="setStkTab('flow', event)">主力净额榜</button>
         <input class="search" id="stkSearch" placeholder="代码/名称…" oninput="renderStocks()">
       </div>
       <div class="scroll" id="stkList"></div>
@@ -279,6 +292,10 @@ function renderAll(j) {
   renderSwitch();
   renderMinutes();
   renderLimits();
+  // 基本面（主力净额/DDX）与通达信口径核对：数据每 20 秒整包刷新，LD 会被换成新对象，
+  // 所以每次渲染前都重新贴一次；必须排在 renderStocks 之前，否则表格先画完就拿不到字段。
+  try { applyFund(); } catch (e) { }
+  try { renderTdxLive(); } catch (e) { }
   renderBlocks();
   renderStocks();
 }
@@ -828,7 +845,7 @@ function toggleKlineLevels() {
   const box = document.getElementById("klineBox");
   if (box && KL_DATA) {
     const btnHtml = `<button onclick="toggleKlineLevels()" style="padding:6px 12px;border:1px solid var(--border);border-radius:5px;background:var(--card);cursor:pointer;font-size:13px;">📏 关键位：${KL_SHOW_LEVELS ? "开" : "关"}</button>`;
-    box.innerHTML = box.innerHTML.replace(/<button onclick="toggleKlineLevels\(\)"[^>]*>[^<]*<\/button>/, btnHtml)
+    box.innerHTML = box.innerHTML.replace(/<button onclick="toggleKlineLevels()"[^>]*>[^<]*<\/button>/, btnHtml)
       .replace(/<svg id="klineSvg"[\s\S]*<\/svg>/, renderKline());
   }
 }
@@ -1333,7 +1350,7 @@ function renderBreadth() {
     `<span class="flat">平盘 ${b.flat}</span> ｜ ` +
     `<span class="up">涨停 <b>${b.limit_up}</b></span> ｜ ` +
     `<span class="down">跌停 <b>${b.limit_down}</b></span> ｜ ` +
-    `<span>总成交 <b>${((b.amount_sum || 0) / 1e4).toFixed(2)}</b> 万亿</span> ｜ ` +
+    `<span>总成交 <b>${((b.amount_sum || 0) / 1e12).toFixed(2)}</b> 万亿</span> ｜ ` +
     `共 ${b.total} 只`;
 }
 
@@ -1675,7 +1692,8 @@ function renderStocks() {
   else if (STK_TAB === "down") list = list.slice().sort((a,b) => a.pct - b.pct).slice(0, 80);
   else if (STK_TAB === "amount") list = list.slice().sort((a,b) => b.amount - a.amount).slice(0, 80);
   else if (STK_TAB === "turnover") list = list.slice().sort((a,b) => b.turnover - a.turnover).slice(0, 80);
-  let html = `<table><thead><tr><th>代码</th><th>名称</th><th>现价</th><th>涨跌幅</th><th>成交额(亿)</th><th>换手率</th><th>流通市值(亿)</th></tr></thead><tbody>`;
+  else if (STK_TAB === "flow") list = list.slice().filter(s => s.mainlx != null).sort((a,b) => b.mainlx - a.mainlx).slice(0, 80);
+  let html = `<table><thead><tr><th>代码</th><th>名称</th><th>现价</th><th>涨跌幅</th><th>成交额(亿)</th><th>换手率</th><th>流通市值(亿)</th><th>主力(亿)</th></tr></thead><tbody>`;
   list.forEach(s => {
     const cls = s.pct >= 0 ? "up" : "down";
     const sign = s.pct >= 0 ? "+" : "";
@@ -1684,7 +1702,8 @@ function renderStocks() {
       <td class="${cls}">${sign}${s.pct.toFixed(2)}%</td>
       <td>${(s.amount/1e8).toFixed(1)}</td>
       <td>${s.turnover.toFixed(2)}%</td>
-      <td>${(s.float_mv/1e4).toFixed(0)}</td></tr>`;
+      <td>${(s.float_mv/1e4).toFixed(0)}</td>
+      <td class="${s.mainlx == null ? '' : (s.mainlx >= 0 ? 'up' : 'down')}">${s.mainlx == null ? "—" : ((s.mainlx/1e8 >= 0 ? "+" : "") + (s.mainlx/1e8).toFixed(2))}</td></tr>`;
   });
   html += "</tbody></table>";
   document.getElementById("stkList").innerHTML = html;
@@ -1712,6 +1731,160 @@ function setStkTab(t, ev) {
 loadMembers();
 loadData();
 setInterval(loadData, 20000); // 每 20 秒自动刷新
+
+/* ===== 实盘页增强：基本面合并 + 通达信口径核对 + 牛熊六维 ===== */
+const FUND_COS = "https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com";
+let FUND = null;      // code -> { mainlx, m3, m5, m10, ddx, ddy, free, px }
+let FUND_AT = "";
+let FUND_STATE = "idle";
+
+function fetchFundamentals() {
+  // 与主页同一份文件：scripts/make_fundamentals_slim.py 生成的列式瘦身版
+  const urls = [FUND_COS + "/fundamentals.json?t=" + Date.now(),
+                "fundamentals.json?v=" + Date.now()];
+  let i = 0;
+  function next() {
+    if (i >= urls.length) { FUND_STATE = "error"; return Promise.reject(new Error("fundamentals.json 不可用")); }
+    const u = urls[i++];
+    return fetch(u, { cache: "no-store" })
+      .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(j => { FUND_STATE = u.indexOf(FUND_COS) === 0 ? "cos" : "pages"; return j; })
+      .catch(() => next());
+  }
+  return next();
+}
+
+function loadFundamentals() {
+  FUND_STATE = "loading";
+  fetchFundamentals().then(j => {
+    const cols = j.cols || [];
+    const pos = {};
+    cols.forEach((c, k) => { pos[c] = k; });
+    const map = Object.create(null);
+    (j.rows || []).forEach(row => {
+      map[row[pos.c]] = {
+        mainlx: row[pos.mainlx], m3: row[pos.m3], m5: row[pos.m5], m10: row[pos.m10],
+        ddx: row[pos.ddx], ddy: row[pos.ddy],
+        free: row[pos.free], px: row[pos.px],
+      };
+    });
+    FUND = map;
+    FUND_AT = j.updated_at || "";
+    FUND_STATE = "ready";
+    try { applyFund(); } catch (e) { }
+    try { renderTdxLive(); } catch (e) { }
+    try { renderStocks(); } catch (e) { }   // 合并后才画表，否则「主力」列是空的
+  }).catch(() => {
+    // 拉不到也要让页面能说明原因，不阻断其它模块
+    try { renderTdxLive(); } catch (e) { }
+  });
+}
+
+/* 实盘页的代码带市场前缀（sh600000 / sz000001 / bj920007），
+   而 fundamentals.json 用的是 6 位纯代码，匹配前必须剥掉前缀。 */
+function normCode(c) {
+  return String(c || "").replace(/^(sh|sz|bj)/i, "");
+}
+
+function applyFund() {
+  if (!FUND || !LD || !LD.stocks) return 0;
+  let n = 0;
+  LD.stocks.forEach(s => {
+    const f = FUND[normCode(s.code)];
+    if (!f) return;
+    s.mainlx = f.mainlx; s.m5 = f.m5; s.ddx = f.ddx;
+    if (s.fturn == null && f.free && f.px && s.amount) {
+      // 自由流通换手率 = 成交额 ÷ (自由流通股数 × 价格) × 100；free 单位是万股
+      s.fturn = Math.round(s.amount / (f.free * 1e4 * f.px) * 100 * 100) / 100;
+    }
+    n++;
+  });
+  LD.fundamentals_updated_at = FUND_AT;
+  return n;
+}
+
+/* 通达信口径核对：口径来源与主页一致（TCalc.dll 内置公式 TOTALHQINFO + ZTPRICE 分档） */
+function limitPctOfLive(code, name) {
+  const c = normCode(code), nm = String(name || "").toUpperCase();
+  const isST = nm.indexOf("ST") >= 0;
+  if (c[0] === "4" || c[0] === "8" || c.slice(0, 3) === "920") return 30;
+  if (c.slice(0, 3) === "300" || c.slice(0, 3) === "301") return 20;
+  if (c.slice(0, 3) === "688" || c.slice(0, 3) === "689") return 20;
+  return isST ? 5 : 10;
+}
+
+function renderTdxLive() {
+  const el = document.getElementById("tdxLive");
+  if (!el || !LD || !LD.stocks) return;
+  let up = 0, down = 0, flat = 0, zt = 0, dt = 0, amt = 0, n = 0, withFlow = 0;
+  LD.stocks.forEach(s => {
+    if (s.pct != null && isFinite(s.pct)) {
+      n++;
+      if (s.amount) amt += s.amount;
+      if (s.pct > 0) up++; else if (s.pct < 0) down++; else flat++;
+      const L = limitPctOfLive(s.code, s.name);
+      if (s.pct >= L - 0.10) zt++;
+      else if (s.pct <= -(L - 0.10)) dt++;
+    }
+    if (s.mainlx != null && s.mainlx !== 0) withFlow++;
+  });
+  if (!n) { el.innerHTML = '<span style="color:var(--muted)">等待行情数据…</span>'; return; }
+  const cell = (label, val) =>
+    `<span style="display:inline-block;margin-right:20px;">${label} <b style="font-size:15px;">${val}</b></span>`;
+  let flowNote;
+  if (FUND_STATE === "ready") flowNote = `主力净额覆盖 <b>${withFlow.toLocaleString()}</b> 只（基本面 ${FUND_AT}）`;
+  else if (FUND_STATE === "loading") flowNote = '主力净额加载中…';
+  else if (FUND_STATE === "error") flowNote = '<span class="down">fundamentals.json 拉取失败，「主力净额榜」不可用</span>';
+  else flowNote = '主力净额未加载';
+  el.innerHTML =
+    `<div>` + cell("上涨", up.toLocaleString()) + cell("下跌", down.toLocaleString()) +
+    cell("平盘", flat.toLocaleString()) + cell("涨停≈", zt) + cell("跌停≈", dt) +
+    cell("总成交", (amt / 1e8).toFixed(0) + " 亿") + `</div>` +
+    `<div style="font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.7;">` +
+    `样本 ${n.toLocaleString()} 只 ｜ 对应公式 <code>TOTALHQINFO(1..6)</code> ｜ ${flowNote}<br>` +
+    `涨停按通达信 ZTPRICE 分档近似（北交所 30% ／ 创业板·科创板 20% ／ 主板 10% ／ 主板 ST 5%，容差 ±0.10 个百分点）——` +
+    `快照没有昨收价，复现不了"按分取整"，所以标 ≈；与云端精确口径可能差几只。` +
+    `</div>`;
+}
+
+/* 牛熊六维：主页有，实盘页原来没有 */
+function loadBullBearLive() {
+  fetch("bull_bear.json?v=" + new Date().getTime())
+    .then(r => r.json())
+    .then(bb => {
+      const el = document.getElementById("bbLive");
+      if (!el || !bb || !bb.scores) return;
+      const s = bb.scores, total = bb.total;
+      const mods = [["价格趋势", s.trend, "25%"], ["市场广度", s.breadth, "20%"],
+                    ["成交量能", s.volume, "15%"], ["宏观盈利", s.macro, "15%"],
+                    ["市场估值", s.valuation, "10%"], ["情绪杠杆", s.sentiment, "15%"]];
+      const bar = v => {
+        const p = Math.max(0, Math.min(100, (v + 100) / 2));
+        const c = v >= 20 ? "#2fa36b" : v <= -20 ? "#d64545" : "#b8860b";
+        return `<div style="height:7px;background:var(--border);border-radius:4px;margin:2px 0;"><div style="width:${p}%;height:7px;background:${c};border-radius:4px;"></div></div>`;
+      };
+      let html = `<div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;">
+        <div style="min-width:130px;text-align:center;">
+          <div style="font-size:32px;font-weight:800;color:${total >= 15 ? "#d64545" : total <= -15 ? "#2fa36b" : "var(--muted)"};">${total > 0 ? "+" : ""}${total}</div>
+          <div style="font-size:13px;font-weight:600;">${bb.state || ""}</div>
+          <div style="font-size:11px;color:var(--muted);">更新 ${bb.updated_at || ""}</div>
+        </div><div style="flex:1;min-width:280px;">`;
+      mods.forEach(([name, v, w]) => {
+        const vv = v != null ? v : 0;
+        html += `<div style="font-size:12px;">${name}（${w}）<span style="float:right;font-weight:600;" class="${vv >= 15 ? "up" : vv <= -15 ? "down" : ""}">${vv > 0 ? "+" : ""}${vv}</span>${bar(vv)}</div>`;
+      });
+      html += "</div></div>";
+      el.innerHTML = html;
+    })
+    .catch(() => {
+      const el = document.getElementById("bbLive");
+      if (el) el.innerHTML = '<span style="color:var(--muted)">牛熊评分数据未就绪（bull_bear.json）</span>';
+    });
+}
+
+loadFundamentals();
+loadBullBearLive();
+
 </script>
 <button id="themeBtn" onclick="toggleTheme()" title="切换主题">🌙</button>
 <script>
