@@ -50,7 +50,22 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
 ::-webkit-scrollbar{width:8px;height:8px;}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
 ::-webkit-scrollbar-track{background:transparent;}
-</style></style>
+/* ── 个股详情弹窗（分时 + 五档盘口 + 内外盘） ── */
+#stkModal{position:fixed;inset:0;z-index:2000;display:none;background:rgba(0,0,0,.55);}
+#stkModal.open{display:flex;align-items:center;justify-content:center;}
+#stkModal .box{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  width:min(880px,94vw);max-height:92vh;overflow:auto;padding:16px 18px;box-shadow:0 12px 40px rgba(0,0,0,.4);}
+#stkModal .hd{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px;}
+#stkModal .hd .nm{font-size:17px;font-weight:700;}
+#stkModal .hd .px{font-size:20px;font-weight:800;}
+#stkModal .hd .close{margin-left:auto;cursor:pointer;border:1px solid var(--border);
+  border-radius:6px;padding:2px 10px;font-size:13px;background:var(--card);color:var(--text);}
+#stkModal .row{display:flex;gap:18px;flex-wrap:wrap;}
+#stkModal .col{flex:1;min-width:280px;}
+#stkModal .ob{font-size:12.5px;line-height:1.9;}
+#stkModal .ob .k{color:var(--muted);display:inline-block;min-width:58px;}
+#stkModal .foot{font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.7;}
+</style>
     <link rel="stylesheet" href="ui-upgrade.css">
 </head>
 <body>
@@ -170,11 +185,13 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
         <button class="tab" onclick="setStkTab('turnover', event)">换手榜</button>
         <button class="tab" onclick="setStkTab('flow', event)">主力净额榜</button>
         <input class="search" id="stkSearch" placeholder="代码/名称…" oninput="renderStocks()">
+        <button class="tab" onclick="intradayFromInput()" title="看该股分时图 + 五档盘口">分时</button>
       </div>
       <div class="scroll" id="stkList"></div>
     </div>
   </div>
 </div>
+<div id="stkModal"><div class="box" id="stkModalBox"></div></div>
 <script>
 let LD = null;
 let BLK_TAB = "concept";
@@ -1702,7 +1719,7 @@ function renderStocks() {
   list.forEach(s => {
     const cls = s.pct >= 0 ? "up" : "down";
     const sign = s.pct >= 0 ? "+" : "";
-    html += `<tr><td>${s.code}</td><td>${s.name}</td>
+    html += `<tr><td><a href="javascript:void(0)" onclick="openStkModal('${s.code}')" style="cursor:pointer;color:#3b6fe0;text-decoration:underline dotted;" title="看分时 + 五档盘口">${s.code}</a></td><td>${s.name}</td>
       <td>${s.price.toFixed(2)}</td>
       <td class="${cls}">${sign}${s.pct.toFixed(2)}%</td>
       <td>${(s.amount/1e8).toFixed(1)}</td>
@@ -1932,6 +1949,238 @@ function loadBullBearLive() {
 
 loadFundamentals();
 loadBullBearLive();
+
+/* =====================================================================
+ * 个股详情弹窗：分时图 + 五档盘口 + 内外盘
+ *
+ * 数据来源（与通达信同语义，字段口径见 tdx-re 逆向笔记）：
+ *   分时  web.ifzq.gtimg.cn/appstock/app/minute/query  每根 = 时间 价 量(手) 额(元)
+ *   盘口  qt.gtimg.cn/q=<sym>  注入 <script> 取全局 v_<sym>（绕 CORS，GBK 由响应头解码）
+ *         p[7] 外盘  p[8] 内盘  p[9..18] 买一~买五(价,量)  p[19..28] 卖一~卖五(价,量)
+ *   委比/委差由五档自行加总，不依赖字段漂移
+ * ===================================================================== */
+function mktOf(code6) {
+  if (/^(6|9)/.test(code6)) return "sh";
+  if (/^(0|3|2)/.test(code6)) return "sz";
+  return "bj";
+}
+function symOf(code) {
+  const c = normCode(code);
+  return (/^(sh|sz|bj)/i.test(String(code)) ? String(code).toLowerCase() : mktOf(c) + c);
+}
+
+function loadMinute(sym) {
+  const u = "https://web.ifzq.gtimg.cn/appstock/app/minute/query?code=" + sym + "&_=" + Date.now();
+  return fetch(u, { cache: "no-store" })
+    .then(r => r.json())
+    .then(j => {
+      const d = (j.data && j.data[sym] && j.data[sym].data) || {};
+      const bars = (d.data || []).map(s => {
+        const a = String(s).trim().split(/\s+/);
+        return { t: a[0], p: +a[1], v: +(a[2] || 0), amt: +(a[3] || 0) };
+      }).filter(b => isFinite(b.p) && b.p > 0);
+      return { bars: bars, date: d.date || "" };
+    })
+    .catch(() => ({ bars: [], date: "" }));
+}
+
+function loadQuote5(sym) {
+  return new Promise(function (resolve) {
+    const vname = "v_" + sym;
+    const s = document.createElement("script");
+    s.src = "https://qt.gtimg.cn/q=" + sym + "&_=" + Date.now();
+    s.onload = function () {
+      let raw = null;
+      try { raw = window[vname]; } catch (e) { }
+      s.remove();
+      resolve(typeof raw === "string" ? raw : null);
+    };
+    s.onerror = function () { s.remove(); resolve(null); };
+    document.head.appendChild(s);
+  });
+}
+
+/* 分时 SVG：价格线 + 均价线 + 昨收基准 + 成交量柱。用 viewBox 自适应宽度。 */
+function intradaySVG(bars, prevClose) {
+  if (!bars || bars.length < 2) return '<div style="color:var(--muted);font-size:12px;">分时数据为空（可能非交易时段/接口不可用）</div>';
+  const W = 820, H = 300, PL = 46, PR = 12, PT = 12, VOLH = 58;
+  const ih = H - PT - VOLH - 10;
+  const iw = W - PL - PR;
+  const px = bars.map(b => b.p);
+  let mn = Math.min.apply(null, px), mx = Math.max.apply(null, px);
+  if (prevClose && isFinite(prevClose)) { mn = Math.min(mn, prevClose); mx = Math.max(mx, prevClose); }
+  if (mx - mn < 1e-6) { mx = mn + 0.01; }
+  const pad = (mx - mn) * 0.08;
+  mn -= pad; mx += pad;
+  const yOf = v => PT + (1 - (v - mn) / (mx - mn)) * ih;
+  const n = bars.length;
+  const xOf = i => PL + (n === 1 ? 0 : i * iw / (n - 1));
+
+  // 均价线：累计成交额 / 累计成交量（手 → 股）
+  let cumAmt = 0, cumVol = 0;
+  const avg = bars.map(b => {
+    cumAmt += b.amt || 0;
+    cumVol += (b.v || 0) * 100;
+    return cumVol > 0 ? cumAmt / cumVol : b.p;
+  });
+
+  const path = arr => arr.map((v, i) => (i ? "L" : "M") + xOf(i).toFixed(1) + " " + yOf(v).toFixed(1)).join("");
+  const last = bars[n - 1].p;
+  const up = prevClose ? last >= prevClose : last >= bars[0].p;
+  const lineColor = up ? "#d64545" : "#2fa36b";
+
+  const vmax = Math.max.apply(null, bars.map(b => b.v || 0)) || 1;
+  const volTop = PT + ih + 10;
+  const vw = Math.max(1, iw / n * 0.7);
+  const vols = bars.map((b, i) => {
+    const h = (b.v || 0) / vmax * (VOLH - 6);
+    const c = (i > 0 && b.p < bars[i - 1].p) ? "#2fa36b" : "#d64545";
+    return '<rect x="' + (xOf(i) - vw / 2).toFixed(1) + '" y="' + (volTop + VOLH - h).toFixed(1) +
+      '" width="' + vw.toFixed(1) + '" height="' + Math.max(0.5, h).toFixed(1) + '" fill="' + c + '" opacity=".55"/>';
+  }).join("");
+
+  const yTicks = [mx, (mx + mn) / 2, mn].map(v =>
+    '<line x1="' + PL + '" y1="' + yOf(v).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + yOf(v).toFixed(1) +
+    '" stroke="var(--border)" stroke-dasharray="3 3"/>' +
+    '<text x="4" y="' + (yOf(v) + 3).toFixed(1) + '" font-size="9" fill="var(--muted)">' + v.toFixed(2) + '</text>'
+  ).join("");
+
+  const pcLine = (prevClose && isFinite(prevClose))
+    ? '<line x1="' + PL + '" y1="' + yOf(prevClose).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + yOf(prevClose).toFixed(1) +
+      '" stroke="var(--muted)" stroke-dasharray="4 3" opacity=".7"/>'
+    : "";
+
+  const timeLabels = [0, Math.floor(n / 2), n - 1].map(i =>
+    '<text x="' + (xOf(i) - 12).toFixed(1) + '" y="' + (H - 2) + '" font-size="9" fill="var(--muted)">' +
+    (bars[i].t.slice(0, 2) + ":" + bars[i].t.slice(2)) + "</text>").join("");
+
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;background:var(--soft);border:1px solid var(--border);border-radius:8px;">' +
+    yTicks + pcLine +
+    '<path d="' + path(avg) + '" fill="none" stroke="#e0a12b" stroke-width="1.2" stroke-dasharray="0"/>' +
+    '<path d="' + path(px) + '" fill="none" stroke="' + lineColor + '" stroke-width="1.6"/>' +
+    vols + timeLabels +
+    '<text x="' + (W - PR - 96) + '" y="' + (PT + 10) + '" font-size="10" fill="#e0a12b">均价 ' +
+    avg[n - 1].toFixed(2) + '</text>' +
+    '</svg>';
+}
+
+function orderBookHTML(raw, sym) {
+  if (!raw) return '<div style="color:var(--muted);font-size:12px;">盘口数据不可用（qt.gtimg.cn 无响应或该品种不支持）</div>';
+  const p = raw.split("~");
+  const num = i => { const v = parseFloat(p[i]); return isFinite(v) ? v : null; };
+  const name = p[1] || "", price = num(3), prevClose = num(4), pct = num(32);
+  const outer = num(7), inner = num(8);   // 外盘 / 内盘（手）
+  const bid = [], ask = [];
+  for (let k = 0; k < 5; k++) {
+    bid.push({ p: num(9 + k * 2), v: num(10 + k * 2) });
+    ask.push({ p: num(19 + k * 2), v: num(20 + k * 2) });
+  }
+  const sum = arr => arr.reduce((a, b) => a + (b.v || 0), 0);
+  const bidV = sum(bid), askV = sum(ask);
+  const wc = bidV - askV;                       // 委差（手）
+  const wb = (bidV + askV) > 0 ? wc / (bidV + askV) * 100 : 0;  // 委比 %
+  const f = v => v == null ? "—" : v.toFixed(2);
+  const g = v => v == null ? "—" : Math.round(v).toLocaleString();
+  const cls = v => v == null ? "" : (v >= 0 ? "up" : "down");
+
+  let rows = "";
+  for (let k = 4; k >= 0; k--) {
+    rows += '<div><span class="k">卖' + (k + 1) + '</span><span class="down">' + f(ask[k].p) + '</span>　<span style="color:var(--muted)">' + g(ask[k].v) + '</span></div>';
+  }
+  rows += '<div style="border-top:1px dashed var(--border);margin:3px 0;"></div>';
+  for (let k = 0; k < 5; k++) {
+    rows += '<div><span class="k">买' + (k + 1) + '</span><span class="up">' + f(bid[k].p) + '</span>　<span style="color:var(--muted)">' + g(bid[k].v) + '</span></div>';
+  }
+
+  return '<div class="ob">' + rows + '</div>' +
+    '<div class="ob" style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px;">' +
+    '<div><span class="k">委比</span><b class="' + cls(wb) + '">' + (wb >= 0 ? "+" : "") + wb.toFixed(2) + '%</b>' +
+    '　<span class="k">委差</span><b class="' + cls(wc) + '">' + (wc >= 0 ? "+" : "") + g(wc) + '</b> 手</div>' +
+    '<div><span class="k">外盘</span><b class="up">' + g(outer) + '</b>' +
+    '　<span class="k">内盘</span><b class="down">' + g(inner) + '</b>' +
+    (outer != null && inner != null && (outer + inner) > 0
+      ? '　<span class="k">主买占比</span><b>' + (outer / (outer + inner) * 100).toFixed(1) + '%</b>'
+      : '') + '</div>' +
+    '<div style="font-size:11px;color:var(--muted);margin-top:4px;">外盘=主动买（按卖价成交），内盘=主动卖（按买价成交）；' +
+    '委比 =（委买总量−委卖总量）/（委买总量+委卖总量）。对应通达信 <code>ACTINVOL/ACTOUTVOL</code>、<code>TOTALMMPAMO</code> 的盘口维度。</div>' +
+    '</div>';
+}
+
+function openStkModal(code) {
+  const sym = symOf(code);
+  const box = document.getElementById("stkModalBox");
+  const modal = document.getElementById("stkModal");
+  if (!box || !modal) return;
+  const s = ((LD && LD.stocks) || []).find(x => normCode(x.code) === normCode(code)) || {};
+  modal.classList.add("open");
+  box.innerHTML = '<div class="hd"><span class="nm">' + (s.name || sym) + '</span>' +
+    '<span style="color:var(--muted);font-size:12px;">' + sym + '</span>' +
+    '<span class="px ' + (s.pct >= 0 ? "up" : "down") + '">' + (s.price != null ? (+s.price).toFixed(2) : "—") + '</span>' +
+    '<span class="' + (s.pct >= 0 ? "up" : "down") + '">' + (s.pct != null ? ((s.pct >= 0 ? "+" : "") + (+s.pct).toFixed(2) + "%") : "") + '</span>' +
+    '<button class="close" onclick="closeStkModal()">关闭 ✕</button></div>' +
+    '<div class="row"><div class="col" id="mChart"><span style="color:var(--muted);font-size:12px;">分时加载中…</span></div>' +
+    '<div class="col" style="max-width:260px;" id="mBook"><span style="color:var(--muted);font-size:12px;">盘口加载中…</span></div></div>' +
+    '<div class="foot" id="mFoot"></div>';
+
+  Promise.all([loadMinute(sym), loadQuote5(sym)]).then(function (res) {
+    const m = res[0], raw = res[1];
+    let prevClose = null;
+    if (raw) { const v = parseFloat(raw.split("~")[4]); if (isFinite(v)) prevClose = v; }
+    if (!prevClose && m.bars.length) prevClose = m.bars[0].p;
+
+    const ch = document.getElementById("mChart");
+    if (ch) ch.innerHTML = intradaySVG(m.bars, prevClose);
+    const bk = document.getElementById("mBook");
+    if (bk) bk.innerHTML = orderBookHTML(raw, sym);
+
+    const ft = document.getElementById("mFoot");
+    if (ft) {
+      const amt = m.bars.reduce((a, b) => a + (b.amt || 0), 0);
+      const vol = m.bars.reduce((a, b) => a + (b.v || 0), 0);
+      ft.innerHTML = '分时日期 ' + (m.date || "—") + ' ｜ ' + m.bars.length + ' 个点 ｜ 累计成交 ' +
+        (amt / 1e8).toFixed(2) + ' 亿元 / ' + (vol / 1e4).toFixed(1) + ' 万手 ｜ ' +
+        '数据：腾讯分时 + qt 盘口，仅作展示，非交易指令。';
+    }
+  });
+}
+
+function closeStkModal() {
+  const modal = document.getElementById("stkModal");
+  if (modal) modal.classList.remove("open");
+}
+
+/* 点遮罩或按 Esc 关闭 */
+document.addEventListener("click", function (e) {
+  const modal = document.getElementById("stkModal");
+  if (modal && modal.classList.contains("open") && e.target === modal) closeStkModal();
+});
+document.addEventListener("keydown", function (e) {
+  if (e.key === "Escape") closeStkModal();
+});
+
+/* 搜索框旁边的「分时」按钮 */
+function intradayFromInput() {  const box = document.getElementById("sigSearch") || document.getElementById("stkSearch");
+  const kw = (box && box.value || "").trim();
+  if (!kw) { alert("先输入代码或名称"); return; }
+  const hit = ((LD && LD.stocks) || []).find(x => normCode(x.code) === normCode(kw) || (x.name || "").indexOf(kw) >= 0);
+  if (hit) { openStkModal(hit.code); return; }
+  if (/^\d{6}$/.test(normCode(kw))) { openStkModal(normCode(kw)); return; }
+  alert("没找到该代码/名称");
+}
+
+/* 分享/调试：live.html?stk=300071 或 ?stk=sz300071 直接打开该股详情 */
+(function () {
+  const m = /[?&]stk=([A-Za-z0-9]{6,8})/.exec(location.search);
+  if (!m) return;
+  const want = normCode(m[1]);
+  let tries = 0;
+  const t = setInterval(function () {
+    const hit = ((LD && LD.stocks) || []).find(x => normCode(x.code) === want);
+    if (hit) { clearInterval(t); openStkModal(hit.code); }
+    else if (++tries > 50) { clearInterval(t); openStkModal(want); }
+  }, 300);
+})();
+
 
 </script>
 <button id="themeBtn" onclick="toggleTheme()" title="切换主题">🌙</button>
