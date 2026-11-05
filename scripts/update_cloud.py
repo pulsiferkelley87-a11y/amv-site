@@ -1715,6 +1715,7 @@ def main():
              "industry": s.get("industry"), "amount_pct": s["amount_pct"],
              "ipo": (FUND.get(s["code"]) or {}).get("ipo"),
              "pe": (FUND.get(s["code"]) or {}).get("pe"),
+                        "mainlx": (FUND.get(s["code"]) or {}).get("mainlx"),
              "score": s.get("score")}
             for s in valid
         ]
