@@ -1715,7 +1715,16 @@ def main():
              "industry": s.get("industry"), "amount_pct": s["amount_pct"],
              "ipo": (FUND.get(s["code"]) or {}).get("ipo"),
              "pe": (FUND.get(s["code"]) or {}).get("pe"),
-                        "mainlx": (FUND.get(s["code"]) or {}).get("mainlx"),
+             "mainlx": (FUND.get(s["code"]) or {}).get("mainlx"),
+             "m5": (FUND.get(s["code"]) or {}).get("m5"),
+             "ddx": (FUND.get(s["code"]) or {}).get("ddx"),
+             "gdr": (FUND.get(s["code"]) or {}).get("gdr"),
+             # 自由流通换手率：用自由流通股本做分母，比总股本更贴近真实可交易筹码
+             "fturn": (round(s["amount"] / ((FUND.get(s["code"]) or {}).get("free") or 0) * 1e4
+                             / ((FUND.get(s["code"]) or {}).get("px") or 0), 2)
+                       if (FUND.get(s["code"]) or {}).get("free") and (FUND.get(s["code"]) or {}).get("px") else None),
+             "tags": "".join([t for t, k in (("H", "hs300"), ("R", "rzrq"), ("G", "hgtag"))
+                              if (FUND.get(s["code"]) or {}).get(k)]),
              "score": s.get("score")}
             for s in valid
         ]
