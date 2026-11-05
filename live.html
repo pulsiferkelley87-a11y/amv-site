@@ -124,6 +124,13 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
     <div id="crossPromoBox" style="font-size:13px;"></div>
   </div>
   <div class="card">
+    <h2>📐 指标口径与阈值
+      <span class="cb cb-self">自研</span>
+      <span style="font-size:12px;color:var(--muted);font-weight:normal;">本页每个指标怎么判、阈值是多少</span>
+    </h2>
+    <div id="methodLiveBox" style="font-size:13px;"></div>
+  </div>
+  <div class="card">
     <h2>个股信号（逐股递推·日频）
       <span style="font-size:12px;color:var(--muted);font-weight:normal;">查个股：
         <input id="sigSearch" placeholder="代码或名称" style="padding:3px 8px;border:1px solid var(--border);border-radius:5px;width:150px;font-size:12.5px;">
@@ -314,6 +321,7 @@ function renderAll(j) {
   renderLHB();
   renderLeader();
   renderSwitch();
+  renderMethodsLive();
   renderMinutes();
   renderLimits();
   // 基本面（主力净额/DDX）与通达信口径核对：数据每 20 秒整包刷新，LD 会被换成新对象，
@@ -415,6 +423,7 @@ function renderAboutToCrossSupport() {
     .then(r => r.json())
     .then(j => {
       const list = j.list || [];
+      A2CS_N = list.length; if (typeof renderMethodsLive === "function") renderMethodsLive();
       if (!list.length) {
         el.innerHTML = "<span style='color:var(--muted);'>暂无快上穿×支撑共振候选（收盘后自动更新）。</span>";
         return;
@@ -443,6 +452,7 @@ function renderCrossPromotion() {
     .then(r => r.json())
     .then(j => {
       const rows = j.rows || [];
+      PROMO = rows[0] || null; if (typeof renderMethodsLive === "function") renderMethodsLive();
       if (!rows.length) {
         el.innerHTML = "<span style='color:var(--muted);'>暂无晋级统计（从明天开始累积：今天名单 → 明天验证上穿）。</span>";
         return;
@@ -471,6 +481,7 @@ function renderAboutToCross() {
     .then(r => r.json())
     .then(j => {
       const list = j.list || [];
+      A2C_N = list.length; if (typeof renderMethodsLive === "function") renderMethodsLive();
       if (!list.length) {
         el.innerHTML = "<span style='color:var(--muted);'>暂无快上穿候选（收盘后自动更新）。</span>";
         return;
@@ -1467,6 +1478,103 @@ function loadPromo() {
     .catch(() => {});
 }
 
+/* =====================================================================
+ * 指标口径与阈值（实盘页版）
+ *
+ * 每个指标给出：当前值 / 判定落在哪一档 / 判定阈值。
+ * 阈值全部对应本页的真实实现：
+ *   临近支撑位、快上穿、支撑共振 → scripts/update_cloud.py
+ *   牛熊六维                    → scripts/bull_bear.py
+ *   龙头·补涨、高切低、个股信号 → 本文件 renderLeader / renderSwitch / showSignal
+ * ===================================================================== */
+function renderMethodsLive() {
+  const el = document.getElementById("methodLiveBox");
+  if (!el || !LD) return;
+
+  const sigs = LD.signals || {};
+  const sigArr = Object.keys(sigs).map(k => sigs[k]).filter(Boolean);
+  const upN = sigArr.filter(s => s.cross === "up").length;
+  const dnN = sigArr.filter(s => s.cross === "down").length;
+
+  const limitList = LD.limit_up_list || [];
+  const brokeN = (LD.broke_list || []).length;
+  const firstN = limitList.filter(s => {
+    const sg = sigs[s.code] || sigs[normCode(s.code)] || {};
+    return ((sg.limit_days || s.limit_days || 0) === 1);
+  }).length;
+
+  /* 龙头覆盖：每个板块里连板天数最高的成分股，连板≥1 才算这个板块有"龙头" */
+  let blkLeaderN = 0;
+  try {
+    Object.keys(MEMBERS || {}).forEach(blk => {
+      const codes = MEMBERS[blk] || [];
+      let best = 0;
+      for (let i = 0; i < codes.length; i++) {
+        const sg = sigs[codes[i]] || sigs[normCode(codes[i])];
+        if (sg && (sg.limit_days || 0) > best) best = sg.limit_days || 0;
+      }
+      if (best >= 1) blkLeaderN++;
+    });
+  } catch (e) { }
+
+  const nsN = (LD.near_support || []).length;
+  /* market_totals 这个字段在 live_data.json 里不存在，真正的合计在 breadth 里 */
+  const br = LD.breadth || {};
+  const mt = { amount: br.amount_sum };
+  const mkt = { up: br.up, down: br.down, flat: br.flat };
+  const sigEmpty = !sigArr.length;
+  const bb = (typeof BB_LIVE !== "undefined" && BB_LIVE) || null;
+
+  const val = v => (v == null || v === "" ? "—" : String(v));
+
+  const rows = [
+    ["指数卡 · 成交额与涨跌家数",
+      mt.amount ? (mt.amount / 1e12).toFixed(2) + " 万亿" : "—",
+      "MAINZSHQ 5 / 6 / 7",
+      "成交额与涨跌家数都从个股快照现算：6/9 开头记沪、0/2/3 开头记深、300/301 记创业板、688/689 记科创50；平盘单列，不并入任一边"],
+    ["市场情绪",
+      val(mkt.up) + " / " + val(mkt.down),
+      "涨 / 跌（平盘单列）",
+      "东财快照口径；与上方通达信核对交叉验证，两边数字应一致"],
+    ["通达信口径核对", "见上方", "TOTALHQINFO(1..6)",
+      "上涨/下跌/涨停/跌停家数 · 总成交金额（亿元）；涨停按 ZTPRICE 分档近似：北交所 30% ／ 创业板·科创板 20% ／ 主板 10% ／ 主板 ST 5%"],
+    ["牛熊六维",
+      bb && bb.total != null ? ((bb.total > 0 ? "+" : "") + Number(bb.total).toFixed(1)) : "—",
+      "权重 25/20/15/15/10/15",
+      "总分五档：≥35 牛市特征较强 ／ 15~34 偏多 ／ −14~14 震荡 ／ −34~−15 偏弱 ／ ≤−35 熊市特征较强"],
+    ["资金主线雷达", "见上方", "东财主力净流入",
+      "按板块主力净额排序取前 N，反推主线方向；净额单位换算为亿元，不做跨板块归一"],
+    ["临近支撑位", nsN ? (nsN + " 只") : "休市回退", "盘中实算",
+      "支撑 = 左右各 3 根 K 线都不破的局部低点 + 近 20 日最低点；相距 <2% 的合并取更低者；只取低于现价 0.5% 以上的最近一个；入选条件 0 < 距支撑 < 5%"],
+    ["快上穿十日线", A2C_N == null ? "—" : A2C_N + " 只", "盘后复算",
+      "六条同时满足：① A 仍在 MA10 下方 ② X=min(换手率÷1.1,1) > A ③ A 三日递增 ④ gap 连续两日收窄 ⑤ 预计穿线 ≤3 天 ⑥ 历史序列 ≥15 天"],
+    ["快上穿×支撑共振", A2CS_N == null ? "—" : A2CS_N + " 只", "盘后复算",
+      "在快上穿基础上再要求距支撑 <3%（普通支撑监控的阈值是 <5%）"],
+    ["上穿晋级统计",
+      PROMO ? (PROMO.prev + " → " + PROMO.promoted) : "—",
+      PROMO && PROMO.rate != null ? "晋级率 " + PROMO.rate + "%" : "次日复盘",
+      "拿昨日快上穿名单，看今日有多少只 A 真的站上了 MA10；共振名单单独统计，两者分开算"],
+    ["龙头 · 补涨识别", sigEmpty ? "未就绪" : (blkLeaderN + " 个板块有连板股"), sigEmpty ? "依赖个股信号" : "连板口径",
+      "每个板块取连板天数最高的成分股作为该板块最强；连板 ≥1 才入选；同一只股属多个板块时只保留连板最高的那条；1 板进「首板候选」，≥2 板进「持续连板」"],
+    ["高切低监测", "炸板 " + brokeN + " / 首板 " + firstN, "情绪切换",
+      "高位退潮 = 当日炸板名单；低位接力 = 今日首板（连板天数 = 1）名单；两者只是并列展示，不构成因果判断"],
+    ["个股信号", sigEmpty ? "未就绪" : (upN + " / " + dnN), sigEmpty ? "信号文件为空" : "当日上穿 / 下穿",
+      "上穿：前一日 A≤MA10 且当日 A>MA10；下穿反之。gap = A÷MA10−1；分位 = 该股活跃度在自身近 250 日中的位置"],
+  ];
+
+  el.innerHTML =
+    '<div class="rulewrap"><table class="ruletbl"><thead><tr>' +
+    '<th>指标</th><th>当前值</th><th>判定</th><th>规则 / 阈值</th>' +
+    '</tr></thead><tbody>' +
+    rows.map(r =>
+      '<tr><td class="rk">' + r[0] + '</td><td class="rv">' + r[1] +
+      '</td><td class="rj">' + r[2] + '</td><td class="rr">' + r[3] + '</td></tr>').join("") +
+    '</tbody></table></div>' +
+    '<div class="note" style="margin-top:8px;">阈值取自 <code>scripts/update_cloud.py</code>、' +
+    '<code>scripts/bull_bear.py</code> 的判定分支与本页渲染逻辑，不是事后补的说明。' +
+    '这些是对指标区间的<b>描述</b>，不是买卖建议。</div>';
+}
+
 function renderLeader() {
   const el = document.getElementById("leaderBox");
   if (!el || !LD || !LD.signals) return;
@@ -1953,6 +2061,7 @@ function loadBullBearLive() {
     .then(bb => {
       const el = document.getElementById("bbLive");
       if (!el || !bb || !bb.scores) return;
+      BB_LIVE = bb; if (typeof renderMethodsLive === "function") renderMethodsLive();
       const s = bb.scores, total = bb.total;
       const mods = [["价格趋势", s.trend, "25%"], ["市场广度", s.breadth, "20%"],
                     ["成交量能", s.volume, "15%"], ["宏观盈利", s.macro, "15%"],
@@ -2000,6 +2109,9 @@ let BLOCKS = null;      // concept_blocks.json 原始数组
 let BLOCKS_OF = null;   // code6 -> [板块下标...]
 let IND_RANK = null;    // code6 -> { r, n }
 let SECTOR_STATE = "idle";
+/* 供「指标口径与阈值」表显示当前数量：三个名单是各自 fetch 的，这里把长度记下来 */
+let A2C_N = null, A2CS_N = null, PROMO = null;
+let BB_LIVE = null;   // 牛熊六维原始数据，供口径表取当前总分
 
 function loadSectorData() {
   SECTOR_STATE = "loading";
