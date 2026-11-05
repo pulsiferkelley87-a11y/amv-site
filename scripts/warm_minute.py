@@ -165,6 +165,8 @@ def main():
     ap.add_argument("--codes", default="", help="直接指定代码，逗号分隔")
     ap.add_argument("--period", type=int, default=7)
     ap.add_argument("-v", "--verbose", action="store_true")
+    ap.add_argument("--skip-existing", action="store_true",
+                    help="先用 HEAD 查已有（慢，约 0.2s/只）；默认直接覆盖写，幂等")
     a = ap.parse_args()
 
     import tdx_minute
@@ -185,7 +187,7 @@ def main():
     t0 = time.time()
     for i, (code, why) in enumerate(uni, 1):
         key = "minute/%s/%s/p%d.json" % (code, date, a.period)
-        if cos_exists(key):
+        if a.skip_existing and cos_exists(key):
             skip += 1
             continue
         try:
