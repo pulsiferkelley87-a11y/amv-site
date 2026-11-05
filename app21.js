@@ -106,6 +106,7 @@ async function load() {
   }
   renderMeta();
   renderTdxCheck();
+  renderMethodBox();
   renderMain();
   renderTrio();
   renderRatio();
@@ -1400,6 +1401,87 @@ function renderTdxCheck() {
     `</div>`;
 }
 
+/* ===== 指标口径与阈值（参照大波浪数据"温度是怎么判的"那张表） =====
+ *
+ * 为什么要有这张表：本页大部分指标是自研的，只给结果不给判定规则，
+ * 读者没法复核，只能选择相信。这里把每个指标的**当前值 + 判定 + 阈值**一起摆出来，
+ * 阈值全部来自 scripts/bull_bear.py 与 scripts/update_cloud.py 里的实际代码，
+ * 不是事后编的说明。
+ */
+function renderMethodBox() {
+  const el = document.getElementById("methodBox");
+  if (!el || !D) return;
+
+  const bb = BB_DATA || (D.bull_bear && D.bull_bear.scores ? D.bull_bear : null);
+  const s = (bb && bb.scores) || {};
+  const total = bb ? bb.total : null;
+  const state = bb ? (bb.state || "") : "";
+
+  const fmt1 = v => (v == null ? "—" : (v > 0 ? "+" : "") + Number(v).toFixed(1));
+  const ofLast = a => (Array.isArray(a) && a.length ? a[a.length - 1] : null);
+
+  const ratio = ofLast(D.official && D.official.ratio);
+  const a2c = (D.about_to_cross || []).length;
+  const a2cs = (D.about_to_cross_support || []).length;
+  const sig = D.stocks_amv || [];
+  const upN = sig.filter(x => x.cross === "up").length;
+  const downN = sig.filter(x => x.cross === "down").length;
+  const mt = D.market_totals;
+
+  // 牛熊五档：只标当前落在哪一档，不预测
+  const band = total == null ? "—"
+    : total >= 35 ? "牛市特征较强"
+      : total >= 15 ? "偏多"
+        : total >= -14 ? "震荡"
+          : total >= -34 ? "偏弱" : "熊市特征较强";
+
+  const rows = [
+    ["牛熊总评", fmt1(total), band + (state ? "（" + state + "）" : ""),
+      "≥35 牛市特征较强 ｜ 15~34 偏多 ｜ −14~14 震荡 ｜ −34~−15 偏弱 ｜ ≤−35 熊市特征较强"],
+    ["价格趋势", fmt1(s.trend), "权重 25%",
+      "主要指数相对 MA20/MA60 的位置打分，单维 −100~+100"],
+    ["市场广度", fmt1(s.breadth), "权重 20%",
+      "(站上60日线%−50)×1.6 + (120日−50)×1.2 + (250日−50)×0.8，再 ÷3.6，钳到 ±100"],
+    ["成交量能", fmt1(s.volume), "权重 15%",
+      "20日量比 >1.2 记 +30 ／ >1 记 +15 ／ <0.7 记 −30；5日量比 >1.05 记 +20；20日均量趋势 >+5% 记 +20"],
+    ["宏观盈利", fmt1(s.macro), "权重 15%",
+      "读 macro.json（PMI、工业企业利润增速等，人工维护）；无数据时记 0"],
+    ["市场估值", fmt1(s.valuation), "权重 10%",
+      "有真实 PE/PB 历史分位时按分位打分，否则退回 macro.json 的手填值"],
+    ["情绪杠杆", fmt1(s.sentiment), "权重 15%",
+      "上涨占比 >65% 记 +60 ／ >50% +20 ／ <35% −60 ／ 其余 −20；涨停>跌停×2 记 +20；最高连板≥5 记 +20"],
+    ["活跃比例", ratio == null ? "—" : (ratio * 100).toFixed(2) + "%", "0AMV ÷ 0号指数",
+      "历史区间 7.7% ~ 30.6%（该区间是历史观测值，不是阈值）"],
+    ["活跃度递推", "见下方说明", "自研模型",
+      "A_t = 0.9169·A_{t−1} + min(换手率÷1.1, 1)·(1−A_{t−1})，半衰期 10 个交易日"],
+    ["快上穿十日线", (a2c >= 60 ? "≥60" : a2c) + " 只", "展示上限 60",
+      "六条同时满足：① A 仍在 MA10 下方 ② 换手强度 X=min(换手率÷1.1,1) > A ③ A 三日递增 ④ gap 连续两日收窄 ⑤ 预计穿线 ≤3 天 ⑥ 历史序列 ≥15 天"],
+    ["快上穿×支撑共振", (a2cs >= 60 ? "≥60" : a2cs) + " 只", "展示上限 60",
+      "在「快上穿」基础上，要求现价高于最近支撑位且距离 <3%（普通版支撑距离阈值是 <5%）"],
+    ["个股信号 上穿 / 下穿", upN + " / " + downN, "当日拐头数",
+      "上穿：前一日 A<MA10 且当日 A≥MA10；下穿反之。分位 = 该股活跃度在自身近 250 日中的位置"],
+    ["沪深京成交额", mt ? (mt.amount / 1e12).toFixed(2) + " 万亿" : "—", "个股快照求和",
+      "个股 amount 加总；与通达信 TOTALHQINFO(6) 逐项核对，偏差见上方「通达信口径核对」"],
+  ];
+
+  const cell = v => esc(v == null ? "—" : String(v));
+  el.innerHTML =
+    '<div class="rulewrap"><table class="ruletbl"><thead><tr>' +
+    '<th>指标</th><th>当前值</th><th>判定</th><th>规则 / 阈值</th>' +
+    '</tr></thead><tbody>' +
+    rows.map(r =>
+      '<tr><td class="rk">' + cell(r[0]) + '</td>' +
+      '<td class="rv">' + cell(r[1]) + '</td>' +
+      '<td class="rj">' + cell(r[2]) + '</td>' +
+      '<td class="rr">' + cell(r[3]) + '</td></tr>').join("") +
+    '</tbody></table></div>' +
+    '<div class="note" style="margin-top:8px;">' +
+    '阈值全部取自 <code>scripts/bull_bear.py</code> 与 <code>scripts/update_cloud.py</code> 的实际判定分支，' +
+    '不是事后补的说明。这些是对指标区间的<b>描述</b>，不是买卖建议。' +
+    (bb && bb.updated_at ? '　牛熊口径更新：' + esc(bb.updated_at) : '') +
+    '</div>';
+}
+
 function esc(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
@@ -1463,6 +1545,7 @@ function renderAll() {
   renderAboutToCrossSupport();
   renderCrossPromotion();
   renderMeta();
+  try { renderMethodBox(); } catch (e) { }
   try { renderTdxCheck(); } catch (e) {
     const box = document.getElementById("tdxCheck");
     if (box) box.textContent = "通达信口径核对渲染失败：" + (e && e.message ? e.message : e);
@@ -1566,6 +1649,7 @@ function loadBullBear() {
         BB_DATA = j;
         const el = document.getElementById("bullBearBox");
         if (el) renderBullBearBox(el, j);
+        try { renderMethodBox(); } catch (e) { }
       }
     })
     .catch(() => {
