@@ -105,6 +105,7 @@ async function load() {
       "个股/板块历史快照采集中（每日自动补充）";
   }
   renderMeta();
+  renderTdxCheck();
   renderMain();
   renderTrio();
   renderRatio();
@@ -1269,7 +1270,7 @@ function renderFlow() {
   const r3 = v => (v == null ? "—" : Number(v).toFixed(3));
 
   let html = '<table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>行业</th>' +
-    '<th>今日(亿)</th><th>3日</th><th>5日</th><th>10日</th><th>DDX</th><th>DDY</th>' +
+    '<th>主力净额(亿)</th><th>3日</th><th>5日</th><th>10日</th><th>DDX</th><th>DDY</th>' +
     '<th>自由换手</th><th>标记</th><th>涨跌幅</th>' +
     '</tr></thead><tbody>';
   rows.forEach((s, i) => {
@@ -1294,6 +1295,74 @@ function renderFlow() {
     const pos = list.filter(s => (val(s) || 0) > 0).length;
     note.textContent = `覆盖 ${list.length} 只（净流入为正 ${pos} 只）｜ 排序口径：${keyName}｜ 基本面时点：${fu}`;
   }
+}
+
+/* ===== 通达信口径核对（TOTALHQINFO 1..6） =====
+ *
+ * 口径来源：对 TCalc.dll 内置公式帮助文本的静态解析（REA/Ghidra，见 tdx-re/REPORT-64bit.md）。
+ * 通达信自己把这些定义成公式函数：
+ *   TOTALHQINFO(N)  沪深京市场表现
+ *     N:1 上涨家数  2 下跌家数  3 涨停家数  4 跌停家数  5 昨日上涨家数  6 总成交金额(亿元)
+ *
+ * 涨停家数的分档沿用通达信内置公式里 ZTPRICE 的写法：
+ *   北交所 30%、创业板(300/301)/科创板(688/689) 20%、主板 10%、主板 ST 5%
+ *   （内置公式原文：ZTJ:=IF(TJ3,ZTPRICE(REF(CLOSE,1),0.3),
+ *                        IF(TJ,ZTPRICE(REF(CLOSE,1),0.2),ZTPRICE(REF(CLOSE,1),0.1)))）
+ *
+ * 局限（必须说清）：本站个股快照只有涨跌幅、没有昨收价，复现不了 ZTPRICE 的"按分取整"，
+ * 所以用"涨幅档位 ± 0.10 个百分点"近似。它的用途是让人拿通达信逐个数字对得上，
+ * 不是用来做回测或统计口径的唯一真值。 */
+function limitPctOf(code, name) {
+  const c = String(code || "");
+  const nm = String(name || "").toUpperCase();
+  const isST = nm.indexOf("ST") >= 0;
+  if (c[0] === "4" || c[0] === "8" || c.slice(0, 3) === "920") return 30;
+  if (c.slice(0, 3) === "300" || c.slice(0, 3) === "301") return 20;
+  if (c.slice(0, 3) === "688" || c.slice(0, 3) === "689") return 20;
+  return isST ? 5 : 10;
+}
+
+function renderTdxCheck() {
+  const el = document.getElementById("tdxCheck");
+  if (!el || !D || !D.all_stocks) return;
+  const list = D.all_stocks;
+  let up = 0, down = 0, flat = 0, zt = 0, dt = 0, amt = 0, n = 0;
+  for (let i = 0; i < list.length; i++) {
+    const s = list[i];
+    const p = s.pct;
+    if (p == null || !isFinite(p)) continue;
+    n++;
+    if (s.amount) amt += s.amount;
+    if (p > 0) up++; else if (p < 0) down++; else flat++;
+    const lim = limitPctOf(s.code, s.name);
+    if (p >= lim - 0.10) zt++;
+    else if (p <= -(lim - 0.10)) dt++;
+  }
+  if (!n) { el.innerHTML = '<span style="color:var(--muted)">等待行情数据…</span>'; return; }
+
+  const mt = D.market_totals;
+  const siteAmt = mt ? mt.amount : null;
+  const diff = siteAmt ? (amt / siteAmt - 1) * 100 : null;
+  const cell = (label, val, extra) =>
+    `<span style="display:inline-block;margin-right:22px;">${label} <b style="font-size:15px;">${val}</b>${extra || ""}</span>`;
+
+  el.innerHTML =
+    `<div>` +
+    cell("上涨", up.toLocaleString()) +
+    cell("下跌", down.toLocaleString()) +
+    cell("平盘", flat.toLocaleString()) +
+    cell("涨停≈", zt) +
+    cell("跌停≈", dt) +
+    cell("总成交", (amt / 1e8).toFixed(0) + " 亿") +
+    `</div>` +
+    `<div style="font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.7;">` +
+    `样本 ${n.toLocaleString()} 只 ｜ 对应公式 <code>TOTALHQINFO(1..6)</code>（上涨/下跌/涨停/跌停家数 · 总成交金额）` +
+    (diff != null
+      ? ` ｜ 与「沪深京成交额」${(siteAmt / 1e8).toFixed(0)} 亿的偏差 <b>${diff >= 0 ? "+" : ""}${diff.toFixed(2)}%</b>` +
+        (Math.abs(diff) > 0.5 ? ' <span class="down">（口径不一致，需查快照是否缺票）</span>' : ' <span class="up">（一致）</span>')
+      : "") +
+    `<br>涨停按通达信 ZTPRICE 分档近似：北交所 30% ／ 创业板·科创板 20% ／ 主板 10% ／ 主板 ST 5%，容差 ±0.10 个百分点。` +
+    `</div>`;
 }
 
 function esc(s) {
@@ -1359,6 +1428,10 @@ function renderAll() {
   renderAboutToCrossSupport();
   renderCrossPromotion();
   renderMeta();
+  try { renderTdxCheck(); } catch (e) {
+    const box = document.getElementById("tdxCheck");
+    if (box) box.textContent = "通达信口径核对渲染失败：" + (e && e.message ? e.message : e);
+  }
   renderMain();
   renderTrio();
   renderRatio();
