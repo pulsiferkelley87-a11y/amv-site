@@ -846,7 +846,7 @@ function loadKline(code) {
         }
         KL_DATA = rows2;
         KL_VIEW = { end: rows2.length - 1, count: Math.min(60, rows2.length) };
-        box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动看十字光标｜<b>点K线看那一天的分时</b></span></div>` + renderKline() + `<div id="kDayIntra" style="margin-top:4px;"></div>`;
+        box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动看十字光标｜<b>点K线看那一天的分时</b>（<span style="color:#2b57c8;">蓝底</span>=近5日可分时）</span></div>` + renderKline() + `<div id="kDayIntra" style="margin-top:4px;"></div>`;
       }, () => {
         KLINE_ABORT = null;
         box.innerHTML = "<span style='font-size:12px;color:var(--muted);'>K线加载失败（该股可能已退市或停牌）。</span>";
@@ -860,7 +860,7 @@ function loadKline(code) {
       }
       KL_DATA = rows;
       KL_VIEW = { end: rows.length - 1, count: Math.min(60, rows.length) };
-      box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动看十字光标｜<b>点K线看那一天的分时</b></span></div>` + renderKline() + `<div id="kDayIntra" style="margin-top:4px;"></div>`;
+      box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动看十字光标｜<b>点K线看那一天的分时</b>（<span style="color:#2b57c8;">蓝底</span>=近5日可分时）</span></div>` + renderKline() + `<div id="kDayIntra" style="margin-top:4px;"></div>`;
     }, () => doSina(), c2.signal);
   };
   fetch(`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${raw},${KLINE_PERIOD},,,${KLINE_RANGE},qfq`, { signal: ctrl.signal })
@@ -875,7 +875,7 @@ function loadKline(code) {
       }
       KL_DATA = rows;
       KL_VIEW = { end: rows.length - 1, count: Math.min(60, rows.length) };
-      box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动看十字光标｜<b>点K线看那一天的分时</b></span></div>` + renderKline() + `<div id="kDayIntra" style="margin-top:4px;"></div>`;
+      box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动看十字光标｜<b>点K线看那一天的分时</b>（<span style="color:#2b57c8;">蓝底</span>=近5日可分时）</span></div>` + renderKline() + `<div id="kDayIntra" style="margin-top:4px;"></div>`;
     })
     .catch(e => {
       if (e && e.name === "AbortError") return;   // 被新请求取消：静默退出，不做兜底
@@ -889,7 +889,7 @@ function toggleKlineLevels() {
   if (box && KL_DATA) {
     const btnHtml = `<button onclick="toggleKlineLevels()" style="padding:6px 12px;border:1px solid var(--border);border-radius:5px;background:var(--card);cursor:pointer;font-size:13px;">📏 关键位：${KL_SHOW_LEVELS ? "开" : "关"}</button>`;
     box.innerHTML = box.innerHTML.replace(/<button onclick="toggleKlineLevels()"[^>]*>[^<]*<\/button>/, btnHtml)
-      .replace(/<svg id="klineSvg"[\s\S]*<\/svg>/, renderKline());
+      .replace(/<svg id="klineSvg"[\s\S]*?<\/svg>/, renderKline());
   }
 }
 
@@ -1108,8 +1108,12 @@ function loadTrends5(sym) {
       if (!KL_TRENDS.dates.length) {
         KL_TRENDS_ERR = "该股没有可用的分时数据";
         KL_TRENDS = null;
+      } else {
+        // 默认就展示最新交易日的分时，用户不用先学会"该点哪根"
+        if (!KL_SEL_DATE) KL_SEL_DATE = KL_TRENDS.dates[KL_TRENDS.dates.length - 1];
+        try { redrawKline(); } catch (e) { }
+        showDayIntraday(KL_SEL_DATE);
       }
-      if (KL_SEL_DATE) showDayIntraday(KL_SEL_DATE);
     })
     .catch(() => {
       KL_TRENDS = null;
@@ -1253,8 +1257,61 @@ function pickBarAt(clientX, clientY) {
   if (d2) showDayIntraday(d2);
 }
 
+/* K 线点击看分时：用「事件委托」挂在容器上，而不是绑在 svg 元素上。
+   原因：repaint() 是用 innerHTML.replace 重建整个 <svg> 的，绑在 svg 上的
+   onmouseup / ontouchend 会在第一次重绘（滚轮缩放、拖动、切周期）后全部丢失，
+   表现就是"点了没反应"。委托挂在不会被替换的 #klineBox 上就与重绘无关。
+   移动端 svg.ontouchstart 里有 preventDefault()，不会合成 click，所以 touch 单独收。 */
+
+/* 全局重绘入口：repaint() 是 loadKline 闭包内的局部函数，外部（如分时数据到达后）调不到。
+   这里用同样的方式替换 <svg id="klineSvg"> 即可，事件委托挂在 #klineBox 上不受影响。 */
+function redrawKline() {
+  const box = document.getElementById("klineBox");
+  if (!box || typeof renderKline !== "function") return;
+  if (!KL_DATA || !KL_DATA.length) return;
+  box.innerHTML = box.innerHTML.replace(/<svg id="klineSvg"[\s\S]*?<\/svg>/, renderKline());
+}
+
+function bindKlineDelegation() {
+  const box = document.getElementById("klineBox");
+  if (!box || box.__kbound) return;
+  box.__kbound = true;
+
+  const handle = (x, y) => {
+    if (typeof pickBarAt === "function") pickBarAt(x, y);
+  };
+  box.addEventListener("click", function (e) {
+    if (e.detail === 0) return;                 // 忽略程序化触发的 click
+    const hit = e.target && e.target.closest ? e.target.closest("[data-d]") : null;
+    if (hit) {
+      const d = hit.getAttribute("data-d");
+      if (d) { showDayIntraday(d); return; }
+    }
+    handle(e.clientX, e.clientY);
+  });
+  let tx = null, ty = null;
+  box.addEventListener("touchstart", function (e) {
+    if (e.touches && e.touches.length === 1) { tx = e.touches[0].clientX; ty = e.touches[0].clientY; }
+  }, { passive: true });
+  box.addEventListener("touchend", function (e) {
+    if (tx == null) return;
+    const t0 = (e.changedTouches && e.changedTouches[0]) || null;
+    if (!t0) return;
+    const moved = Math.hypot(t0.clientX - tx, t0.clientY - ty) > 10;
+    tx = null; ty = null;
+    if (moved) return;                           // 拖动不算点击
+    const hit = e.target && e.target.closest ? e.target.closest("[data-d]") : null;
+    if (hit) {
+      const d = hit.getAttribute("data-d");
+      if (d) { showDayIntraday(d); return; }
+    }
+    handle(t0.clientX, t0.clientY);
+  });
+}
+
 function renderKline() {
   if (!KL_DATA || !KL_DATA.length) return "";
+  bindKlineDelegation();
   const n = KL_DATA.length;
   const dispEnd = KL_VIEW.end;
   const dispStart = Math.max(0, dispEnd - KL_VIEW.count + 1);
@@ -1332,8 +1389,21 @@ function renderKline() {
       }
     }
   }
+  // 把「能看分时」的那几根（近 5 个交易日）标一层浅底纹，省得用户点到老日子才发现没数据
+  let availBand = "";
+  if (KL_TRENDS && KL_TRENDS.dates && KL_TRENDS.dates.length) {
+    const avail = Object.create(null);
+    KL_TRENDS.dates.forEach(x => { avail[x] = 1; });
+    rows.forEach((r, i) => {
+      const dd = normDate(r[0]);
+      if (!avail[dd]) return;
+      const cx0 = x(i) - bw / 2;
+      availBand += `<rect x="${cx0.toFixed(1)}" y="${PT}" width="${bw.toFixed(1)}" height="${ih.toFixed(1)}" fill="#2b57c8" opacity="0.07"/>`;
+    });
+  }
   const svg = `<svg id="klineSvg" width="100%" viewBox="0 0 ${W} ${H}" style="background:var(--card2);border:1px solid var(--border);border-radius:6px;margin-top:6px;touch-action:none;">
     ${grid}
+    ${availBand}
     ${levelLines}
     <g id="klinePan">
     ${volbars}
@@ -1375,7 +1445,7 @@ function bindKlineGestures() {
   const clampEnd = v => Math.max(KL_VIEW.count - 1, Math.min(n - 1, v));
   const repaint = () => {
     const box = document.getElementById("klineBox");
-    if (box) box.innerHTML = box.innerHTML.replace(/<svg id="klineSvg"[\s\S]*<\/svg>/, renderKline());
+    if (box) box.innerHTML = box.innerHTML.replace(/<svg id="klineSvg"[\s\S]*?<\/svg>/, renderKline());
     if (KL_RAF) { cancelAnimationFrame(KL_RAF); KL_RAF = null; }
   };
   const panEl = () => {
