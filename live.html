@@ -816,6 +816,9 @@ function loadKline(code) {
   abortPrevKline();
   box.innerHTML = "<span style='font-size:12px;color:var(--muted);'>K线加载中…</span>";
   LAST_KLINE_CODE = code;
+  // 换股票就重拉 5 日分钟线；同一只票不重复请求
+  const _raw6 = code.startsWith('sh') || code.startsWith('sz') || code.startsWith('bj') ? code.slice(2) : code;
+  if (KL_TRENDS_SYM !== _raw6) { KL_TRENDS = null; KL_SEL_DATE = ''; loadTrends5(_raw6); }
   const raw = code.startsWith("sh") || code.startsWith("sz") || code.startsWith("bj") ? code
     : (code.startsWith("92") || code.startsWith("4") || code.startsWith("8") ? "bj" + code
        : code.startsWith("6") ? "sh" + code
@@ -843,7 +846,7 @@ function loadKline(code) {
         }
         KL_DATA = rows2;
         KL_VIEW = { end: rows2.length - 1, count: Math.min(60, rows2.length) };
-        box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动/点击看十字光标</span></div>` + renderKline();
+        box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动看十字光标｜<b>点K线看那一天的分时</b></span></div>` + renderKline() + `<div id="kDayIntra" style="margin-top:4px;"></div>`;
       }, () => {
         KLINE_ABORT = null;
         box.innerHTML = "<span style='font-size:12px;color:var(--muted);'>K线加载失败（该股可能已退市或停牌）。</span>";
@@ -857,7 +860,7 @@ function loadKline(code) {
       }
       KL_DATA = rows;
       KL_VIEW = { end: rows.length - 1, count: Math.min(60, rows.length) };
-      box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动/点击看十字光标</span></div>` + renderKline();
+      box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动看十字光标｜<b>点K线看那一天的分时</b></span></div>` + renderKline() + `<div id="kDayIntra" style="margin-top:4px;"></div>`;
     }, () => doSina(), c2.signal);
   };
   fetch(`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${raw},${KLINE_PERIOD},,,${KLINE_RANGE},qfq`, { signal: ctrl.signal })
@@ -872,7 +875,7 @@ function loadKline(code) {
       }
       KL_DATA = rows;
       KL_VIEW = { end: rows.length - 1, count: Math.min(60, rows.length) };
-      box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动/点击看十字光标</span></div>` + renderKline();
+      box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动看十字光标｜<b>点K线看那一天的分时</b></span></div>` + renderKline() + `<div id="kDayIntra" style="margin-top:4px;"></div>`;
     })
     .catch(e => {
       if (e && e.name === "AbortError") return;   // 被新请求取消：静默退出，不做兜底
@@ -1045,6 +1048,211 @@ function computeLevels() {
 
 const KL_PAD = 15;   // 拖动预渲染缓冲区（根）
 
+/* =====================================================================
+ * K 线里点某根 → 看那一天的分时（通达信里双击 K 线进分时的等价操作）
+ *
+ * 数据现实：免费源给不出任意历史日期的分时。
+ *   - 腾讯 minute/query 的 date 参数是假的，永远返回最近一个交易日
+ *   - 腾讯 day/query 一次给最近 5 个交易日（东财 trends2 也行，但会无预兆拒连，已弃用）
+ * 所以这里如实做成"最近 5 个交易日可点"，更早的日期明确说明取不到，
+ * 不用成交量/均价去"还原"一条假的分时线。
+ * ===================================================================== */
+let KL_TRENDS = null;        // { dates: [...], byDate: { 'YYYY-MM-DD': [{t,price,avg,vol,amt}] } }
+let KL_TRENDS_SYM = "";      // 这份 trends 属于哪只票
+let KL_TRENDS_PEND = false;  // 正在拉
+let KL_SEL_DATE = "";        // 当前选中的日期
+let KL_TRENDS_ERR = "";     // 分时源失败原因（诊断用）
+let KL_TRENDS_RETRY = false;  // 自愈重试标记
+
+/* 拉最近 5 个交易日的分时（腾讯 day/query，和「分时」弹窗同源，支持北交所）
+   —— 原来用东财 trends2，但那个接口会无预兆拒连（实测连 5 次全 Remote end closed），
+      换成腾讯：一次返回 5 个交易日，每根是「时间 价 累计量 累计额」。 */
+function loadTrends5(sym) {
+  const s = String(sym || "");
+  const full = /^(sh|sz|bj)/i.test(s) ? s.toLowerCase() : mktOf(normCode(s)) + normCode(s);
+  KL_TRENDS_SYM = normCode(full);
+  KL_TRENDS_PEND = true;
+  KL_TRENDS_ERR = "";
+  const u = "https://web.ifzq.gtimg.cn/appstock/app/day/query?code=" + full + "&_=" + Date.now();
+  fetch(u, { cache: "no-store" })
+    .then(r => r.json())
+    .then(j => {
+      const arr = ((j.data || {})[full] || {}).data || [];
+      const byDate = {};
+      arr.forEach(day => {
+        const raw = String(day.date || "");
+        if (raw.length !== 8) return;
+        const key = raw.slice(0, 4) + "-" + raw.slice(4, 6) + "-" + raw.slice(6, 8);
+        let prevVol = 0;
+        const bars = (day.data || []).map(line => {
+          const a = String(line).trim().split(/\s+/);
+          const price = parseFloat(a[1]);
+          if (!isFinite(price) || price <= 0) return null;
+          const cumVol = parseFloat(a[2]) || 0;
+          const cumAmt = parseFloat(a[3]) || 0;
+          const dvol = Math.max(0, cumVol - prevVol);
+          prevVol = cumVol;
+          return {
+            t: a[0] || "",
+            price: price,
+            vol: cumVol,      // 累计量（手）
+            dvol: dvol,       // 本根增量（画量柱用）
+            amt: cumAmt,      // 累计额（元）
+            avg: cumVol > 0 && cumAmt > 0 ? cumAmt / (cumVol * 100) : price
+          };
+        }).filter(Boolean);
+        if (bars.length) byDate[key] = bars;
+      });
+      KL_TRENDS = { dates: Object.keys(byDate).sort(), byDate: byDate };
+      KL_TRENDS_PEND = false;
+      if (!KL_TRENDS.dates.length) {
+        KL_TRENDS_ERR = "该股没有可用的分时数据";
+        KL_TRENDS = null;
+      }
+      if (KL_SEL_DATE) showDayIntraday(KL_SEL_DATE);
+    })
+    .catch(() => {
+      KL_TRENDS = null;
+      KL_TRENDS_PEND = false;
+      KL_TRENDS_ERR = "腾讯 day/query 请求失败";
+      const el = document.getElementById("kDayIntra");
+      if (el) el.innerHTML = '<span style="font-size:11.5px;color:var(--muted);">分时数据取不到（腾讯 day/query 失败）</span>';
+    });
+}
+
+/* 日期归一：K线日期可能是 2026-11-05 或 20261105 */
+function normDate(d) {
+  const s = String(d || "").replace(/[^0-9]/g, "");
+  return s.length >= 8 ? s.slice(0, 4) + "-" + s.slice(4, 6) + "-" + s.slice(6, 8) : "";
+}
+
+/* 画某一天的分时：价格线 + 均价线 + 量柱 */
+function dayIntraSVG(bars, prevClose) {
+  const W = 660, H = 190, PL = 46, PR = 10, PT = 10, PB = 18, volH = 46;
+  const ih = H - PT - PB - volH - 8;
+  const iw = W - PL - PR;
+  const n = bars.length;
+  if (!n) return "";
+  const px = bars.map(b => b.price);
+  let mn = Math.min.apply(null, px), mx = Math.max.apply(null, px);
+  if (prevClose && isFinite(prevClose)) { mn = Math.min(mn, prevClose); mx = Math.max(mx, prevClose); }
+  if (mx - mn < 1e-6) mx = mn + 0.01;
+  const pad = (mx - mn) * 0.08;
+  mn -= pad; mx += pad;
+  const yOf = v => PT + (1 - (v - mn) / (mx - mn)) * ih;
+  const xOf = i => PL + (n === 1 ? 0 : i * iw / (n - 1));
+  const path = arr => arr.map((v, i) => (i ? "L" : "M") + xOf(i).toFixed(1) + " " + yOf(v).toFixed(1)).join("");
+
+  const last = px[n - 1];
+  const up = prevClose ? last >= prevClose : last >= px[0];
+  const col = up ? "#d64545" : "#2fa36b";
+  const vmax = Math.max.apply(null, bars.map(b => (b.dvol != null ? b.dvol : b.vol) || 0)) || 1;
+  const vTop = PT + ih + 8;
+  const bw = Math.max(0.6, iw / n * 0.7);
+  const vols = bars.map((b, i) => {
+    const h = ((b.dvol != null ? b.dvol : b.vol) || 0) / vmax * volH;
+    const c = (i > 0 && b.price < bars[i - 1].price) ? "#2fa36b" : "#d64545";
+    return '<rect x="' + (xOf(i) - bw / 2).toFixed(1) + '" y="' + (vTop + volH - h).toFixed(1) +
+      '" width="' + bw.toFixed(1) + '" height="' + Math.max(0.4, h).toFixed(1) +
+      '" fill="' + c + '" opacity=".55"/>';
+  }).join("");
+
+  const ticks = [mx, mn].map(v =>
+    '<line x1="' + PL + '" y1="' + yOf(v).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + yOf(v).toFixed(1) +
+    '" stroke="var(--border)" stroke-dasharray="3 3"/>' +
+    '<text x="4" y="' + (yOf(v) + 3).toFixed(1) + '" font-size="9" fill="var(--muted)">' + v.toFixed(2) + '</text>'
+  ).join("");
+  const pcLine = (prevClose && isFinite(prevClose))
+    ? '<line x1="' + PL + '" y1="' + yOf(prevClose).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + yOf(prevClose).toFixed(1) +
+      '" stroke="var(--muted)" stroke-dasharray="4 3" opacity=".65"/>' : "";
+  const tLbl = [0, Math.floor(n / 2), n - 1].map(i =>
+    '<text x="' + (xOf(i) - 12).toFixed(1) + '" y="' + (H - 3) + '" font-size="9" fill="var(--muted)">' +
+    (bars[i].t.slice(0, 2) + ":" + bars[i].t.slice(2)) + "</text>").join("");
+
+  return '<svg viewBox="0 0 ' + W + " " + H + '" style="width:100%;height:auto;background:var(--soft);' +
+    'border:1px solid var(--border);border-radius:6px;">' +
+    ticks + pcLine +
+    '<path d="' + path(bars.map(b => b.avg)) + '" fill="none" stroke="#e0a12b" stroke-width="1.1"/>' +
+    '<path d="' + path(px) + '" fill="none" stroke="' + col + '" stroke-width="1.5"/>' +
+    vols + tLbl + '</svg>';
+}
+
+/* 选中某一天 → 画那天分时（取不到就如实说明） */
+function showDayIntraday(dateStr) {
+  const el = document.getElementById("kDayIntra");
+  if (!el) return;
+  const d = normDate(dateStr);
+  KL_SEL_DATE = dateStr;
+  if (!d) { el.innerHTML = ""; return; }
+
+  if (KLINE_PERIOD !== "day") {
+    el.innerHTML = '<span style="font-size:11.5px;color:var(--muted);">分时只在日 K 下可用，当前是' +
+      (KLINE_PERIOD === "week" ? "周K" : "月K") + '，切回日K 再点。</span>';
+    return;
+  }
+  if (KL_TRENDS_PEND) {
+    el.innerHTML = '<span style="font-size:11.5px;color:var(--muted);">分时数据加载中…</span>';
+    return;
+  }
+  if (!KL_TRENDS) {
+    el.innerHTML = '<span style="font-size:11.5px;color:var(--muted);">分时数据源不可用（腾讯 day/query）</span>';
+    return;
+  }
+  const bars = KL_TRENDS.byDate[d];
+  const first = KL_TRENDS.dates[0], lastD = KL_TRENDS.dates[KL_TRENDS.dates.length - 1];
+  if (!bars || !bars.length) {
+    el.innerHTML = '<span style="font-size:11.5px;color:var(--muted);">' +
+      "「" + d + "」的分时取不到 —— 免费源（腾讯 day/query）只提供最近 5 个交易日：" +
+      first + " ~ " + lastD + "。更早的日内数据需要 L2 历史行情，本站没有接入，也不会用日K数据伪造分时。</span>";
+    return;
+  }
+
+  const o = bars[0].price, c = bars[bars.length - 1].price;
+  const hi = Math.max.apply(null, bars.map(b => b.price));
+  const lo = Math.min.apply(null, bars.map(b => b.price));
+  // 腾讯这两列是累计值，合计直接取最后一根
+  const lastBar = bars[bars.length - 1] || {};
+  const vol = lastBar.vol || 0;
+  const amt = lastBar.amt || 0;
+  const cls = c >= o ? "up" : "down";
+
+  el.innerHTML =
+    '<div style="font-size:12px;margin:6px 0 4px;">📈 <b>' + d + '</b> 分时 ' +
+    '<span style="color:var(--muted);">（耗时 ' + bars.length + ' 根分钟线）</span> ｜ ' +
+    '开 ' + o.toFixed(2) + ' ｜ 收 <b class="' + cls + '">' + c.toFixed(2) + '</b> ｜ ' +
+    '高 ' + hi.toFixed(2) + ' ｜ 低 ' + lo.toFixed(2) + ' ｜ ' +
+    '量 ' + (vol / 1e4).toFixed(1) + ' 万手 ｜ 额 ' + (amt / 1e8).toFixed(2) + ' 亿</div>' +
+    dayIntraSVG(bars, null) +
+    '<div style="font-size:11px;color:var(--muted);margin-top:3px;">' +
+    '点 K 线任意一根看那天的分时（可看：' + first + " ~ " + lastD + '）。橙线为当日均价。</div>';
+}
+
+/* 点击命中：先按元素命中取 data-d（精确），取不到再用坐标反推（兜底） */
+function pickBarAt(clientX, clientY) {
+  const hit = document.elementFromPoint(clientX, clientY);
+  if (hit && hit.closest) {
+    const node = hit.closest([data-d]);
+    if (node) {
+      const d = node.getAttribute(data-d);
+      if (d) { showDayIntraday(d); return; }
+    }
+  }
+  const svg = document.getElementById(klineSvg);
+  if (!svg || !KL_DATA || !KL_DATA.length) return;
+  const W = 660, PL = 46, PR = 8;
+  const r = svg.getBoundingClientRect();
+  const sx = ((clientX - r.left) / r.width) * W;
+  const start2 = Math.max(0, KL_VIEW.end - KL_VIEW.count + 1);
+  const rows = KL_DATA.slice(start2, KL_VIEW.end + 1);
+  const m = rows.length;
+  if (!m) return;
+  const bw = (W - PL - PR) / m;
+  let idx = Math.floor((sx - PL) / bw);
+  idx = Math.max(0, Math.min(m - 1, idx));
+  const d2 = rows[idx] && rows[idx][0];
+  if (d2) showDayIntraday(d2);
+}
+
 function renderKline() {
   if (!KL_DATA || !KL_DATA.length) return "";
   const n = KL_DATA.length;
@@ -1079,7 +1287,7 @@ function renderKline() {
     const cx = x(i);
     candles += `<line x1="${cx}" y1="${y(h).toFixed(1)}" x2="${cx}" y2="${y(l).toFixed(1)}" stroke="${col}" stroke-width="1"/>`;
     const top = y(Math.max(o, c)), bot = y(Math.min(o, c));
-    candles += `<rect x="${(cx - bw * 0.35).toFixed(1)}" y="${top.toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${Math.max(1.2, bot - top).toFixed(1)}" fill="${col}"/>`;
+    candles += `<rect data-d="${r[0]}" x="${(cx - bw * 0.35).toFixed(1)}" y="${top.toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${Math.max(1.2, bot - top).toFixed(1)}" fill="${col}"/>`;
     volbars += `<rect x="${(cx - bw * 0.35).toFixed(1)}" y="${vy(vols[i]).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${(H - PB - vy(vols[i])).toFixed(1)}" fill="${col}" opacity="0.55"/>`;
   });
   const maLine = (period, color) => {
@@ -1266,6 +1474,7 @@ function bindKlineGestures() {
     if (D.tap && !D.moved && Date.now() - D.tap.t < 300 && e.changedTouches && e.changedTouches.length) {
       const t = e.changedTouches[0];
       showCross(t.clientX, t.clientY);
+      pickBarAt(t.clientX, t.clientY);
       setTimeout(() => {
         const c2 = document.getElementById("klineCross");
         if (c2) c2.style.display = "none";
@@ -1296,10 +1505,12 @@ function bindKlineGestures() {
     svg.onmousemove = ev => {
       doDrag(ev.clientX);
     };
-    svg.onmouseup = () => {
+    svg.onmouseup = ev2 => {
       svg.onmousemove = e2 => {
         if (!D.startX) showCross(e2.clientX, e2.clientY);
       };
+      // 没拖动 = 一次点击 → 看这根 K 线当天分时
+      if (!D.moved && ev2 && ev2.clientX != null) pickBarAt(ev2.clientX, ev2.clientY);
       if (KL_VIEW.end !== D.curEnd) {
         KL_VIEW.end = D.curEnd;
         repaint();
@@ -2531,6 +2742,25 @@ window.addEventListener("unhandledrejection", function (e) {
   const msg = r && (r.stack || r.message) || String(r);
   d.textContent += (d.textContent ? " | " : "") + "rejection: " + String(msg).slice(0, 300);
 });
+
+
+/* 分享/调试：live.html?k=600000&d=2026-11-05 → 直接打开 K 线并选中该日分时
+   （K线数据是异步的，所以轮询等 LD 就绪再调用） */
+(function () {
+  const m = /[?&]k=([A-Za-z0-9]{6,8})/.exec(location.search);
+  if (!m) return;
+  const dm = /[?&]d=(\d{4}-?\d{2}-?\d{2})/.exec(location.search);
+  let tries = 0;
+  const timer = setInterval(function () {
+    if (typeof showSignal === "function" && LD) {
+      clearInterval(timer);
+      showSignal(m[1]);
+      if (dm) setTimeout(function () { showDayIntraday(dm[1]); }, 4200);
+    } else if (++tries > 80) {
+      clearInterval(timer);
+    }
+  }, 300);
+})();
 
 /* 启动顺序收口：所有 let/const 声明都执行完，再拉起各模块 */
 loadSectorData();
