@@ -93,7 +93,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
 </style>
     <link rel="stylesheet" href="ui-upgrade.css">
     <link rel="stylesheet" href="ui-resp.css?v=20261105e">
-    <link rel="stylesheet" href="ui-theme.css?v=20261105f">
+    <link rel="stylesheet" href="ui-theme.css?v=20261105g">
     <style>
       /* 历史回看工具栏：原来是一串内联元素，窄屏会把"到"字挤成孤行。
          改成 flex 容器，桌面端仍是一行，窄屏由 ui-resp.css 接管换行。 */
@@ -113,7 +113,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
   </div>
 </noscript>
 <header>
-  <h1>活跃市值 0AMV 监测台 <a href="live.html?v=20261105f" style="font-size:13px;color:var(--blue);text-decoration:none;">⚡ 实盘页</a></h1>
+  <h1>活跃市值 0AMV 监测台 <a href="live.html?v=20261105g" style="font-size:13px;color:var(--blue);text-decoration:none;">⚡ 实盘页</a></h1>
   <div class="meta" id="meta">加载中…</div>
   <div class="meta datebar">
     <span class="dlbl">历史回看</span>
@@ -136,6 +136,15 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
       </span>
     </h2>
     <div id="tdxCheck" style="font-size:13px;"></div>
+  </div>
+  <div class="card full">
+    <h2>📐 指标口径与阈值
+      <span class="cb cb-self">自研</span>
+      <span style="font-size:12px;color:var(--muted);font-weight:normal;">
+        每个指标的当前值、判定落在哪一档、以及判定阈值本身
+      </span>
+    </h2>
+    <div id="methodBox" style="font-size:13px;"></div>
   </div>
   <div class="card full">
     <h2>📝 今日盘面总结 <span style="font-size:12px;color:var(--muted);font-weight:normal;">每日收盘后自动生成</span></h2>
@@ -281,7 +290,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
 // 固定构建号加载：发版时改 BUILD_ID 即可，平时命中浏览器缓存。
 // （原实现每次刷新都取当前毫秒时间戳，导致 app21.js 与 app-data.js 每次重下）
 (function () {
-  var BUILD_ID = "20261105f";
+  var BUILD_ID = "20261105g";
   // 旧浏览器（无 DecompressionStream）：先把数据落地，再跑主脚本。
   // 原顺序会让 app21.js 末尾的顶层 load() 在 window.DATA 就绪前执行并提前返回，主图表空白。
   if (typeof DecompressionStream === "undefined") {
