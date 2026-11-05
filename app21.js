@@ -111,6 +111,7 @@ async function load() {
   renderWeekly();
   renderSectors();
   renderStocks();
+  renderFlow();
 }
 
 function applyRange() {
@@ -1160,6 +1161,41 @@ function renderStockRows(rows) {
   document.getElementById("stockTable").innerHTML = html;
 }
 
+/* ===== 主力资金流面板 ===== */
+let FLOW_DESC = true;
+function toggleFlowSort() {
+  FLOW_DESC = !FLOW_DESC;
+  const b = document.getElementById("btnFlow");
+  if (b) b.textContent = FLOW_DESC ? "净流入 ↓" : "净流出 ↑";
+  renderFlow();
+}
+function renderFlow() {
+  const box = document.getElementById("flowBox");
+  if (!box) return;
+  const list = (D.all_stocks || []).filter(s => s.mainlx != null && s.mainlx !== 0);
+  if (!list.length) { box.innerHTML = '<span style="color:var(--muted)">暂无资金流数据</span>'; return; }
+  list.sort((a, b) => FLOW_DESC ? b.mainlx - a.mainlx : a.mainlx - b.mainlx);
+  const rows = list.slice(0, 20);
+  const yi = v => (v == null ? "—" : ((v / 1e8 >= 0 ? "+" : "") + (v / 1e8).toFixed(2)));
+  const cls = v => (v == null ? "" : (v >= 0 ? "up" : "down"));
+  let html = '<table><thead><tr><th>#</th><th>代码</th><th>名称</th><th>行业</th>' +
+    '<th>主力(亿)</th><th>5日(亿)</th><th>DDX</th><th>自由换手</th><th>标记</th><th>涨跌幅</th>' +
+    '</tr></thead><tbody>';
+  rows.forEach((s, i) => {
+    const pct = s.pct == null ? null : Number(s.pct);
+    const pctTxt = pct == null ? "—" : (pct >= 0 ? "+" : "") + pct.toFixed(2) + "%";
+    html += `<tr><td>${i + 1}</td><td>${s.code}</td><td>${s.name}</td><td>${s.industry || "—"}</td>` +
+      `<td class="${cls(s.mainlx)}">${yi(s.mainlx)}</td>` +
+      `<td class="${cls(s.m5)}">${yi(s.m5)}</td>` +
+      `<td>${s.ddx == null ? "—" : Number(s.ddx).toFixed(3)}</td>` +
+      `<td>${s.fturn == null ? "—" : Number(s.fturn).toFixed(2) + "%"}</td>` +
+      `<td>${s.tags || ""}</td>` +
+      `<td class="${pct == null ? "" : (pct >= 0 ? "up" : "down")}">${pctTxt}</td></tr>`;
+  });
+  html += "</tbody></table>";
+  box.innerHTML = html;
+}
+
 function esc(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
@@ -1229,6 +1265,7 @@ function renderAll() {
   renderWeekly();
   renderSectors();
   renderStocks();
+  renderFlow();
 }
 
 let BB_DATA = null;
