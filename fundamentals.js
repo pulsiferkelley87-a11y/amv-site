@@ -73,6 +73,45 @@
     return next();
   }
 
+  /* ── 3b. 行业名映射（industry_map.json: 代码 -> 行业名） ──────
+   * 个股的 industry 在快照里一直是空的，两张表的「行业」列因此全是 —。
+   * 这个映射文件本来就已发布，只是没人去加载它。失败就当没有，不影响主流程。 */
+  function fetchIndustry() {
+    var urls = [
+      COS_HOST + "/industry_map.json?t=" + Date.now(),
+      "industry_map.json?v=" + Date.now()
+    ];
+    var i = 0;
+    function next() {
+      if (i >= urls.length) return Promise.resolve(null);
+      var u = urls[i++];
+      return fetch(u, { cache: "no-store" }).then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      }).catch(function () { return next(); });
+    }
+    return next();
+  }
+
+  function applyIndustry(D, map) {
+    if (!map) return 0;
+    var n = 0;
+    // 注意：后端的 industry 不是 null，而是字面量占位符 "—"（破折号），
+    // 直接判断 !s.industry 会永远为假，行业名就填不进去。
+    var MISSING = { "": 1, "—": 1, "-": 1, "－": 1, "null": 1 };
+    ["all_stocks", "stocks_top", "stocks_amv"].forEach(function (k) {
+      var arr = D[k] || [];
+      for (var i = 0; i < arr.length; i++) {
+        var cur = arr[i].industry;
+        if (MISSING[String(cur == null ? "" : cur).trim()] && map[arr[i].code]) {
+          arr[i].industry = map[arr[i].code];
+          n++;
+        }
+      }
+    });
+    return n;
+  }
+
   /* ── 3. 合并 ─────────────────────────────────────────────────
    * 注意：页面上有三份同源但不同对象的个股数组 ——
    *   D.all_stocks  → 主力资金流面板
@@ -149,6 +188,7 @@
 
   /* ── 5. 主流程 ─────────────────────────────────────────────── */
   var PAYLOAD = null;
+  var IND = null;   // 代码 -> 行业名
 
   /* 供 app21.js 的 renderAll() 在整包数据刷新后回调：
      那时 D 已是新对象，之前贴上去的字段全丢了，必须重新合并。 */
@@ -158,6 +198,7 @@
     if (!D || !D.all_stocks || !D.all_stocks.length) return;
     if (D.fundamentals_updated_at) return; // 这个数据对象已经贴过了
     var n = merge(D, PAYLOAD);
+    if (IND) applyIndustry(D, IND);
     log("重新合并", n);
     try { if (typeof window.renderFlow === "function") window.renderFlow(); } catch (e) { /* noop */ }
     try {
@@ -169,8 +210,10 @@
   };
 
   STATUS.state = "loading";
-  fetchPayload().then(function (payload) {
+  Promise.all([fetchPayload(), fetchIndustry()]).then(function (res) {
+    var payload = res[0], indMap = res[1];
     PAYLOAD = payload;
+    IND = indMap;
     whenData(function (D) {
       if (!D) {
         STATUS.state = "error";
@@ -180,8 +223,10 @@
         return;
       }
       var n = merge(D, payload);
+      var m = applyIndustry(D, indMap);
       STATUS.state = n > 0 ? "ready" : "empty";
-      log("合并完成", n, "/", D.all_stocks.length, "updated_at=", STATUS.updated_at);
+      STATUS.industry = m;
+      log("合并完成", n, "/", D.all_stocks.length, "行业", m, "updated_at=", STATUS.updated_at);
       repaint();
       renderDiag();
     });
@@ -212,6 +257,8 @@
       all_stocks: (D.all_stocks || []).length,
       stocks_top: (D.stocks_top || []).length,
       withMainlx: n,
+      indMapKeys: IND ? Object.keys(IND).length : null,
+      industryFilled: STATUS.industry,
       fundamentals_updated_at: D.fundamentals_updated_at || "",
       data_updated_at: D.updated_at || ""
     }, null, 1);
