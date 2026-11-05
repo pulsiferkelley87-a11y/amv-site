@@ -68,15 +68,32 @@
     return "mkt";
   }
 
-  /* ── ① KPI 条：从已渲染的 DOM 里取值，取不到就显示 — ─── */
+  /* ── ① KPI 条：优先读 app21.js 导出的 window.__AMV_META，正则只作兜底 ─── */
+  function metaAmount() {
+    var M = window.__AMV_META;
+    if (!M) return null;
+    if (M.amount == null || isNaN(M.amount)) return null;
+    return Number(M.amount).toFixed(2);
+  }
+  function amountSub() {
+    var M = window.__AMV_META || {};
+    var b = M.byMarket;
+    if (b) return "万亿 · 沪 " + b.sh + " ／ 深 " + b.sz + " ／ 北 " + b.bj;
+    return "万亿（沪深京合计）";
+  }
   function buildKpis() {
+    var M = window.__AMV_META || {};
     var meta = (document.querySelector("header .meta") || {}).textContent || "";
     function pick(re) { var m = meta.match(re); return m ? m[1] : "—"; }
 
-    var amv = pick(/0AMV\s*([\d,]+(?:\.\d+)?)/);
-    var amvPct = pick(/（([+\-][\d.]+%)）/);
-    var ratio = pick(/活跃比例\s*([\d.]+%)/);
-    var amount = pick(/全市场成交额\s*([\d.]+)/);
+    var amv = (M.amv != null)
+      ? Number(M.amv).toLocaleString("zh-CN", { maximumFractionDigits: 1 })
+      : pick(/0AMV\s*([\d,]+(?:\.\d+)?)/);
+    var amvPct = (M.amvPct != null)
+      ? ((Number(M.amvPct) >= 0 ? "+" : "") + M.amvPct + "%")
+      : pick(/（([+\-][\d.]+%)）/);
+    var ratio = (M.ratio != null) ? Number(M.ratio).toFixed(2) + "%" : pick(/活跃比例\s*([\d.]+%)/);
+    var amount = metaAmount() || pick(/成交额\s*([\d.]+)/);
 
     var scoreEl = document.querySelector('#bullBearBox div[style*="font-size:38px"]');
     var score = scoreEl ? scoreEl.textContent.trim() : "—";
@@ -90,7 +107,7 @@
       { lbl: "官方 0AMV", val: amv, sub: (amvPct === "—" ? "" : amvPct + " · ") + "最新交易日", cls: amvPct.indexOf("-") === 0 ? "down" : "up" },
       { lbl: "活跃比例", val: ratio, sub: "历史区间 7.7% ~ 30.6%", cls: "" },
       { lbl: "牛熊六维评分", val: score, sub: state, cls: cls },
-      { lbl: "两市成交额", val: amount === "—" ? "—" : amount, sub: amount === "—" ? "" : "万亿（全市场）", cls: "" }
+      { lbl: "沪深京成交额", val: amount === "—" ? "—" : amount, sub: amount === "—" ? "" : amountSub(), cls: "" }
     ];
 
     var box = document.createElement("div");
@@ -208,14 +225,19 @@
         首次构建时拿到的是空串，这里在数据到位后回填。 ───── */
   function refreshKpis() {
     if (!kpis) return false;
+    var M = window.__AMV_META || {};
     var metaEl = document.querySelector("header .meta");
     var meta = metaEl ? metaEl.textContent : "";
     function pick(re) { var m = meta.match(re); return m ? m[1] : null; }
 
-    var amv = pick(/0AMV\s*([\d,]+(?:\.\d+)?)/);
-    var pct = pick(/（([+\-][\d.]+%)）/) || pick(/([+\-][\d.]+%)/);
-    var ratio = pick(/活跃比例\s*([\d.]+%)/);
-    var amount = pick(/全市场成交额\s*([\d.]+)/);
+    var amv = (M.amv != null)
+      ? Number(M.amv).toLocaleString("zh-CN", { maximumFractionDigits: 1 })
+      : pick(/0AMV\s*([\d,]+(?:\.\d+)?)/);
+    var pct = (M.amvPct != null)
+      ? ((Number(M.amvPct) >= 0 ? "+" : "") + M.amvPct + "%")
+      : (pick(/（([+\-][\d.]+%)）/) || pick(/([+\-][\d.]+%)/));
+    var ratio = (M.ratio != null) ? Number(M.ratio).toFixed(2) + "%" : pick(/活跃比例\s*([\d.]+%)/);
+    var amount = metaAmount() || pick(/成交额\s*([\d.]+)/);
 
     var scoreEl = document.querySelector('#bullBearBox div[style*="font-size:38px"]');
     var score = scoreEl ? scoreEl.textContent.trim() : null;
@@ -241,7 +263,7 @@
     set(0, amv, (pct ? pct + " · " : "") + "最新交易日", pctCls);
     set(1, ratio, "历史区间 7.7% ~ 30.6%", "");
     set(2, score, state, cls);
-    set(3, amount, "万亿（全市场）", "");
+    set(3, amount, amountSub(), "");
 
     return !!(amv && ratio && score && amount);
   }
