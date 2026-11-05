@@ -92,6 +92,17 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
 .skip-link:focus{left:0;}
 </style>
     <link rel="stylesheet" href="ui-upgrade.css">
+    <link rel="stylesheet" href="ui-resp.css?v=20261105e">
+    <style>
+      /* 历史回看工具栏：原来是一串内联元素，窄屏会把"到"字挤成孤行。
+         改成 flex 容器，桌面端仍是一行，窄屏由 ui-resp.css 接管换行。 */
+      .datebar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+      .datebar .dlbl { flex: 0 0 auto; }
+      .datebar .dfield { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+      .datebar input[type="date"] { padding: 2px 6px; border: 1px solid var(--border); border-radius: 5px; }
+      .datebar button { padding: 2px 10px; border: 1px solid var(--border); border-radius: 5px; background: var(--card); cursor: pointer; }
+      #histRange { flex: 1 1 100%; }
+    </style>
 </head>
 <body>
 <a class="skip-link" href="#main">跳到主要内容</a>
@@ -101,13 +112,14 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
   </div>
 </noscript>
 <header>
-  <h1>活跃市值 0AMV 监测台 <a href="live.html?v=20261105c" style="font-size:13px;color:var(--blue);text-decoration:none;">⚡ 实盘页</a></h1>
+  <h1>活跃市值 0AMV 监测台 <a href="live.html?v=20261105e" style="font-size:13px;color:var(--blue);text-decoration:none;">⚡ 实盘页</a></h1>
   <div class="meta" id="meta">加载中…</div>
-  <div class="meta" style="margin-top:4px;">
-    历史回看：从 <input type="date" id="dateStart" style="padding:2px 6px;border:1px solid var(--border);border-radius:5px;">
-    到 <input type="date" id="dateEnd" style="padding:2px 6px;border:1px solid var(--border);border-radius:5px;">
-    <button onclick="applyRange()" style="padding:2px 10px;border:1px solid var(--border);border-radius:5px;background:var(--card);cursor:pointer;">只看这段</button>
-    <button onclick="showLatest()" style="padding:2px 10px;border:1px solid var(--border);border-radius:5px;background:var(--card);cursor:pointer;">回到最新</button>
+  <div class="meta datebar">
+    <span class="dlbl">历史回看</span>
+    <label class="dfield">从 <input type="date" id="dateStart"></label>
+    <label class="dfield">到 <input type="date" id="dateEnd"></label>
+    <button onclick="applyRange()">只看这段</button>
+    <button onclick="showLatest()">回到最新</button>
     <span id="histRange" style="color:var(--muted);"></span>
   </div>
 </header>
@@ -268,7 +280,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
 // 固定构建号加载：发版时改 BUILD_ID 即可，平时命中浏览器缓存。
 // （原实现每次刷新都取当前毫秒时间戳，导致 app21.js 与 app-data.js 每次重下）
 (function () {
-  var BUILD_ID = "20261105d";
+  var BUILD_ID = "20261105e";
   // 旧浏览器（无 DecompressionStream）：先把数据落地，再跑主脚本。
   // 原顺序会让 app21.js 末尾的顶层 load() 在 window.DATA 就绪前执行并提前返回，主图表空白。
   if (typeof DecompressionStream === "undefined") {
