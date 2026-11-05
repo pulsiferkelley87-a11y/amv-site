@@ -190,8 +190,23 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
     <div class="scroll" id="pickTable"></div>
   </div>
   <div class="card full">
-    <h2>💰 主力资金流 <span style="font-size:12px;color:var(--muted);font-weight:normal;">通达信主力净流入 · 5 日累计 · DDX 大单动向</span><button id="btnFlow" onclick="toggleFlowSort()" style="float:right;padding:2px 10px;border:1px solid var(--border);border-radius:5px;background:var(--card);color:var(--text);font-size:12px;cursor:pointer;">净流入 ↓</button></h2>
+    <h2>💰 主力资金流 <span style="font-size:12px;color:var(--muted);font-weight:normal;">通达信主力净流入 · 3/5/10 日累计 · DDX/DDY 大单项</span>
+      <span style="float:right;font-size:12px;white-space:nowrap;">
+        <select id="flowKey" onchange="renderFlow()" style="padding:2px 6px;border:1px solid var(--border);border-radius:5px;background:var(--card);color:var(--text);font-size:12px;margin-right:6px;">
+          <option value="mainlx">今日净流入</option>
+          <option value="m3">3日累计</option>
+          <option value="m5">5日累计</option>
+          <option value="m10">10日累计</option>
+          <option value="ddx">DDX 大单</option>
+        </select><button id="btnFlow" onclick="toggleFlowSort()" style="padding:2px 10px;border:1px solid var(--border);border-radius:5px;background:var(--card);color:var(--text);font-size:12px;cursor:pointer;">净流入 ↓</button>
+      </span>
+    </h2>
+    <div class="note" id="flowNote"></div>
     <div id="flowBox" style="font-size:12.5px;"></div>
+    <div class="note" style="margin-top:6px;font-size:11.5px;">
+      数据来自通达信基本面，作为独立文件 <code>fundamentals.json</code> 发布，与行情主数据分开更新 —— 行情重算失败不会连带这块面板空白。
+      「自由换手」= 成交额 ÷ 自由流通股本 ÷ 价格，比总股本口径更贴近真实可交易筹码。
+    </div>
   </div>
   <div class="card full">
     <h2>个股信号面板 · 逐股递推实测公式
@@ -244,7 +259,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
 // 固定构建号加载：发版时改 BUILD_ID 即可，平时命中浏览器缓存。
 // （原实现每次刷新都取当前毫秒时间戳，导致 app21.js 与 app-data.js 每次重下）
 (function () {
-  var BUILD_ID = "20261105b";
+  var BUILD_ID = "20261105c";
   // 旧浏览器（无 DecompressionStream）：先把数据落地，再跑主脚本。
   // 原顺序会让 app21.js 末尾的顶层 load() 在 window.DATA 就绪前执行并提前返回，主图表空白。
   if (typeof DecompressionStream === "undefined") {
@@ -258,7 +273,8 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
 function setTheme(t){document.documentElement.setAttribute("data-theme",t);localStorage.setItem("amv-theme",t);var b=document.getElementById("themeBtn");if(b)b.textContent=t==="dark"?"☀️":"🌙";try{if(window.refreshCharts)window.refreshCharts();}catch(e){}try{if(window.renderStocksChart)window.renderStocksChart();}catch(e){}}
 function toggleTheme(){setTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");}
 (function(){var t=localStorage.getItem("amv-theme");if(!t){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}setTheme(t);})();
-</script><script src="realtime-quote.js"></script>
+</script><script src="fundamentals.js?v=20261105c"></script>
+<script src="realtime-quote.js"></script>
 <script src="live-quote-bar.js"></script>
   <script src="ui-dashboard.js"></script>
 </body>
