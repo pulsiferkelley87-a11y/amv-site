@@ -1,0 +1,280 @@
+/* ============================================================================
+ * ui-theme.css —— 视觉层 v2（两页共用，最后加载）
+ *
+ * 参照对象：大波浪数据的内容页 —— 浅色、大留白、每个数字都带"日期戳 + 口径小字"、
+ * 判定阈值公开可复核。这套信息设计比"卡片 + 阴影堆叠"更耐看，也更像研究台。
+ *
+ * 我们自己的特色（不是照抄的部分）：
+ *   1. 「口径徽标」.cb —— 每个数字旁边标清 通达信 / 自研 / 东财 / 腾讯 / 盘后，
+ *      这是本站在做的事：口径可追溯。别家没有这个自觉。
+ *   2. 统计条统一成"一格一分隔线"的 strip（.kpis 与 .indices 同一套），
+ *      手机端靠 ui-resp.css 自动变 2×2，分隔线不用改。
+ *   3. 表格首列在窄屏滑动时 sticky —— 宽表横向拖的时候还知道在看哪只股。
+ *   4. 数字全部 tabular-nums，涨跌色只上在数字本体，不染整行。
+ *
+ * 只覆盖视觉属性（颜色/边框/圆角/阴影/间距/字号），不动 display/grid 布局主结构，
+ * 避免和 app21.js / live.html 内联逻辑打架。
+ * ==========================================================================*/
+
+/* ───────────────────────── 设计令牌 ───────────────────────── */
+:root {
+  /* 底色更冷一点、留白更足，长时间盯盘不累 */
+  --bg: #f4f6f9;
+  --card: #ffffff;
+  --card2: #fbfcfe;
+  --soft: #f3f5f9;
+  --border: #e3e7ee;
+  --text: #14181f;
+  --muted: #6b7484;
+
+  /* 强调色：靛蓝，比原来的 #3b6fe0 沉一点 */
+  --accent: #2b57c8;
+  --blue: #2b57c8;
+
+  /* 涨跌：降饱和，红绿都不刺眼；数字加粗靠字重不靠高饱和 */
+  --red: #cf3b3b;
+  --green: #12835c;
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 14px;
+
+  /* 只用一层很浅的阴影，靠边框分层 */
+  --sh-1: 0 1px 2px rgba(16, 24, 40, .04);
+  --sh-2: 0 1px 2px rgba(16, 24, 40, .05);
+  --sh-hover: 0 2px 8px rgba(16, 24, 40, .07);
+}
+
+[data-theme="dark"] {
+  --bg: #101319;
+  --card: #171b23;
+  --card2: #171b23;
+  --soft: #1d222c;
+  --border: #2a3140;
+  --text: #e8ecf3;
+  --muted: #8f99a9;
+  --accent: #6f95ff;
+  --blue: #6f95ff;
+  --red: #e06060;
+  --green: #37a97a;
+}
+
+/* ───────────────────────── 基础排版 ───────────────────────── */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+               "PingFang SC", "Hiragino Sans GB", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: .01em;
+}
+
+/* 所有数字等宽对齐：这是数据站的基本功 */
+table, .kpi .val, .idx .p, .idx .c, .rt-price, .rt-chg,
+#meta, #updTime, .note, code { font-variant-numeric: tabular-nums; }
+
+/* ───────────────────────── 头部 ───────────────────────── */
+header {
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+header h1 {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: .01em;
+}
+header .meta {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.9;
+}
+
+/* ───────────────────────── 卡片 ───────────────────────── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: none;
+  padding: 16px 18px;
+}
+.card:hover { box-shadow: none; }          /* 数据台不需要悬浮跳动 */
+
+/* 标题：左侧 3px 竖条做识别，比 emoji 更克制 */
+.card h2 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-left: 10px;
+  border-left: 3px solid var(--accent);
+  line-height: 1.4;
+  margin-bottom: 10px;
+}
+.card h2 > span:not(.cb) {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--muted);
+}
+.card .note { color: var(--muted); font-size: 12px; line-height: 1.75; }
+
+/* ───────────────────── 统计条（.kpis / .indices 统一） ─────────────────────
+   用 1px gap + 背景色做分隔线：列数随断点变（4 列 / 2 列），分隔线自动跟着变，
+   不用为每个断点单独写 border-right。 */
+.kpis, .indices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  box-shadow: none;
+}
+.kpis > *, .indices > .idx {
+  background: var(--card);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 13px 15px;
+}
+.kpi::before { display: none; }            /* 去掉原来那条彩色顶边 */
+
+.kpi .lbl, .idx .n {
+  font-size: 11.5px;
+  color: var(--muted);
+  font-weight: 500;
+  letter-spacing: .02em;
+}
+.kpi .val {
+  font-size: 25px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 3px 0 2px;
+}
+.kpi .sub, .idx .c { font-size: 11.5px; color: var(--muted); line-height: 1.6; }
+.idx .p { font-size: 23px; font-weight: 700; margin: 3px 0 2px; line-height: 1.2; }
+
+/* 涨跌色只上数字 */
+.kpi.up .val, .kpi .val.up, .idx .p.up { color: var(--red); }
+.kpi.down .val, .kpi .val.down, .idx .p.down { color: var(--green); }
+.up { color: var(--red); }
+.down { color: var(--green); }
+
+/* ───────────────────────── 口径徽标 ─────────────────────────
+   本站的识别物：每个关键数字都能回答"这数从哪来、什么口径"。 */
+.cb {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  margin-left: 6px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: .02em;
+  white-space: nowrap;
+  border: 1px solid currentColor;
+  opacity: .9;
+  vertical-align: middle;
+}
+.cb-tdx  { color: #2b57c8; }   /* 通达信口径 */
+.cb-self { color: #7c4dff; }   /* 自研模型   */
+.cb-east { color: #b8860b; }   /* 东财数据   */
+.cb-tx   { color: #0f8a5f; }   /* 腾讯行情   */
+.cb-close{ color: #6b7484; }   /* 盘后/收盘  */
+[data-theme="dark"] .cb-tdx { color: #8fb0ff; }
+[data-theme="dark"] .cb-self { color: #b39dff; }
+[data-theme="dark"] .cb-east { color: #e0b64a; }
+[data-theme="dark"] .cb-tx { color: #4fc79a; }
+
+/* ───────────────────────── 表格 ───────────────────────── */
+table { font-size: 12.5px; }
+thead th {
+  background: var(--soft);
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 11.5px;
+  letter-spacing: .02em;
+  border-bottom: 1px solid var(--border);
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+tbody td {
+  border-bottom: 1px solid var(--border);
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+tbody tr:nth-child(even) { background: transparent; }
+tbody tr:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+/* 首列（代码/名称）稍加粗，扫表时先抓这一列 */
+tbody td:first-child { font-weight: 600; }
+tbody td:first-child a { font-weight: 600; }
+
+/* 窄屏横向滚动时，首列钉住 —— 拖到右边还知道在看哪只股 */
+@media (max-width: 1024px) {
+  .scroll thead th:first-child,
+  .scroll tbody td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--card);
+    box-shadow: 1px 0 0 var(--border);
+  }
+  .scroll thead th:first-child { background: var(--soft); z-index: 3; }
+}
+
+/* ───────────────────────── 控件 ───────────────────────── */
+button, .tab, .modeBtn, .sectorBtn {
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  font-weight: 500;
+  transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+button:hover, .tab:hover, .modeBtn:hover, .sectorBtn:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  color: var(--accent);
+}
+.tab.active, .modeBtn.active, .sectorBtn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+input, select, textarea {
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+  outline: none;
+}
+
+/* 行情条：压平成一条细带，不再像另一个卡片 */
+#rt-bar {
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  padding: 7px 16px;
+}
+#rt-bar .rt-name { color: var(--muted); }
+#rt-bar .rt-price { font-weight: 700; }
+
+/* 图表容器底色跟卡片一致，去掉描边 */
+.chart svg, .chart canvas { border-radius: var(--r-sm); }
+
+/* 锚点导航：胶囊更紧凑、选中态用强调色实心 */
+.anchornav a {
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  padding: 5px 12px;
+}
+
+/* 页面底部留白，别让最后一张卡贴边 */
+.wrap { padding-bottom: 56px; }
