@@ -38,6 +38,12 @@ jobs:
   fetch:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      # secrets 上下文不能用在 if 里，只能放 env；这里统一注入，步骤里用 env.COS_SECRET_ID 判断
+      COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
+      COS_SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
+      COS_BUCKET: ${{ secrets.COS_BUCKET || 'amv-live-1500351250' }}
+      COS_REGION: ${{ secrets.COS_REGION || 'ap-guangzhou' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -109,12 +115,7 @@ jobs:
           PY
 
       - name: 上传到 COS（仓库已有 COS_SECRET_ID/KEY；bucket/region 有默认值）
-        if: ${{ secrets.COS_SECRET_ID != '' }}
-        env:
-          COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
-          COS_SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
-          COS_BUCKET: ${{ secrets.COS_BUCKET || 'amv-live-1500351250' }}
-          COS_REGION: ${{ secrets.COS_REGION || 'ap-guangzhou' }}
+        if: env.COS_SECRET_ID != ''
         run: |
           python - <<'PY'
           import base64, hashlib, hmac, json, os, time, urllib.request
