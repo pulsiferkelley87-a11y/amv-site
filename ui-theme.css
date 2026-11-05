@@ -227,6 +227,58 @@ tbody td:first-child a { font-weight: 600; }
   .scroll thead th:first-child { background: var(--soft); z-index: 3; }
 }
 
+/* ───────────────────── 口径与阈值表（.ruletbl） ─────────────────────
+   参照站的"温度是怎么判的"那张表：一行一个指标，当前值 / 判定 / 规则阈值并排，
+   规则列可以长，但要能一眼扫完 —— 所以用等宽小字 + 左侧浅色竖线做分栏。 */
+.rulewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.ruletbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  table-layout: fixed;
+  min-width: 660px;
+}
+.ruletbl thead th {
+  text-align: left;
+  padding: 7px 10px;
+  background: var(--soft);
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.ruletbl td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  line-height: 1.7;
+}
+.ruletbl tbody tr:last-child td { border-bottom: 0; }
+/* 全站默认 td 是右对齐（数字表），口径表要显式覆盖，否则规则列会被推到右边 */
+.ruletbl .rk { width: 16%; text-align: left; font-weight: 600; color: var(--text); }
+.ruletbl .rv {
+  width: 12%;
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ruletbl .rj { width: 18%; text-align: left; color: var(--muted); }
+.ruletbl .rr {
+  width: 54%;
+  text-align: left;
+  color: var(--muted);
+  font-size: 11.8px;
+  border-left: 2px solid color-mix(in srgb, var(--border) 70%, transparent);
+  padding-left: 12px;
+}
+.ruletbl tbody tr:hover { background: color-mix(in srgb, var(--accent) 4%, transparent); }
+
+@media (max-width: 720px) {
+  .ruletbl { min-width: 620px; font-size: 12px; }
+  .ruletbl .rr { font-size: 11.5px; }
+}
+
 /* ───────────────────────── 控件 ───────────────────────── */
 button, .tab, .modeBtn, .sectorBtn {
   border-radius: var(--r-sm);
