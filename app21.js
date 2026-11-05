@@ -1288,6 +1288,7 @@ function renderFlow() {
   });
   html += "</tbody></table>";
   box.innerHTML = html;
+  window.__LAST_FLOW = rows;   // 供「⬇ CSV」导出当前视图，不用把筛选逻辑抄第二遍
 
   if (note) {
     const fu = (D && D.fundamentals_updated_at) || "未知";
@@ -1298,7 +1299,6 @@ function renderFlow() {
 }
 
 /* ===== 通达信口径核对（TOTALHQINFO 1..6） =====
- *
  * 口径来源：对 TCalc.dll 内置公式帮助文本的静态解析（REA/Ghidra，见 tdx-re/REPORT-64bit.md）。
  * 通达信自己把这些定义成公式函数：
  *   TOTALHQINFO(N)  沪深京市场表现
@@ -1916,3 +1916,42 @@ document.addEventListener("click", function (e) {
     else if (++tries > 40) clearInterval(t);
   }, 400);
 })();
+
+/* ===== 主力资金流：导出当前视图为 CSV（带 BOM，Excel 直接打开） ===== */
+function exportFlowCsv() {
+  const rows = window.__LAST_FLOW || [];
+  if (!rows.length) { alert("当前没有可导出的资金流数据"); return; }
+  const head = ["代码", "名称", "行业", "主力净额(亿)", "3日(亿)", "5日(亿)", "10日(亿)", "DDX", "DDY", "自由换手%", "涨跌幅%"];
+  const q = v => {
+    const s = v == null ? "" : String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const yi = v => (v == null || !isFinite(v)) ? "" : (v / 1e8).toFixed(2);
+  const lines = [head.join(",")];
+  rows.forEach(s => {
+    lines.push([
+      s.code, s.name, s.industry || "",
+      yi(s.mainlx), yi(s.m3), yi(s.m5), yi(s.m10),
+      s.ddx != null ? s.ddx : "", s.ddy != null ? s.ddy : "",
+      s.fturn != null ? s.fturn : "", s.pct != null ? s.pct : "",
+    ].map(q).join(","));
+  });
+  const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  const d = new Date();
+  a.href = URL.createObjectURL(blob);
+  a.download = "amv-flow-" + d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") +
+    String(d.getDate()).padStart(2, "0") + ".csv";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+}
+
+/* "/" 快捷聚焦搜索框（不在输入框内时才生效） */
+document.addEventListener("keydown", function (e) {
+  if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  const box = document.getElementById("sigSearch") || document.getElementById("pickDateSel");
+  if (box && box.focus) { e.preventDefault(); box.focus(); box.select && box.select(); }
+});
