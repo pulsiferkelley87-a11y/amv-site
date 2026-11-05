@@ -1720,8 +1720,12 @@ def main():
              "ddx": (FUND.get(s["code"]) or {}).get("ddx"),
              "gdr": (FUND.get(s["code"]) or {}).get("gdr"),
              # 自由流通换手率：用自由流通股本做分母，比总股本更贴近真实可交易筹码
-             "fturn": (round(s["amount"] / ((FUND.get(s["code"]) or {}).get("free") or 0) * 1e4
-                             / ((FUND.get(s["code"]) or {}).get("px") or 0), 2)
+             # 自由流通换手率 = 成交金额 / (自由流通股数 × 价格) × 100
+             # 量纲提醒：fundamentals 的 free 单位是「万股」，必须先 ×1e4 换成「股」，
+             # 再乘价格才是自由流通市值（元）。旧写法 amount/free*1e4/px 量纲错了 1e8 倍，
+             # 前端会显示成几十万个百分点（2026-11-05 实测 6632381.27%）。
+             "fturn": (round(s["amount"] / ((FUND.get(s["code"]) or {}).get("free") * 1e4
+                                            * ((FUND.get(s["code"]) or {}).get("px") or 0)) * 100, 2)
                        if (FUND.get(s["code"]) or {}).get("free") and (FUND.get(s["code"]) or {}).get("px") else None),
              "tags": "".join([t for t, k in (("H", "hs300"), ("R", "rzrq"), ("G", "hgtag"))
                               if (FUND.get(s["code"]) or {}).get(k)]),
