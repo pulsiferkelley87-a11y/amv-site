@@ -1146,6 +1146,41 @@ function onPickDateChange() {
   renderPicks();
 }
 
+/* ===== 行业内排名（对应通达信 INSORT(板块名称,指标,输出,升降序)） =====
+ * 个股表同时服务"全市场 / 板块下钻 / 区间回看"三种视图，排名只依赖
+ * D.all_stocks 与每只股的 industry，所以统一算一次、按数据版本缓存；
+ * fundamentals.js 合并完 industry 后会重绘表格，缓存键里带上 fundamentals_updated_at 就能自动失效。 */
+let IND_RANK = null, IND_RANK_KEY = "";
+function buildIndRank() {
+  const list = (D && D.all_stocks) || [];
+  const key = String((D && D.fundamentals_updated_at) || "") + "|" + list.length;
+  if (IND_RANK && IND_RANK_KEY === key) return IND_RANK;
+  const groups = Object.create(null);
+  for (let i = 0; i < list.length; i++) {
+    const s = list[i];
+    if (!s.industry) continue;
+    (groups[s.industry] || (groups[s.industry] = [])).push(s);
+  }
+  const rk = Object.create(null);
+  Object.keys(groups).forEach(k => {
+    const arr = groups[k].slice().sort((a, b) => (Number(b.pct) || 0) - (Number(a.pct) || 0));
+    const n = arr.length;
+    arr.forEach((s, i) => { rk[s.code] = { r: i + 1, n: n }; });
+  });
+  IND_RANK = rk;
+  IND_RANK_KEY = key;
+  return rk;
+}
+
+/* 「行业内」单元格：5/180，前 10% 标红、后 10% 标绿 */
+function indRankCell(s) {
+  const rk = buildIndRank()[s.code];
+  if (!rk) return "—";
+  const pos = rk.r / rk.n;
+  const cls = pos <= 0.1 ? "up" : pos >= 0.9 ? "down" : "";
+  return `<span class="${cls}" title="涨幅在「${esc(s.industry || "")}」${rk.n} 只中排第 ${rk.r}">${rk.r}/${rk.n}</span>`;
+}
+
 function renderStockRows(rows) {
   const fmt = (v, d = 1) =>
     v == null ? "—" : Number(v).toLocaleString("zh-CN", { maximumFractionDigits: d });
@@ -1182,7 +1217,7 @@ function renderStockRows(rows) {
     return `<span style="color:${color};font-weight:700;">${sc.toFixed(0)}</span>`;
   };
   let html = `<table><thead><tr>
-    <th>#</th><th>代码</th><th>名称</th><th>行业</th><th>上市</th><th>PE</th><th>主力(亿)</th><th>评分</th>` +
+    <th>#</th><th>代码</th><th>名称</th><th>行业</th><th>行业内</th><th>上市</th><th>PE</th><th>主力(亿)</th><th>评分</th>` +
     (isAmv ? `<th>活跃市值(亿)</th><th>占比</th>` : "") +
     `<th>活跃SZ(亿)</th><th>流通市值(亿)</th><th>换手率</th><th>涨跌幅</th></tr></thead><tbody>`;
   rows.forEach((s, i) => {
@@ -1193,7 +1228,7 @@ function renderStockRows(rows) {
     const amvTxt = amvVal ? fmt(amvVal / 1e8, 0) : "—";
     const amvPctTxt = s[amvPctField] != null ? fmt(s[amvPctField], 2) + "%" : "—";
     html += `<tr>
-      <td>${i + 1}</td><td>${s.code}</td><td>${s.name}</td><td>${s.industry || "—"}</td>` +
+      <td>${i + 1}</td><td>${s.code}</td><td>${s.name}</td><td>${s.industry || "—"}</td><td>${indRankCell(s)}</td>` +
       `<td>${ipoTxt(s.ipo)}</td><td>${peTxt(s.pe)}</td><td>${flowTxt(s.mainlx)}</td>` +
       `<td>${scoreCell(s)}</td>` +
       (isAmv ? `<td>${amvTxt}</td><td>${amvPctTxt}</td>` : "") +
