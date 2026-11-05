@@ -1121,6 +1121,14 @@ function renderStockRows(rows) {
     const color = pe > 80 ? "#c0392b" : (pe > 40 ? "#b8860b" : "");
     return color ? `<span style="color:${color}">${pe.toFixed(1)}</span>` : pe.toFixed(1);
   };
+  // 主力净流入（元 -> 亿），红进绿出
+  const flowTxt = v => {
+    const x = Number(v);
+    if (!isFinite(x) || x === 0) return "—";
+    const yi = x / 1e8;
+    const cls = yi >= 0 ? "up" : "down";
+    return `<span class="${cls}">${yi >= 0 ? "+" : ""}${yi.toFixed(2)}</span>`;
+  };
   const scoreCell = s => {
     if (s.score == null) return "—";
     const sc = Number(s.score);
@@ -1128,7 +1136,7 @@ function renderStockRows(rows) {
     return `<span style="color:${color};font-weight:700;">${sc.toFixed(0)}</span>`;
   };
   let html = `<table><thead><tr>
-    <th>#</th><th>代码</th><th>名称</th><th>行业</th><th>上市</th><th>PE</th><th>评分</th>` +
+    <th>#</th><th>代码</th><th>名称</th><th>行业</th><th>上市</th><th>PE</th><th>主力(亿)</th><th>评分</th>` +
     (isAmv ? `<th>活跃市值(亿)</th><th>占比</th>` : "") +
     `<th>活跃SZ(亿)</th><th>流通市值(亿)</th><th>换手率</th><th>涨跌幅</th></tr></thead><tbody>`;
   rows.forEach((s, i) => {
@@ -1140,6 +1148,7 @@ function renderStockRows(rows) {
     const amvPctTxt = s[amvPctField] != null ? fmt(s[amvPctField], 2) + "%" : "—";
     html += `<tr>
       <td>${i + 1}</td><td>${s.code}</td><td>${s.name}</td><td>${s.industry || "—"}</td>` +
+      `<td>${ipoTxt(s.ipo)}</td><td>${peTxt(s.pe)}</td><td>${flowTxt(s.mainlx)}</td>` +
       `<td>${scoreCell(s)}</td>` +
       (isAmv ? `<td>${amvTxt}</td><td>${amvPctTxt}</td>` : "") +
       `<td>${fmt(s.amount / 1e8, 1)}</td>` +
