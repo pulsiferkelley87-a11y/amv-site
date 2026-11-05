@@ -68,6 +68,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
 </style>
     <link rel="stylesheet" href="ui-upgrade.css">
     <link rel="stylesheet" href="ui-resp.css?v=20261105e">
+    <link rel="stylesheet" href="ui-theme.css?v=20261105f">
 </head>
 <body>
 <header>
@@ -83,7 +84,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
     <div style="display:flex;flex-wrap:wrap;gap:12px;" id="minBox"></div>
   </div>
   <div class="card">
-    <h2>市场情绪</h2>
+    <h2>市场情绪 <span class="cb cb-east">东财快照</span></h2>
     <div id="breadth" style="font-size:13px;"></div>
   </div>
   <div class="card">
@@ -91,13 +92,13 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
     <div id="tempBox"></div>
   </div>
   <div class="card">
-    <h2>📐 通达信口径核对
+    <h2>📐 通达信口径核对 <span class="cb cb-tdx">TOTALHQINFO</span>
       <span style="font-size:12px;color:var(--muted);font-weight:normal;">对应公式 TOTALHQINFO(1..6)：上涨 / 下跌 / 涨停 / 跌停家数 · 总成交金额（亿元）</span>
     </h2>
     <div id="tdxLive" style="font-size:13px;"></div>
   </div>
   <div class="card">
-    <h2>🐂🐻 牛熊六维
+    <h2>🐂🐻 牛熊六维 <span class="cb cb-self">自研模型</span>
       <span style="font-size:12px;color:var(--muted);font-weight:normal;">趋势25% 广度20% 量能15% 宏观15% 估值10% 情绪15%</span>
     </h2>
     <div id="bbLive" style="font-size:13px;"></div>
@@ -2400,6 +2401,6 @@ loadSectorData();
 function setTheme(t){document.documentElement.setAttribute("data-theme",t);localStorage.setItem("amv-theme",t);var b=document.getElementById("themeBtn");if(b)b.textContent=t==="dark"?"☀️":"🌙";}
 function toggleTheme(){setTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");}
 (function(){var t=localStorage.getItem("amv-theme");if(!t){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}setTheme(t);})();
-</script>  <script src="ui-nav.js"></script>
+</script>  <script src="ui-nav.js?v=20261105f"></script>
 </body>
 </html>
