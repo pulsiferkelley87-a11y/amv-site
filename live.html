@@ -1504,13 +1504,18 @@ function renderMethodsLive() {
   }).length;
 
   /* 龙头覆盖：每个板块里连板天数最高的成分股，连板≥1 才算这个板块有"龙头" */
+  /* 信号表的 key 带 sh/sz/bj 前缀，而板块成分表是 6 位码，必须先归一化再查，
+     否则永远查不到 —— 会显示"0 个板块有连板股"，与首板数自相矛盾。 */
+  const sig6 = Object.create(null);
+  Object.keys(sigs).forEach(k => { sig6[normCode(k)] = sigs[k]; });
+
   let blkLeaderN = 0;
   try {
     Object.keys(MEMBERS || {}).forEach(blk => {
       const codes = MEMBERS[blk] || [];
       let best = 0;
       for (let i = 0; i < codes.length; i++) {
-        const sg = sigs[codes[i]] || sigs[normCode(codes[i])];
+        const sg = sig6[normCode(codes[i])];
         if (sg && (sg.limit_days || 0) > best) best = sg.limit_days || 0;
       }
       if (best >= 1) blkLeaderN++;
