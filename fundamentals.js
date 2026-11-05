@@ -174,6 +174,8 @@
     try {
       if (typeof window.renderFlow === "function") window.renderFlow();
     } catch (e) { log("renderFlow 失败", e && e.message); }
+    // 口径表里「资金流覆盖」要读 mainlx，必须等合并完再画
+    try { if (typeof window.renderMethodBox === "function") window.renderMethodBox(); } catch (e) { }
 
     // 个股表里也有「主力(亿)」列，但只有在全市场视图下重绘才安全；
     // 用户正在看某个板块时重绘会把他踢回全市场。
@@ -201,6 +203,7 @@
     if (IND) applyIndustry(D, IND);
     log("重新合并", n);
     try { if (typeof window.renderFlow === "function") window.renderFlow(); } catch (e) { /* noop */ }
+      try { if (typeof window.renderMethodBox === "function") window.renderMethodBox(); } catch (e) { /* noop */ }
     try {
       var t = document.getElementById("stockTableTitle");
       if (t && /全市场/.test(t.textContent || "") && typeof window.showMarketStocks === "function") {
@@ -233,6 +236,7 @@
   }).catch(function () {
     // fetchPayload 已记录错误；这里只需要让面板能说明原因
     try { if (typeof window.renderFlow === "function") window.renderFlow(); } catch (e) { /* noop */ }
+      try { if (typeof window.renderMethodBox === "function") window.renderMethodBox(); } catch (e) { /* noop */ }
     renderDiag();
   });
 
