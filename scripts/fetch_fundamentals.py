@@ -87,12 +87,21 @@ def fetch_one(code):
         "jly": cw.get("JLY"),
         "jzc": cw.get("JZC"),
         "yysr": cw.get("YYSR"),
-        "gdr": cw.get("GDRS"),
+        "gdr": cw.get("GDRS"),               # 股东人数
         "pe": ex.get("SYL"),
         "pettm": pr.get("PETTM"),
         "mgjzc": ex.get("MGJZC"),
-        "mainlx": st.get("Mainlx"),
-        "free": ex.get("FreeLtgb"),
+        "mainlx": st.get("Mainlx"),          # 主力净流入（元）
+        "m3": st.get("Mainlx3day"),          # 3 日主力累计
+        "m5": st.get("Mainlx5day"),
+        "m10": st.get("Mainlx10day"),
+        "ddx": st.get("DDX"),                # 大单动向
+        "ddy": st.get("DDY"),                # 涨跌动因
+        "ddz": st.get("DDZ"),                # 大单差分
+        "free": ex.get("FreeLtgb"),          # 自由流通股本（万股）
+        "hs300": ex.get("BelongHS300"),
+        "rzrq": ex.get("BelongRZRQ"),
+        "hgtag": ex.get("BelongHGTAG"),
     }, None
 
 
