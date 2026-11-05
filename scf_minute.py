@@ -24,6 +24,8 @@
     - 未命中才翻页取数，取完写回 COS —— 同一只票同一天只会真正抓一次；
     - 纯标准库（urllib），与 index.py 保持一致，云函数不需要装依赖。
 """
+import hashlib
+import hmac
 import http.client
 import json
 import os
@@ -33,16 +35,48 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
-try:
-    # 同包内的 index.py：复用它的 COS 签名/读写（纯标准库实现）
-    from index import cos_get, cos_put, COS_BUCKET
-except Exception:                                     # 单独部署时的兜底
-    COS_BUCKET = os.environ.get("COS_BUCKET", "amv-live-1500351250")
+# ── COS 读写（纯标准库，自带签名，不依赖同包的 index.py） ──────────────
+COS_SECRET_ID = os.environ.get("COS_SECRET_ID", "")
+COS_SECRET_KEY = os.environ.get("COS_SECRET_KEY", "")
+COS_BUCKET = os.environ.get("COS_BUCKET", "amv-live-1500351250")
+COS_REGION = os.environ.get("COS_REGION", "ap-guangzhou")
 
-    def cos_get(path, timeout=20):
+
+def _cos_auth(method, path):
+    """COS 请求签名。注意 http_string 里的方法名必须小写（put 不是 PUT），否则 403。"""
+    now = int(time.time())
+    sign_time = "%d;%d" % (now - 60, now + 900)
+    key_time = sign_time
+    sign_key = hmac.new(COS_SECRET_KEY.encode(), key_time.encode(), hashlib.sha1).hexdigest()
+    host = "%s.cos.%s.myqcloud.com" % (COS_BUCKET, COS_REGION)
+    http_string = "%s\n/%s\n\nhost=%s\n" % (method.lower(), path, host)
+    string_to_sign = "sha1\n%s\n%s\n" % (sign_time, hashlib.sha1(http_string.encode()).hexdigest())
+    sig = hmac.new(sign_key.encode(), string_to_sign.encode(), hashlib.sha1).hexdigest()
+    return ("q-sign-algorithm=sha1&q-ak=%s&q-sign-time=%s&q-key-time=%s"
+            "&q-header-list=host&q-url-param-list=&q-signature=%s"
+            % (COS_SECRET_ID, sign_time, key_time, sig))
+
+
+def cos_get(path, timeout=20):
+    url = "https://%s.cos.%s.myqcloud.com/%s" % (COS_BUCKET, COS_REGION, path)
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as r:
+            return r.read()
+    except Exception:
         return None
 
-    def cos_put(path, content, timeout=30):
+
+def cos_put(path, content, timeout=30):
+    if not (COS_SECRET_ID and COS_SECRET_KEY):
+        return False
+    host = "%s.cos.%s.myqcloud.com" % (COS_BUCKET, COS_REGION)
+    req = urllib.request.Request(
+        "https://%s/%s" % (host, path), data=content, method="PUT",
+        headers={"Authorization": _cos_auth("PUT", path), "Host": host})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status == 200
+    except Exception:
         return False
 
 
@@ -113,10 +147,13 @@ def _head():
 
 def _setcode(code):
     c = str(code)
+    # 顺序很重要：北交所要先判。
+    # 原来沪市那一行里有个裸 "9"，会把 92xxxx（北交所）吞成沪市，
+    # 结果北交所股票一律取不到数据（Setcode 错，接口返回空）。
+    if c.startswith(("92", "4", "8", "43", "83", "87")):
+        return 2
     if c.startswith(("60", "68", "5", "9", "11", "13")):
         return 1
-    if c.startswith(("4", "8", "92", "43", "83", "87")):
-        return 2
     return 0
 
 
