@@ -23,6 +23,10 @@ on:
         description: '周期 7=1分钟 0=5分钟 1=15分钟 2=30分钟 3=60分钟 4=日线'
         required: false
         default: '7'
+      backfill:
+        description: '回填最近 N 个交易日（填了就走回填模式，忽略 code/date）'
+        required: false
+        default: ''
   schedule:
     # 交易日 16:10（北京时间 = UTC 08:10）预热最近一个交易日
     - cron: '10 8 * * 1-5'
@@ -81,7 +85,7 @@ jobs:
           PY
 
       - name: 取指定日分钟线（手动触发）
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.backfill == ''
         env:
           CODE: ${{ github.event.inputs.code }}
           DATE: ${{ github.event.inputs.date }}
@@ -115,7 +119,12 @@ jobs:
               f.write("n=%d\n" % len(bars))
           PY
 
-      - name: 批量预热（定时触发：涨停池 + 龙虎榜 + 快上穿）
+      - name: 回填历史（手动触发 + 填了 backfill）
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.backfill != ''
+        run: |
+          python scripts/warm_minute.py --backfill ${{ github.event.inputs.backfill }}
+
+      - name: 批量预热（定时触发：涨停池 + 龙虎榜 + 快上穿 + 主力净流入 Top50）
         if: github.event_name == 'schedule'
         run: |
           python scripts/warm_minute.py
