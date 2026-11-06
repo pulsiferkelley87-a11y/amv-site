@@ -100,6 +100,18 @@ def _c6(code):
     return s
 
 
+
+def all_market_codes():
+    """全市场代码（来自 live_data.json 的 stocks，约 5500 只）"""
+    ld = get_json("live_data.json")
+    out = []
+    for s in ((ld or {}).get("stocks") or []):
+        c = _c6(s.get("code"))
+        if len(c) == 6 and c.isdigit():
+            out.append((c, "全市场"))
+    return out
+
+
 def build_universe(verbose=False, top_flow=50):
     codes = []
 
@@ -222,7 +234,7 @@ def fetch_latest_day(code, date_str, period=7):
 
 def run_backfill(a, put_workers=8):
     uni = [(_c6(c), "指定") for c in a.codes.split(",") if _c6(c)] if a.codes \
-        else build_universe(a.verbose, a.top_flow)
+        else (all_market_codes() if a.all else build_universe(a.verbose, a.top_flow))
     if a.limit:
         uni = uni[:a.limit]
     days = trading_days(a.backfill)
@@ -279,6 +291,8 @@ def main():
                     help="回填最近 N 个交易日（按股票翻页，一次覆盖整段）")
     ap.add_argument("--put-workers", type=int, default=8,
                     help="回填时并发上传数（默认 8）")
+    ap.add_argument("--all", action="store_true",
+                    help="用全市场（live_data.json 的 stocks）而不是精选名单")
     ap.add_argument("--list", action="store_true", help="只打印预热名单，不取数")
     ap.add_argument("--top-flow", type=int, default=50,
                     help="名单里额外加入主力净流入前 N 名")
@@ -289,9 +303,11 @@ def main():
 
     import tdx_minute
 
+    pick = all_market_codes if a.all else (lambda: build_universe(a.verbose, a.top_flow))
+
     if a.list:
         from collections import Counter
-        uni = build_universe(a.verbose, a.top_flow)
+        uni = pick()
         print("预热名单 %d 只（每交易日 16:10 自动取这些票的当日分时）" % len(uni))
         for c, why in uni:
             print("  %s  %s" % (c, why))
