@@ -24,6 +24,7 @@
 环境变量（与其它脚本一致）：COS_SECRET_ID / COS_SECRET_KEY，可选 COS_BUCKET / COS_REGION
 """
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import hmac
 import json
@@ -219,7 +220,7 @@ def fetch_latest_day(code, date_str, period=7):
 
 
 
-def run_backfill(a):
+def run_backfill(a, put_workers=8):
     uni = [(_c6(c), "指定") for c in a.codes.split(",") if _c6(c)] if a.codes \
         else build_universe(a.verbose, a.top_flow)
     if a.limit:
@@ -245,15 +246,20 @@ def run_backfill(a):
             empty += 1
             continue
         codes_ok += 1
+        jobs = []
         for d, bars in by_date.items():
             key = "minute/%s/%s/p%d.json" % (code, d, a.period)
-            st = cos_put(key, json.dumps(
+            jobs.append((key, json.dumps(
                 {"code": code, "date": d, "period": a.period, "bars": bars},
-                ensure_ascii=False).encode("utf-8"))
-            if st == 200:
-                files += 1
-            else:
-                fail += 1
+                ensure_ascii=False).encode("utf-8")))
+        # 上传并发：单只 100 天 = 100 次 PUT，串行每只 100s 会把整轮拖到十几小时
+        if jobs:
+            with ThreadPoolExecutor(max_workers=put_workers) as ex:
+                for st in ex.map(lambda kv: cos_put(kv[0], kv[1]), jobs):
+                    if st == 200:
+                        files += 1
+                    else:
+                        fail += 1
         if a.verbose or i % 10 == 0:
             print("  [%d/%d] %s(%s) 覆盖 %d 天，累计文件 %d，%.0fs"
                   % (i, len(uni), code, why, len(by_date), files, time.time() - t0))
@@ -271,6 +277,8 @@ def main():
     ap.add_argument("--period", type=int, default=7)
     ap.add_argument("--backfill", type=int, default=0,
                     help="回填最近 N 个交易日（按股票翻页，一次覆盖整段）")
+    ap.add_argument("--put-workers", type=int, default=8,
+                    help="回填时并发上传数（默认 8）")
     ap.add_argument("--top-flow", type=int, default=50,
                     help="名单里额外加入主力净流入前 N 名")
     ap.add_argument("-v", "--verbose", action="store_true")
@@ -281,7 +289,7 @@ def main():
     import tdx_minute
 
     if a.backfill:
-        return run_backfill(a)
+        return run_backfill(a, max(1, a.put_workers))
 
     date = (a.date or "").replace("-", "") or latest_date()
     if a.codes:
