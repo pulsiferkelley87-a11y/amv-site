@@ -248,7 +248,16 @@ def fetch_latest_day(code, date_str, period=7):
         if str(r[0]) == date_str:
             b = tdx_minute._to_bar(r)
             out[b["t"]] = b
-    return [out[k] for k in sorted(out.keys())]
+    if out:
+        return [out[k] for k in sorted(out.keys())]
+
+    # 目标日比第一页更早 → 走二分定位（约 6~8 次请求）。
+    # 只在这种情况下回退，避免停牌股掉进翻页黑洞。
+    ds0 = [str(r[0]) for r in rows] if rows else []
+    if ds0 and date_str < min(ds0):
+        r2 = tdx_minute.fetch_day(code, date_str, period=period)
+        return r2.get("bars") or []
+    return []
 
 
 
