@@ -279,6 +279,7 @@ def main():
                     help="回填最近 N 个交易日（按股票翻页，一次覆盖整段）")
     ap.add_argument("--put-workers", type=int, default=8,
                     help="回填时并发上传数（默认 8）")
+    ap.add_argument("--list", action="store_true", help="只打印预热名单，不取数")
     ap.add_argument("--top-flow", type=int, default=50,
                     help="名单里额外加入主力净流入前 N 名")
     ap.add_argument("-v", "--verbose", action="store_true")
@@ -287,6 +288,15 @@ def main():
     a = ap.parse_args()
 
     import tdx_minute
+
+    if a.list:
+        from collections import Counter
+        uni = build_universe(a.verbose, a.top_flow)
+        print("预热名单 %d 只（每交易日 16:10 自动取这些票的当日分时）" % len(uni))
+        for c, why in uni:
+            print("  %s  %s" % (c, why))
+        print("来源构成:", dict(Counter(w for _, w in uni)))
+        return 0
 
     if a.backfill:
         return run_backfill(a, max(1, a.put_workers))
