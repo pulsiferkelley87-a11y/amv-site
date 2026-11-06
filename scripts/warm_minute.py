@@ -99,7 +99,7 @@ def _c6(code):
     return s
 
 
-def build_universe(verbose=False):
+def build_universe(verbose=False, top_flow=50):
     codes = []
 
     def add(c, why):
@@ -123,6 +123,28 @@ def build_universe(verbose=False):
     if ac:
         for x in (ac.get("list") or []):
             add(x.get("code"), "快上穿")
+
+    # 主力净流入 Top N：fundamentals.json 是列式存储，cols 里找 c / mainlx
+    fu = get_json("fundamentals.json")
+    if fu and fu.get("rows"):
+        cols = fu.get("cols") or []
+        try:
+            ic = cols.index("c")
+            im = cols.index("mainlx")
+        except ValueError:
+            ic, im = 0, 1
+        rows = []
+        for r in fu["rows"]:
+            try:
+                v = r[im]
+                if v is None:
+                    continue
+                rows.append((float(v), r[ic]))
+            except (TypeError, ValueError):
+                continue
+        rows.sort(reverse=True)
+        for v, c in rows[:top_flow]:
+            add(c, "主力净流入")
     if verbose:
         from collections import Counter
         print("名单来源:", dict(Counter(w for _, w in codes)))
@@ -139,6 +161,44 @@ def latest_date():
 
 
 # ─────────────────────────── 主流程 ───────────────────────────
+
+
+def trading_days(n):
+    """用 600000 的日线当交易日历（浦发极少停牌，做日历足够稳）。"""
+    import tdxhub
+    j = tdxhub.kline_raw("600000", 1, period=4, want_num=min(n + 10, 700), startxh=0)
+    rows = [x.get("Item") for x in (j.get("ListItem") or [])]
+    ds = sorted({str(r[0]) for r in rows})
+    return ds[-n:] if n and len(ds) >= n else ds
+
+
+def fetch_range(code, need, period=7):
+    """一次翻页把该股翻到窗口最早日期，按日分组。
+
+    回填时"按股票翻页"比"按日期逐日查"快一个数量级：
+    每页 700 根 ≈ 2.9 天，100 个交易日 ≈ 35 页；逐日查则是 100 次二分查找。
+    """
+    import tdx_minute
+    sc = tdx_minute.setcode_of(code)
+    need = set(need)
+    if not need:
+        return {}
+    oldest = min(need)
+    out = {}
+    for page in range(tdx_minute.MAX_PAGES):
+        rows = tdx_minute._page(code, sc, page * tdx_minute.PAGE, period)
+        if not rows:
+            break
+        for r in rows:
+            d = str(r[0])
+            if d in need:
+                b = tdx_minute._to_bar(r)
+                out.setdefault(d, {})[b["t"]] = b
+        ds = [str(r[0]) for r in rows]
+        if min(ds) < oldest:
+            break
+    return {d: [v[k] for k in sorted(v.keys())] for d, v in out.items()}
+
 
 def fetch_latest_day(code, date_str, period=7):
     """只取第一页（最新 700 根）里目标日的数据。
@@ -158,18 +218,70 @@ def fetch_latest_day(code, date_str, period=7):
     return [out[k] for k in sorted(out.keys())]
 
 
+
+def run_backfill(a):
+    uni = [(_c6(c), "指定") for c in a.codes.split(",") if _c6(c)] if a.codes \
+        else build_universe(a.verbose, a.top_flow)
+    if a.limit:
+        uni = uni[:a.limit]
+    days = trading_days(a.backfill)
+    if not days:
+        print("拿不到交易日历")
+        return 1
+    print("回填 %d 个交易日（%s ~ %s），标的 %d 只，period=%d"
+          % (len(days), days[0], days[-1], len(uni), a.period))
+
+    files = codes_ok = empty = fail = 0
+    t0 = time.time()
+    for i, (code, why) in enumerate(uni, 1):
+        try:
+            by_date = fetch_range(code, days, a.period)
+        except Exception as e:
+            fail += 1
+            if a.verbose:
+                print("  [%d/%d] %s 取数失败 %s" % (i, len(uni), code, str(e)[:50]))
+            continue
+        if not by_date:
+            empty += 1
+            continue
+        codes_ok += 1
+        for d, bars in by_date.items():
+            key = "minute/%s/%s/p%d.json" % (code, d, a.period)
+            st = cos_put(key, json.dumps(
+                {"code": code, "date": d, "period": a.period, "bars": bars},
+                ensure_ascii=False).encode("utf-8"))
+            if st == 200:
+                files += 1
+            else:
+                fail += 1
+        if a.verbose or i % 10 == 0:
+            print("  [%d/%d] %s(%s) 覆盖 %d 天，累计文件 %d，%.0fs"
+                  % (i, len(uni), code, why, len(by_date), files, time.time() - t0))
+
+    print("回填完成：%d 只 × 平均 %.1f 天 = %d 个文件 ｜ 无数据 %d 只 ｜ 失败 %d ｜ 耗时 %.0fs"
+          % (codes_ok, files / max(1, codes_ok), files, empty, fail, time.time() - t0))
+    return 0 if fail == 0 else 1
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--date", default="", help="YYYYMMDD，留空=最近交易日")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--codes", default="", help="直接指定代码，逗号分隔")
     ap.add_argument("--period", type=int, default=7)
+    ap.add_argument("--backfill", type=int, default=0,
+                    help="回填最近 N 个交易日（按股票翻页，一次覆盖整段）")
+    ap.add_argument("--top-flow", type=int, default=50,
+                    help="名单里额外加入主力净流入前 N 名")
     ap.add_argument("-v", "--verbose", action="store_true")
     ap.add_argument("--skip-existing", action="store_true",
                     help="先用 HEAD 查已有（慢，约 0.2s/只）；默认直接覆盖写，幂等")
     a = ap.parse_args()
 
     import tdx_minute
+
+    if a.backfill:
+        return run_backfill(a)
 
     date = (a.date or "").replace("-", "") or latest_date()
     if a.codes:
