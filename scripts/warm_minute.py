@@ -101,6 +101,26 @@ def _c6(code):
 
 
 
+
+def apply_shard(uni, spec):
+    """--shard K/N：按 K/N 交错切片，多个 runner 并行时负载均衡。
+
+    交错（i % N == K）而不是连续切段：不同市场/板块的票在名单里是混排的，
+    交错能让每个分片都覆盖到各类票，避免某个分片全是停牌股。
+    """
+    spec = (spec or "").strip()
+    if not spec or "/" not in spec:
+        return uni
+    try:
+        k, n = spec.split("/")
+        k, n = int(k), int(n)
+    except ValueError:
+        return uni
+    if n <= 1 or k < 0 or k >= n:
+        return uni
+    return [x for i, x in enumerate(uni) if i % n == k]
+
+
 def all_market_codes():
     """全市场代码（来自 live_data.json 的 stocks，约 5500 只）"""
     ld = get_json("live_data.json")
@@ -235,6 +255,7 @@ def fetch_latest_day(code, date_str, period=7):
 def run_backfill(a, put_workers=8):
     uni = [(_c6(c), "指定") for c in a.codes.split(",") if _c6(c)] if a.codes \
         else (all_market_codes() if a.all else build_universe(a.verbose, a.top_flow))
+    uni = apply_shard(uni, getattr(a, "shard", ""))
     if a.limit:
         uni = uni[:a.limit]
     days = trading_days(a.backfill)
@@ -293,6 +314,8 @@ def main():
                     help="回填时并发上传数（默认 8）")
     ap.add_argument("--all", action="store_true",
                     help="用全市场（live_data.json 的 stocks）而不是精选名单")
+    ap.add_argument("--shard", default="",
+                    help="分片 K/N：只处理第 K 片（0 基），用于多 runner 并行")
     ap.add_argument("--list", action="store_true", help="只打印预热名单，不取数")
     ap.add_argument("--top-flow", type=int, default=50,
                     help="名单里额外加入主力净流入前 N 名")
