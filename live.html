@@ -1182,6 +1182,60 @@ function dayIntraSVG(bars, prevClose) {
 }
 
 /* 选中某一天 → 画那天分时（取不到就如实说明） */
+/* 某一天的分时：**通达信云端（COS）优先**，取不到再回退腾讯。
+ *
+ * 为什么改成通达信优先：
+ *   腾讯 day/query 只给最近 5 个交易日，且一根 K 线是 267 根（含 09:30 集合竞价）；
+ *   通达信是 240 根、从 09:31 起。两边挨着的日期用不同源，指标会跳一下。
+ *   现在云端已经把最近 ~91 个交易日都缓存了（含最近的），统一走通达信更一致。
+ */
+const MIN_CACHE = Object.create(null);   // code+date -> bars（同一只票同一天不重复请）
+
+function renderDayIntraday(el, d, bars, src) {
+  const conv = bars.map(function (b) {
+    // 兼容两种来源：云端 {t,o,h,l,c,amt,vol}；腾讯 {t,price,vol,amt,avg}
+    const price = (b.c != null) ? b.c : b.price;
+    const vol = (b.vol || 0);
+    return {
+      t: b.t, price: price, vol: vol,
+      dvol: (b.dvol != null ? b.dvol : vol),
+      amt: b.amt || 0,
+      avg: (b.avg != null && b.avg > 0) ? b.avg : ((vol > 0 && b.amt > 0) ? b.amt / (vol * 100) : price)
+    };
+  }).filter(function (x) { return isFinite(x.price) && x.price > 0; });
+  if (!conv.length) return false;
+
+  const o0 = conv[0].price, c0 = conv[conv.length - 1].price;
+  const hi = Math.max.apply(null, conv.map(function (x) { return x.price; }));
+  const lo = Math.min.apply(null, conv.map(function (x) { return x.price; }));
+  // 两个源的量纲**相反**，必须分开算（这条踩过两次）：
+  //   通达信 TQLEX：vol / amt 是**每根增量** → 当日合计 = 累加
+  //   腾讯 day/query：vol / amt 是**累计值**   → 当日合计 = 最后一根
+  const vtot = (src === "tdx")
+    ? conv.reduce(function (a, x) { return a + (x.dvol || 0); }, 0)
+    : (conv[conv.length - 1].vol || 0);
+  const atot = (src === "tdx")
+    ? conv.reduce(function (a, x) { return a + (x.amt || 0); }, 0)
+    : (conv[conv.length - 1].amt || 0);
+  const badge = (src === "tdx")
+    ? '<span class="cb cb-tdx">通达信云端</span>'
+    : '<span class="cb cb-tx">腾讯</span>';
+
+  el.innerHTML =
+    '<div style="font-size:12px;margin:6px 0 4px;">📈 <b>' + d + '</b> 分时 ' + badge +
+    '<span style="color:var(--muted);">（' + conv.length + ' 根）</span> ｜ ' +
+    '开 ' + o0.toFixed(2) + ' ｜ 收 <b class="' + (c0 >= o0 ? "up" : "down") + '">' + c0.toFixed(2) + '</b> ｜ ' +
+    '高 ' + hi.toFixed(2) + ' ｜ 低 ' + lo.toFixed(2) + ' ｜ ' +
+    '量 ' + (vtot / 1e4).toFixed(1) + ' 万手 ｜ 额 ' + (atot / 1e8).toFixed(2) + ' 亿</div>' +
+    dayIntraSVG(conv, null) +
+    '<div style="font-size:11px;color:var(--muted);margin-top:3px;">' +
+    (src === "tdx"
+      ? '通达信 TQLEX 取数后缓存在 COS（云端 GitHub Actions 定时预热），手机/电脑直接读。'
+      : '腾讯 day/query（仅最近 5 个交易日）。') +
+    ' 橙线为当日均价。</div>';
+  return true;
+}
+
 function showDayIntraday(dateStr) {
   const el = document.getElementById("kDayIntra");
   if (!el) return;
@@ -1194,94 +1248,57 @@ function showDayIntraday(dateStr) {
       (KLINE_PERIOD === "week" ? "周K" : "月K") + '，切回日K 再点。</span>';
     return;
   }
-  if (KL_TRENDS_PEND) {
-    el.innerHTML = '<span style="font-size:11.5px;color:var(--muted);">分时数据加载中…</span>';
-    return;
-  }
-  if (!KL_TRENDS) {
-    el.innerHTML = '<span style="font-size:11.5px;color:var(--muted);">分时数据源不可用（腾讯 day/query）</span>';
-    return;
-  }
-  const bars = KL_TRENDS.byDate[d];
-  const first = KL_TRENDS.dates[0], lastD = KL_TRENDS.dates[KL_TRENDS.dates.length - 1];
-  if (!bars || !bars.length) {
-    // 腾讯只给最近 5 个交易日；更早的走「云端通达信缓存」（GitHub Actions 取数 → COS）
-    const c6 = normCode(KL_TRENDS_SYM || LAST_KLINE_CODE || "");
-    if (c6 && !el.__cosTried) {
-      el.__cosTried = d;
-      el.innerHTML = '<span style="font-size:11.5px;color:var(--muted);">查云端通达信缓存 ' + d + '…</span>';
-      const u = "https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com/minute/" +
-        c6 + "/" + d.replace(/-/g, "") + "/p7.json?_=" + Date.now();
-      fetch(u, { cache: "no-store" })
-        .then(r => r.ok ? r.json() : null)
-        .then(j => {
-          if (j && j.bars && j.bars.length) {
-            // 云端数据字段是 {t,o,h,l,c,amt,vol}，转成绘图用的 {t,price,avg,dvol,vol,amt}
-            const conv = j.bars.map(b => ({
-              t: b.t, price: b.c, vol: b.vol, dvol: b.vol, amt: b.amt,
-              avg: (b.vol > 0 && b.amt > 0) ? b.amt / (b.vol * 100) : b.c
-            }));
-            const o0 = conv[0].price, c0 = conv[conv.length - 1].price;
-            const hi = Math.max.apply(null, conv.map(x => x.price));
-            const lo = Math.min.apply(null, conv.map(x => x.price));
-            const vtot = conv.reduce((a, x) => a + (x.dvol || 0), 0);
-            const atot = conv.reduce((a, x) => a + (x.amt || 0), 0);
-            el.innerHTML =
-              '<div style="font-size:12px;margin:6px 0 4px;">📈 <b>' + d + '</b> 分时 ' +
-              '<span class="cb cb-tdx">通达信云端</span> ' +
-              '<span style="color:var(--muted);">（' + conv.length + ' 根）</span> ｜ ' +
-              '开 ' + o0.toFixed(2) + ' ｜ 收 <b class="' + (c0 >= o0 ? "up" : "down") + '">' + c0.toFixed(2) + '</b> ｜ ' +
-              '高 ' + hi.toFixed(2) + ' ｜ 低 ' + lo.toFixed(2) + ' ｜ ' +
-              '量 ' + (vtot / 1e4).toFixed(1) + ' 万手 ｜ 额 ' + (atot / 1e8).toFixed(2) + ' 亿</div>' +
-              dayIntraSVG(conv, null) +
-              '<div style="font-size:11px;color:var(--muted);margin-top:3px;">' +
-              '数据由云端（GitHub Actions）用通达信 TQLEX 取数后缓存在 COS，手机/电脑打开都直接读，不经过任何本机进程。</div>';
-          } else {
-            el.innerHTML = '<span style="font-size:11.5px;color:var(--muted);">' +
-              "「" + d + "」云端也还没有缓存。腾讯只提供最近 5 个交易日（" + first + " ~ " + lastD + "），" +
-              "更早的日期需要在云端跑一次取数（GitHub Actions → minute.yml）才会出现。" +
-              "不会用日K数据伪造分时。</span>";
-          }
-        })
-        .catch(() => {
-          el.innerHTML = '<span style="font-size:11.5px;color:var(--muted);">' +
-            "「" + d + "」云端缓存读取失败（网络或 CORS）。腾讯只提供最近 5 个交易日：" + first + " ~ " + lastD + "。</span>";
-        });
-      return;
-    }
-    el.innerHTML = '<span style="font-size:11.5px;color:var(--muted);">' +
-      "「" + d + "」的分时取不到 —— 腾讯只提供最近 5 个交易日：" +
-      first + " ~ " + lastD + "，云端也还没缓存这一天。</span>";
-    return;
-  }
 
-  const o = bars[0].price, c = bars[bars.length - 1].price;
-  const hi = Math.max.apply(null, bars.map(b => b.price));
-  const lo = Math.min.apply(null, bars.map(b => b.price));
-  // 腾讯这两列是累计值，合计直接取最后一根
-  const lastBar = bars[bars.length - 1] || {};
-  const vol = lastBar.vol || 0;
-  const amt = lastBar.amt || 0;
-  const cls = c >= o ? "up" : "down";
+  const c6 = normCode(KL_TRENDS_SYM || LAST_KLINE_CODE || "");
+  const tencentHas = !!(KL_TRENDS && KL_TRENDS.byDate && KL_TRENDS.byDate[d]);
+  const first = (KL_TRENDS && KL_TRENDS.dates && KL_TRENDS.dates[0]) || "";
+  const lastD = (KL_TRENDS && KL_TRENDS.dates && KL_TRENDS.dates.length)
+    ? KL_TRENDS.dates[KL_TRENDS.dates.length - 1] : "";
 
-  el.innerHTML =
-    '<div style="font-size:12px;margin:6px 0 4px;">📈 <b>' + d + '</b> 分时 ' +
-    '<span style="color:var(--muted);">（耗时 ' + bars.length + ' 根分钟线）</span> ｜ ' +
-    '开 ' + o.toFixed(2) + ' ｜ 收 <b class="' + cls + '">' + c.toFixed(2) + '</b> ｜ ' +
-    '高 ' + hi.toFixed(2) + ' ｜ 低 ' + lo.toFixed(2) + ' ｜ ' +
-    '量 ' + (vol / 1e4).toFixed(1) + ' 万手 ｜ 额 ' + (amt / 1e8).toFixed(2) + ' 亿</div>' +
-    dayIntraSVG(bars, null) +
-    '<div style="font-size:11px;color:var(--muted);margin-top:3px;">' +
-    '点 K 线任意一根看那天的分时（可看：' + first + " ~ " + lastD + '）。橙线为当日均价。</div>';
+  // ① 通达信云端优先
+  const ck = c6 + "|" + d;
+  if (MIN_CACHE[ck]) {
+    if (renderDayIntraday(el, d, MIN_CACHE[ck], "tdx")) return;
+  }
+  if (c6) {
+    el.innerHTML = '<span style="font-size:11.5px;color:var(--muted);">查云端通达信 ' + d + '…</span>';
+    const u = "https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com/minute/" +
+      c6 + "/" + d.replace(/-/g, "") + "/p7.json?_=" + Date.now();
+    fetch(u, { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (j && j.bars && j.bars.length) {
+          MIN_CACHE[ck] = j.bars;
+          if (renderDayIntraday(el, d, j.bars, "tdx")) return;
+        }
+        fallbackTencent(el, d, tencentHas, first, lastD);
+      })
+      .catch(function () { fallbackTencent(el, d, tencentHas, first, lastD); });
+    return;
+  }
+  fallbackTencent(el, d, tencentHas, first, lastD);
+}
+
+/* 云端没有 → 回退腾讯（仅最近 5 个交易日）；再没有就如实说明 */
+function fallbackTencent(el, d, tencentHas, first, lastD) {
+  if (tencentHas) {
+    const bars = KL_TRENDS.byDate[d];
+    if (renderDayIntraday(el, d, bars, "tx")) return;
+  }
+  el.innerHTML = '<span style="font-size:11.5px;color:var(--muted);">' +
+    "「" + d + "」的分时取不到 —— 云端（通达信）没有这一天的缓存" +
+    (first ? ("，腾讯也只覆盖最近 5 个交易日（" + first + " ~ " + lastD + "）") : "") +
+    "。更早的日期可以在云端跑一次取数（GitHub Actions → minute.yml，支持 --backfill）再来看。" +
+    "不会用日K数据伪造分时。</span>";
 }
 
 /* 点击命中：先按元素命中取 data-d（精确），取不到再用坐标反推（兜底） */
 function pickBarAt(clientX, clientY) {
   const hit = document.elementFromPoint(clientX, clientY);
   if (hit && hit.closest) {
-    const node = hit.closest([data-d]);
+    const node = hit.closest("[data-d]");
     if (node) {
-      const d = node.getAttribute(data-d);
+      const d = node.getAttribute("data-d");
       if (d) { showDayIntraday(d); return; }
     }
   }
