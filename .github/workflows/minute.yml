@@ -27,6 +27,10 @@ on:
         description: '回填最近 N 个交易日（填了就走回填模式，忽略 code/date）'
         required: false
         default: ''
+      scope:
+        description: '范围：list=精选名单（涨停/龙虎榜/快上穿/净流入）｜all=全市场 5500 只'
+        required: false
+        default: 'list'
   schedule:
     # 交易日 16:10（北京时间 = UTC 08:10）预热最近一个交易日
     - cron: '10 8 * * 1-5'
@@ -122,12 +126,14 @@ jobs:
       - name: 回填历史（手动触发 + 填了 backfill）
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.backfill != ''
         run: |
-          python scripts/warm_minute.py --backfill ${{ github.event.inputs.backfill }}
+          python scripts/warm_minute.py --backfill ${{ github.event.inputs.backfill }} \
+            ${{ github.event.inputs.scope == 'all' && '--all' || '' }}
 
-      - name: 批量预热（定时触发：涨停池 + 龙虎榜 + 快上穿 + 主力净流入 Top50）
+      - name: 批量预热（定时触发：全市场 5500 只当日分时）
         if: github.event_name == 'schedule'
         run: |
-          python scripts/warm_minute.py
+          # 全市场：约 5500 只 × 1 次请求 + 1 次 PUT ≈ 60 分钟，6 小时上限内够用
+          python scripts/warm_minute.py --all
 
       - name: 上传到 COS（仓库已有 COS_SECRET_ID/KEY；bucket/region 有默认值）
         if: env.COS_SECRET_ID != ''
