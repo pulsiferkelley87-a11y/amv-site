@@ -28,9 +28,13 @@ on:
         required: false
         default: ''
       scope:
-        description: '范围：list=精选名单（涨停/龙虎榜/快上穿/净流入）｜all=全市场 5500 只'
+        description: '范围：list=精选名单｜all=全市场 5500 只'
         required: false
         default: 'list'
+      shard:
+        description: '分片 K/N（0/8 表示 8 片里的第 0 片）；留空=不分片'
+        required: false
+        default: ''
   schedule:
     # 交易日 16:10（北京时间 = UTC 08:10）预热最近一个交易日
     - cron: '10 8 * * 1-5'
@@ -39,7 +43,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: tdx-minute
+  # 分片并行时不能互相取消，所以并发组带上 shard
+  group: tdx-minute-${{ github.event.inputs.shard }}
   cancel-in-progress: true
 
 jobs:
@@ -126,8 +131,10 @@ jobs:
       - name: 回填历史（手动触发 + 填了 backfill）
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.backfill != ''
         run: |
+          # 分片：全市场回填单线程要十几小时，这里按 shard 切给多个 runner 并行
           python scripts/warm_minute.py --backfill ${{ github.event.inputs.backfill }} \
-            ${{ github.event.inputs.scope == 'all' && '--all' || '' }}
+            ${{ github.event.inputs.scope == 'all' && '--all' || '' }} \
+            --shard ${{ github.event.inputs.shard }}
 
       - name: 批量预热（定时触发：全市场 5500 只当日分时）
         if: github.event_name == 'schedule'
