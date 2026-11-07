@@ -94,6 +94,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
     <link rel="stylesheet" href="ui-upgrade.css">
     <link rel="stylesheet" href="ui-resp.css?v=20261105h">
     <link rel="stylesheet" href="ui-theme.css?v=20261105h">
+    <link rel="stylesheet" href="ui-clean.css?v=20261107a">
     <style>
       /* 历史回看工具栏：原来是一串内联元素，窄屏会把"到"字挤成孤行。
          改成 flex 容器，桌面端仍是一行，窄屏由 ui-resp.css 接管换行。 */
@@ -290,7 +291,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
 // 固定构建号加载：发版时改 BUILD_ID 即可，平时命中浏览器缓存。
 // （原实现每次刷新都取当前毫秒时间戳，导致 app21.js 与 app-data.js 每次重下）
 (function () {
-  var BUILD_ID = "20261105h";
+  var BUILD_ID = "20261107a";
   // 旧浏览器（无 DecompressionStream）：先把数据落地，再跑主脚本。
   // 原顺序会让 app21.js 末尾的顶层 load() 在 window.DATA 就绪前执行并提前返回，主图表空白。
   if (typeof DecompressionStream === "undefined") {
@@ -308,5 +309,6 @@ function toggleTheme(){setTheme(document.documentElement.getAttribute("data-them
 <script src="realtime-quote.js"></script>
 <script src="live-quote-bar.js"></script>
   <script src="ui-dashboard.js"></script>
+  <script src="ui-clean.js?v=20261107a"></script>
 </body>
 </html>
