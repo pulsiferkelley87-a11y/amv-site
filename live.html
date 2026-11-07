@@ -1139,7 +1139,12 @@ function dayIntraSVG(bars, prevClose) {
   if (!n) return "";
   const px = bars.map(b => b.price);
   let mn = Math.min.apply(null, px), mx = Math.max.apply(null, px);
-  if (prevClose && isFinite(prevClose)) { mn = Math.min(mn, prevClose); mx = Math.max(mx, prevClose); }
+  if (prevClose && isFinite(prevClose)) {
+    // 通达信默认把昨收放在**正中**：上下等幅，方便一眼看出强弱
+    const span = Math.max(Math.abs(mx - prevClose), Math.abs(prevClose - mn)) * 1.08;
+    mn = prevClose - span;
+    mx = prevClose + span;
+  }
   if (mx - mn < 1e-6) mx = mn + 0.01;
   const pad = (mx - mn) * 0.08;
   mn -= pad; mx += pad;
@@ -1176,7 +1181,7 @@ function dayIntraSVG(bars, prevClose) {
   return '<svg viewBox="0 0 ' + W + " " + H + '" style="width:100%;height:auto;background:var(--soft);' +
     'border:1px solid var(--border);border-radius:6px;">' +
     ticks + pcLine +
-    '<path d="' + path(bars.map(b => b.avg)) + '" fill="none" stroke="#e0a12b" stroke-width="1.1"/>' +
+    '<path d="' + path(bars.map(b => (b.avgCum != null ? b.avgCum : b.avg))) + '" fill="none" stroke="#e0a12b" stroke-width="1.1"/>' +
     '<path d="' + path(px) + '" fill="none" stroke="' + col + '" stroke-width="1.5"/>' +
     vols + tLbl + '</svg>';
 }
@@ -1192,42 +1197,71 @@ function dayIntraSVG(bars, prevClose) {
 const MIN_CACHE = Object.create(null);   // code+date -> bars（同一只票同一天不重复请）
 
 function renderDayIntraday(el, d, bars, src) {
-  const conv = bars.map(function (b) {
-    // 兼容两种来源：云端 {t,o,h,l,c,amt,vol}；腾讯 {t,price,vol,amt,avg}
+  // ① 归一化：价格字段两源不同；量/额统一成「每根增量」
+  const conv = [];
+  let prevVol = 0, prevAmt = 0;
+  bars.forEach(function (b) {
     const price = (b.c != null) ? b.c : b.price;
-    const vol = (b.vol || 0);
-    return {
-      t: b.t, price: price, vol: vol,
-      dvol: (b.dvol != null ? b.dvol : vol),
-      amt: b.amt || 0,
-      avg: (b.avg != null && b.avg > 0) ? b.avg : ((vol > 0 && b.amt > 0) ? b.amt / (vol * 100) : price)
-    };
-  }).filter(function (x) { return isFinite(x.price) && x.price > 0; });
+    if (!isFinite(price) || price <= 0) return;
+    const cumV = b.vol || 0, cumA = b.amt || 0;
+    let dvol, damt;
+    if (src === "tdx") {
+      dvol = cumV; damt = cumA;      // 通达信本来就是每根增量
+    } else {
+      dvol = Math.max(0, cumV - prevVol);   // 腾讯是累计值，取差
+      damt = Math.max(0, cumA - prevAmt);
+      prevVol = cumV; prevAmt = cumA;
+    }
+    conv.push({ t: b.t, price: price, dvol: dvol, damt: damt });
+  });
   if (!conv.length) return false;
+
+  // ② 均价线 = **当日累计** VWAP（Σ额 ÷ Σ量），不是每根自己的均价。
+  //    通达信那条橙线是累计的、平滑的；按每根算会锯齿乱跳，一眼就觉得不对。
+  let cumAmt = 0, cumVol = 0;
+  conv.forEach(function (x) {
+    cumAmt += x.damt;
+    cumVol += x.dvol * 100;                    // 手 → 股
+    x.avgCum = cumVol > 0 ? cumAmt / cumVol : x.price;
+  });
+
+  // ③ 昨收：从日K里取该日**前一根的收盘**，这才是分时图的基准
+  let prevClose = null;
+  try {
+    if (typeof KL_DATA !== "undefined" && KL_DATA && KL_DATA.length) {
+      for (let i = KL_DATA.length - 1; i >= 0; i--) {
+        if (normDate(KL_DATA[i][0]) === d) {
+          if (i > 0) {
+            const pc = parseFloat(KL_DATA[i - 1][2]);
+            if (isFinite(pc) && pc > 0) prevClose = pc;
+          }
+          break;
+        }
+      }
+    }
+  } catch (e) { }
 
   const o0 = conv[0].price, c0 = conv[conv.length - 1].price;
   const hi = Math.max.apply(null, conv.map(function (x) { return x.price; }));
   const lo = Math.min.apply(null, conv.map(function (x) { return x.price; }));
-  // 两个源的量纲**相反**，必须分开算（这条踩过两次）：
-  //   通达信 TQLEX：vol / amt 是**每根增量** → 当日合计 = 累加
-  //   腾讯 day/query：vol / amt 是**累计值**   → 当日合计 = 最后一根
-  const vtot = (src === "tdx")
-    ? conv.reduce(function (a, x) { return a + (x.dvol || 0); }, 0)
-    : (conv[conv.length - 1].vol || 0);
-  const atot = (src === "tdx")
-    ? conv.reduce(function (a, x) { return a + (x.amt || 0); }, 0)
-    : (conv[conv.length - 1].amt || 0);
+  const vtot = conv.reduce(function (a, x) { return a + x.dvol; }, 0);
+  const atot = conv.reduce(function (a, x) { return a + x.damt; }, 0);
+  const ref = (prevClose != null) ? prevClose : o0;
+  const chg = ((c0 / ref - 1) * 100);
   const badge = (src === "tdx")
     ? '<span class="cb cb-tdx">通达信云端</span>'
     : '<span class="cb cb-tx">腾讯</span>';
 
+
   el.innerHTML =
     '<div style="font-size:12px;margin:6px 0 4px;">📈 <b>' + d + '</b> 分时 ' + badge +
     '<span style="color:var(--muted);">（' + conv.length + ' 根）</span> ｜ ' +
-    '开 ' + o0.toFixed(2) + ' ｜ 收 <b class="' + (c0 >= o0 ? "up" : "down") + '">' + c0.toFixed(2) + '</b> ｜ ' +
+    '昨收 ' + ref.toFixed(2) + ' ｜ ' +
+    '开 ' + o0.toFixed(2) + ' ｜ 收 <b class="' + (c0 >= ref ? "up" : "down") + '">' + c0.toFixed(2) + '</b> ' +
+    '<span class="' + (chg >= 0 ? "up" : "down") + '">' + (chg >= 0 ? "+" : "") + chg.toFixed(2) + '%</span> ｜ ' +
     '高 ' + hi.toFixed(2) + ' ｜ 低 ' + lo.toFixed(2) + ' ｜ ' +
     '量 ' + (vtot / 1e4).toFixed(1) + ' 万手 ｜ 额 ' + (atot / 1e8).toFixed(2) + ' 亿</div>' +
-    dayIntraSVG(conv, null) +
+    dayIntraSVG(conv, prevClose) +
     '<div style="font-size:11px;color:var(--muted);margin-top:3px;">' +
     (src === "tdx"
       ? '通达信 TQLEX 取数后缓存在 COS（云端 GitHub Actions 定时预热），手机/电脑直接读。'
