@@ -90,7 +90,12 @@
     var key = pageKey();
     var defaults = COLLAPSE[key] || [];
     var saved = storeGet(key);
-    var cards = document.querySelectorAll(".wrap > .card, .card.full");
+    // 原来只取 .wrap 的直接子卡片，.grid 里的（龙头/高切低）漏掉了 ——
+    // 表现就是"有的卡片有折叠按钮、有的没有"。改成取全部 .card，再排除嵌套卡片。
+    var all = document.querySelectorAll(".card");
+    var cards = Array.prototype.filter.call(all, function (c) {
+      return !c.parentElement || !c.parentElement.closest(".card");
+    });
 
     cleanNav();
 
@@ -102,7 +107,11 @@
       stripEmoji(h2);
       wrapBody(card, h2);
 
-      var title = (h2.textContent || "").trim();
+      // key 只取 h2 的**直接文本节点**（主标题）。
+      // 用 textContent 会把副标题 span 也拼进去，副标题一改折叠状态就错位。
+      var title = Array.prototype.filter.call(h2.childNodes, function (n) {
+        return n.nodeType === 3;
+      }).map(function (n) { return n.nodeValue; }).join("").replace(/\s+/g, " ").trim();
 
       var btn = document.createElement("span");
       btn.className = "card-toggle";
