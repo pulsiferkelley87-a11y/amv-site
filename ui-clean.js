@@ -16,26 +16,20 @@
 
   /* 默认收起哪些（按标题包含的关键词匹配） */
   var COLLAPSE = {
+    // 铁律：**图表卡不折叠**。折叠图表等于删除 —— 用户第一反应是"图没了"。
+    // 只折纯文字/长表/核对类。
     live: [
-      "市场温度计",        // 250 根柱状图，占一屏，看图信息量低
       "通达信口径核对",    // 说明类
       "指标口径与阈值",    // 13 行长表
-      "牛熊六维",          // 与"市场情绪"表达重叠
-      "资金主线雷达",
-      "临近支撑位监控",
-      "上穿晋级统计",
-      "高切低监测",
-      "龙虎榜"
+      "上穿晋级统计",      // 纯表格
+      "高切低监测"         // 纯文字
     ],
     index: [
-      "数据源状态",
-      "通达信口径核对",
-      "指标口径与阈值",
-      "上穿晋级统计",
-      "全历史周线",
-      "官方三件套",
-      "0AMV 叠加",
-      "市场快讯"
+      "数据源状态",        // 文字
+      "通达信口径核对",    // 文字
+      "指标口径与阈值",    // 长表
+      "上穿晋级统计",      // 纯表格
+      "市场快讯"           // 长列表
     ]
   };
 
@@ -45,11 +39,16 @@
     return /live/i.test(location.pathname) ? "live" : "index";
   }
 
+  // 版本号：折叠名单一改，旧状态就必须作废。
+  // 否则早期版本把"0AMV/三件套/周线"这些**图表卡**折叠过，浏览器里还记着，
+  // 改了默认值也没用 —— 用户看到的就是"历史那一栏的图全没了"。
+  var STATE_VER = "v2";
+
   function storeGet(k) {
-    try { return JSON.parse(localStorage.getItem("amv_clean_" + k) || "{}"); } catch (e) { return {}; }
+    try { return JSON.parse(localStorage.getItem("amv_clean_" + STATE_VER + "_" + k) || "{}"); } catch (e) { return {}; }
   }
   function storeSet(k, v) {
-    try { localStorage.setItem("amv_clean_" + k, JSON.stringify(v)); } catch (e) { }
+    try { localStorage.setItem("amv_clean_" + STATE_VER + "_" + k, JSON.stringify(v)); } catch (e) { }
   }
 
   function stripEmoji(el) {
@@ -134,6 +133,10 @@
         var s = storeGet(key);
         s[title] = now;
         storeSet(key, s);
+        // 展开后让 ECharts 重算尺寸：卡片隐藏时渲染出来的图可能是 0 宽
+        if (!now) {
+          setTimeout(function () { window.dispatchEvent(new Event("resize")); }, 60);
+        }
       });
     });
   }
