@@ -81,7 +81,9 @@
         var t = firstOf[k];
         if (!t) return;
         var y = t.getBoundingClientRect().top + window.scrollY - 118;   // 留出 sticky 头
-        window.scrollTo({ top: y, behavior: "smooth" });
+        // 注意：这里**不能用 behavior:"smooth"** —— 本页 html 有 overflow-x:clip，
+        // 实测平滑滚动完全不动（scrollY 保持 0），点了像没反应。瞬时滚动稳定。
+        window.scrollTo(0, y);
         Array.prototype.forEach.call(bar.children, function (x) { x.classList.remove("on"); });
         btn.classList.add("on");
       });
