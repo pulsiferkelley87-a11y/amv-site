@@ -462,19 +462,6 @@ function renderMain() {
   const o = D.official, s = D.self;
   const dom = document.getElementById("chartMain");
   const ch = echarts.getInstanceByDom(dom) || echarts.init(dom);
-  // 序列来源说明：这条曲线做过拼接修复，必须如实标出来，不能让它看起来像原生递推
-  (function () {
-    const host = dom.parentElement;
-    if (!host || host.querySelector('.amv-splice-note')) return;
-    const sp = D.amv_spliced || {};
-    if (!sp.from_cur) return;
-    const n = document.createElement('div');
-    n.className = 'note amv-splice-note';
-    n.style.cssText = 'margin-top:6px;font-size:11px;color:var(--muted);line-height:1.6';
-    n.textContent = '序列说明：' + (sp.date || '2026-11-07') + ' 做过一次拼接修复 —— 逐日取更接近官方 0AMV 的快照值（当次重建 '
-      + sp.from_cur + ' 天 ／ 11-03 旧快照 ' + sp.from_old + ' 天），用于消除 2025-10-14 的断点与今年的漂移。';
-    dom.insertAdjacentElement('afterend', n);
-  })();
   const opt = baseOption();
   opt.legend = { top: 0, data: ["官方 0AMV", "活跃SZ(逐股递推·实测)", "var1(成交额平滑)", "C5", "C13", "C34", "∞"] };
   // 日期轴 = 官方日期 ∪ 自研日期。官方序列来自手工维护的 JSON，会滞后数日；
