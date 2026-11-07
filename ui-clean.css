@@ -1,0 +1,72 @@
+/* ============================================================================
+ * ui-clean.css —— 清爽化：减少视觉噪音、收紧间距、支持卡片折叠
+ *
+ * 原则：只做减法。
+ *   1. 去掉 h2 里的 emoji（视觉噪音最大的一项）
+ *   2. 卡片头的"说明小字"淡化成 11px 灰字，不再和标题抢注意力
+ *   3. 收紧内边距与卡片间距，让一屏看到更多骨架
+ *   4. 卡片可折叠，默认收起"说明/核对/低频"类，主数据保持展开
+ * ==========================================================================*/
+
+/* ── 标题：去 emoji、字号统一、去掉左色条（色条在折叠后反而更乱） ── */
+.card h2 {
+  border-left: 0 !important;
+  padding-left: 0 !important;
+  font-size: 13.5px !important;
+  font-weight: 700;
+  gap: 6px !important;
+  margin-bottom: 8px !important;
+  letter-spacing: .01em;
+}
+/* 说明小字：更小更淡，像脚注而不是副标题 */
+.card h2 > span:not(.cb) {
+  font-size: 11px !important;
+  color: var(--muted);
+  opacity: .8;
+  font-weight: 400 !important;
+}
+/* 口径徽标也缩一号 */
+.cb { height: 16px !important; font-size: 10px !important; padding: 0 5px !important; margin-left: 2px !important; }
+
+/* ── 卡片：更小的内边距、更轻的边框、更紧的间距 ── */
+.card {
+  padding: 12px 14px !important;
+  border-radius: 10px !important;
+  margin-bottom: 10px !important;
+}
+.card .note { font-size: 11px !important; line-height: 1.6 !important; opacity: .85; }
+
+/* ── 折叠 ── */
+.card { position: relative; }
+.card-toggle {
+  margin-left: auto;
+  flex: 0 0 auto;
+  width: 22px; height: 22px;
+  line-height: 20px;
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  user-select: none;
+  transition: transform .15s ease, color .15s ease;
+}
+.card-toggle:hover { color: var(--accent); border-color: var(--accent); }
+.card.is-collapsed .card-toggle { transform: rotate(-90deg); }
+.card.is-collapsed .card-body { display: none; }
+/* 折叠态：只留标题一行，省出整屏 */
+.card.is-collapsed { padding-bottom: 12px !important; }
+.card.is-collapsed h2 { margin-bottom: 0 !important; }
+
+/* ── 图表别撑太高 ── */
+.chart { height: 300px !important; }
+.card svg { max-height: 420px; }
+
+/* ── 手机上更紧凑 ── */
+@media (max-width: 720px) {
+  .card { padding: 10px 11px !important; margin-bottom: 8px !important; }
+  .card h2 { font-size: 13px !important; }
+  .card h2 > span:not(.cb) { display: none; }   /* 手机上一律不显示副标题说明 */
+}
