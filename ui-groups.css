@@ -1,0 +1,87 @@
+/* ============================================================================
+ * ui-groups.css —— 分组导航（借同花顺的两级导航 + 集思录的块状入口）
+ *
+ * 问题：实盘页 18 张卡片、主页 16 张，从上到下一条道排完，一屏看不到骨架，
+ *       顶部 chip 横排只是"滚动锚点"，没有分组概念。
+ * 做法：
+ *   - 按功能把卡片分成 4~5 组，组间插一条**组标题带**（细细一条，不占高度）
+ *   - 顶部把它做成**分组块**（组名 + 该组卡片数），点击跳到该组
+ *   - 不隐藏任何内容（隐藏会让"东西去哪了"变成新问题）
+ * ==========================================================================*/
+
+/* 关掉原来的平铺 chip 导航，避免两套导航打架 */
+.anchornav { display: none !important; }
+
+.grpbar {
+  position: sticky;
+  top: var(--header-h, 0px);
+  z-index: 40;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 8px 0 10px;
+  margin-bottom: 4px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.grpbar .gbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+.grpbar .gbtn:hover { border-color: var(--accent); color: var(--accent); }
+.grpbar .gbtn.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.grpbar .gbtn .cnt {
+  font-size: 10.5px;
+  font-weight: 500;
+  opacity: .7;
+}
+
+/* 组标题带：很细一条，主要用于视觉分段 + 作为跳转锚点 */
+.grp-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: .06em;
+  scroll-margin-top: calc(var(--header-h, 0px) + 56px);
+}
+.grp-head::before {
+  content: "";
+  width: 3px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: .85;
+}
+.grp-head::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+@media (max-width: 720px) {
+  .grpbar { gap: 5px; padding: 6px 0 8px; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
+  .grpbar::-webkit-scrollbar { display: none; }
+  .grpbar .gbtn { padding: 4px 10px; font-size: 12px; }
+  .grp-head { margin: 10px 0 6px; font-size: 11px; }
+}
