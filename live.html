@@ -69,8 +69,8 @@ input:focus,select:focus{outline:none;border-color:var(--accent);}
     <link rel="stylesheet" href="ui-upgrade.css">
     <link rel="stylesheet" href="ui-resp.css?v=20261105e">
     <link rel="stylesheet" href="ui-theme.css?v=20261105f">
-    <link rel="stylesheet" href="ui-clean.css?v=20261107a">
-    <link rel="stylesheet" href="ui-groups.css?v=20261107b">
+    <link rel="stylesheet" href="ui-clean.css?v=20261107c">
+    <link rel="stylesheet" href="ui-groups.css?v=20261107c">
 </head>
 <body>
 <header>
@@ -2981,7 +2981,7 @@ function setTheme(t){document.documentElement.setAttribute("data-theme",t);local
 function toggleTheme(){setTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");}
 (function(){var t=localStorage.getItem("amv-theme");if(!t){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}setTheme(t);})();
 </script>  <script src="ui-nav.js?v=20261105f"></script>
-  <script src="ui-clean.js?v=20261107a"></script>
-  <script src="ui-groups.js?v=20261107b"></script>
+  <script src="ui-clean.js?v=20261107c"></script>
+  <script src="ui-groups.js?v=20261107c"></script>
 </body>
 </html>
