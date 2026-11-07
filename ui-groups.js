@@ -40,6 +40,11 @@
   }
 
   function build() {
+    // index 页已经有 ui-dashboard.js 的 Tab 分页（盘面/个股/板块/历史），
+    // 再加一条分组条就是**两套导航并存** —— 用户不知道点哪个，看着就像坏了。
+    // 有 .panel（Tab 面板）就说明已经分好组了，这里直接退出。
+    if (document.querySelector(".panel")) return;
+
     var wrap = document.querySelector(".wrap");
     if (!wrap || wrap.__grouped) return;
     var cards = wrap.querySelectorAll(".card");     // 任意层级，覆盖 .grid 里的卡片
