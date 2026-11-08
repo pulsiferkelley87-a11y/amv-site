@@ -833,8 +833,8 @@ function loadKline(code) {
   const raw6 = raw.slice(2);
   const perBtns = [["day", "日K"], ["week", "周K"], ["month", "月K"]].map(([p, t]) =>
     `<button onclick="setKlinePeriod('${p}')" style="padding:6px 14px;border:1px solid ${p === KLINE_PERIOD ? '#3b6fe0' : 'var(--border)'};border-radius:5px;background:${p === KLINE_PERIOD ? '#3b6fe0' : 'var(--card)'};color:${p === KLINE_PERIOD ? 'var(--card)' : 'var(--text)'};cursor:pointer;font-size:13px;margin-right:5px;">${t}</button>`).join("");
-  const mfBtn = `<button onclick="toggleKlineMf()" style="padding:6px 12px;border:1px solid var(--border);border-radius:5px;background:var(--card);cursor:pointer;font-size:13px;">💠 主力带：${KL_SHOW_MF ? "开" : "关"}</button>`;
-  const chipBtn = `<button onclick="toggleKlineChips()" style="padding:6px 12px;border:1px solid var(--border);border-radius:5px;background:var(--card);cursor:pointer;font-size:13px;">🧱 筹码带：${KL_SHOW_CHIPS ? "开" : "关"}</button>`;
+  const mfBtn = `<button onclick="toggleKlineMf()" style="padding:6px 12px;border:1px solid var(--border);border-radius:5px;background:var(--card);cursor:pointer;font-size:13px;" title="东财主力净额口径：紫柱=主力筹码主峰，紫线=主力POC。和筹码POC错位时才有意义">💠 主力带：${KL_SHOW_MF ? "开" : "关"}</button>`;
+  const chipBtn = `<button onclick="toggleKlineChips()" style="padding:6px 12px;border:1px solid var(--border);border-radius:5px;background:var(--card);cursor:pointer;font-size:13px;" title="成交量口径的筹码分布：蓝柱=核心带，蓝线=POC 最密价位，浅蓝=价值区">🧱 筹码带：${KL_SHOW_CHIPS ? "开" : "关"}</button>`;
   const lvlBtn = `<button onclick="toggleKlineLevels()" style="padding:6px 12px;border:1px solid var(--border);border-radius:5px;background:var(--card);cursor:pointer;font-size:13px;">📏 关键位：${KL_SHOW_LEVELS ? "开" : "关"}</button>`;
   const ctrl = new AbortController();
   abortPrevKline();
@@ -855,7 +855,7 @@ function loadKline(code) {
         }
         KL_DATA = rows2;
         KL_VIEW = { end: rows2.length - 1, count: Math.min(60, rows2.length) };
-        box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn}${chipBtn}${mfBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动看十字光标｜<b>点K线看那一天的分时</b>（<span style="color:#2b57c8;">蓝底</span>=近5日可分时）</span></div>` + renderKline() + `<div id="kDayIntra" style="margin-top:4px;"></div>`;
+        box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn}${chipBtn}${mfBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动看十字光标｜<b>点K线看那一天的分时</b>（<span style="color:#2b57c8;">蓝底</span>=近5日可分时）</span></div>` + renderKline() + klineChipsHelp() + `<div id="kDayIntra" style="margin-top:4px;"></div>`;
       }, () => {
         KLINE_ABORT = null;
         box.innerHTML = "<span style='font-size:12px;color:var(--muted);'>K线加载失败（该股可能已退市或停牌）。</span>";
@@ -870,7 +870,7 @@ function loadKline(code) {
       KL_DATA = rows;
       KL_VIEW = { end: rows.length - 1, count: Math.min(60, rows.length) };
       ensureMainFlow(raw6, null);
-      box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn}${chipBtn}${mfBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动看十字光标｜<b>点K线看那一天的分时</b>（<span style="color:#2b57c8;">蓝底</span>=近5日可分时）</span></div>` + renderKline() + `<div id="kDayIntra" style="margin-top:4px;"></div>`;
+      box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn}${chipBtn}${mfBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动看十字光标｜<b>点K线看那一天的分时</b>（<span style="color:#2b57c8;">蓝底</span>=近5日可分时）</span></div>` + renderKline() + klineChipsHelp() + `<div id="kDayIntra" style="margin-top:4px;"></div>`;
     }, () => doSina(), c2.signal);
   };
   fetch(`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${raw},${KLINE_PERIOD},,,${KLINE_RANGE},qfq`, { signal: ctrl.signal })
@@ -886,7 +886,7 @@ function loadKline(code) {
       KL_DATA = rows;
       KL_VIEW = { end: rows.length - 1, count: Math.min(60, rows.length) };
       ensureMainFlow(raw6, null);
-      box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn}${chipBtn}${mfBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动看十字光标｜<b>点K线看那一天的分时</b>（<span style="color:#2b57c8;">蓝底</span>=近5日可分时）</span></div>` + renderKline() + `<div id="kDayIntra" style="margin-top:4px;"></div>`;
+      box.innerHTML = `<div style="margin-bottom:4px;">${perBtns}${lvlBtn}${chipBtn}${mfBtn} <span style="font-size:11px;color:var(--muted);">拖动看历史｜双指缩放｜移动看十字光标｜<b>点K线看那一天的分时</b>（<span style="color:#2b57c8;">蓝底</span>=近5日可分时）</span></div>` + renderKline() + klineChipsHelp() + `<div id="kDayIntra" style="margin-top:4px;"></div>`;
     })
     .catch(e => {
       if (e && e.name === "AbortError") return;   // 被新请求取消：静默退出，不做兜底
@@ -920,12 +920,46 @@ function toggleKlineLevels() {
  * 看到的就是那一屏的筹码分布，比固定窗口直观。K 截止偏移在网页上没意义
  * （点哪根 K 线就是哪一天），故不实现。
  * ==========================================================================*/
+
+/* 筹码带 / 主力带的使用说明（折叠面板，放在 K 线下面） */
+function klineChipsHelp() {
+  if (document.getElementById("klChipsHelp")) return "";
+  return '<details id="klChipsHelp" style="margin-top:8px;font-size:11.5px;line-height:1.75;'
+
+    + 'border:1px solid var(--border);border-radius:8px;background:var(--card2);padding:6px 10px;">'
+    + '<summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text);">'
+    + '两个筹码带怎么读（点开）</summary>'
+    + '<div style="margin-top:6px;color:var(--muted);">'
+
+    + '<b style="color:#3b6fe0;">🧱 区间筹码带</b>（成交量口径，看"钱堆在哪个价位"）<br>'
+    + '· <b>蓝柱</b>=核心带（密度 ≥ 峰值 66%）；<b>灰柱</b>=边缘带<br>'
+    + '· <b>蓝线 POC</b>=窗口内成交最密的价位 → 当前价的成本锚<br>'
+    + '· <b>浅蓝底纹 VA</b>=密度 ≥20% 的价值区（≈70% 成交集中区）<br>'
+    + '· 读法：价在 POC 上方偏强、下方偏弱；回踩 POC 不破=支撑有效，'
+    + '跌破 POC 反抽不过=转弱；价在 VA 内=震荡换手，突破 VA 上下沿=出趋势<br>'
+    + '· 窗口 = <b>当前可见的 K 线</b>（缩放就变），不是固定 30 根<br><br>'
+
+    + '<b style="color:#807096;">💠 主力筹码带</b>（东财主力净额口径，看"主力买在哪个价位"）<br>'
+    + '· <b>紫柱</b>=主力筹码主峰（≥66% 峰值）；<b>灰柱</b>=其余；'
+    + '<b>净流出档留白</b>（照 TDX 公式，负数不画）<br>'
+    + '· <b>紫线 主力POC</b>=主力资金堆得最厚的价位<br>'
+    + '· 关键看两条带<b>是否错位</b>：<br>'
+    + '&nbsp;&nbsp;— 主力POC <b>低于</b> 筹码POC：主力在低位吸，筹码压在高位 → 吸筹中<br>'
+    + '&nbsp;&nbsp;— 主力POC <b>高于</b> 筹码POC：主力高位接力 → 警惕接盘<br>'
+    + '&nbsp;&nbsp;— 两条 POC 基本重合：分歧小，趋势较实<br>'
+    + '· 口径说明：<b>超大单净额 + 0.2×大单净额</b>（对应 TDX 公式的"主力买入"项）。'
+    + '拿不到逐笔的主动/被动拆分，所以是<b>近似 L2</b>，不等于通达信 L2 原值<br>'
+    + '· 数据：每交易日 16:20 云端抓取存 COS，页面读缓存；东财直连只作兜底'
+
+    + '</div></details>';
+}
+
 function toggleKlineMf() {
   KL_SHOW_MF = !KL_SHOW_MF;
   const box = document.getElementById("klineBox");
   const paint = () => {
     if (!box || !KL_DATA) return;
-    const btnHtml = `<button onclick="toggleKlineMf()" style="padding:6px 12px;border:1px solid var(--border);border-radius:5px;background:var(--card);cursor:pointer;font-size:13px;">💠 主力带：${KL_SHOW_MF ? "开" : "关"}</button>`;
+    const btnHtml = `<button onclick="toggleKlineMf()" style="padding:6px 12px;border:1px solid var(--border);border-radius:5px;background:var(--card);cursor:pointer;font-size:13px;" title="东财主力净额口径：紫柱=主力筹码主峰，紫线=主力POC。和筹码POC错位时才有意义">💠 主力带：${KL_SHOW_MF ? "开" : "关"}</button>`;
     box.innerHTML = box.innerHTML.replace(/<button onclick="toggleKlineMf\(\)"[^>]*>[^<]*<\/button>/, btnHtml)
       .replace(/<svg id="klineSvg"[\s\S]*?<\/svg>/, renderKline());
   };
@@ -941,7 +975,7 @@ function toggleKlineChips() {
   KL_SHOW_CHIPS = !KL_SHOW_CHIPS;
   const box = document.getElementById("klineBox");
   if (box && KL_DATA) {
-    const btnHtml = `<button onclick="toggleKlineChips()" style="padding:6px 12px;border:1px solid var(--border);border-radius:5px;background:var(--card);cursor:pointer;font-size:13px;">🧱 筹码带：${KL_SHOW_CHIPS ? "开" : "关"}</button>`;
+    const btnHtml = `<button onclick="toggleKlineChips()" style="padding:6px 12px;border:1px solid var(--border);border-radius:5px;background:var(--card);cursor:pointer;font-size:13px;" title="成交量口径的筹码分布：蓝柱=核心带，蓝线=POC 最密价位，浅蓝=价值区">🧱 筹码带：${KL_SHOW_CHIPS ? "开" : "关"}</button>`;
     box.innerHTML = box.innerHTML.replace(/<button onclick="toggleKlineChips\(\)"[^>]*>[^<]*<\/button>/, btnHtml)
       .replace(/<svg id="klineSvg"[\s\S]*?<\/svg>/, renderKline());
   }
