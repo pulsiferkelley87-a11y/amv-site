@@ -758,6 +758,7 @@ let KL_SHOW_LEVELS = true;   // 关键位虚线开关
 let KL_SHOW_CHIPS = true;    // 筹码带（区间成交量分布）开关
 let KL_SHOW_MF = false;      // 主力筹码带（东财主力净额口径）开关
 let KL_MF = null;            // { 'YYYY-MM-DD': 主力净额(元) }
+let KL_MF_SRC = '';          // cos=我们自己的缓存 / em=东财直连兜底
 let KL_MF_CODE = '';         // 当前已加载的代码
 
 function setKlineRange(n) {
@@ -969,27 +970,50 @@ function ensureMainFlow(c6, cb) {
   if (KL_MF_CODE === c6 && KL_MF) { cb && cb(); return; }
   KL_MF_CODE = c6;
   KL_MF = null;
-  const u = "https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get?lmt=0&klt=101&secid="
-    + emSecid(c6)
-    + "&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61";
-  fetch(u, { cache: "no-store" })
-    .then(r => r.json())
+  KL_MF_SRC = "";
+
+  const useDays = (days, src) => {
+    const m = Object.create(null);
+    Object.keys(days || {}).forEach(d => {
+      const v = days[d];
+      m[d] = Array.isArray(v) ? Number(v[1]) : Number(v);
+    });
+    KL_MF = m;
+    KL_MF_SRC = src;
+    if (cb) cb();
+  };
+
+  // ① 优先读我们自己的 COS 缓存：稳定，不依赖东财、不带第三方 Referer、不怕限流
+  const cosUrl = "https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com/flow/"
+    + c6 + ".json?_=" + Date.now();
+  fetch(cosUrl, { cache: "no-store" })
+    .then(r => r.ok ? r.json() : null)
     .then(j => {
-      const kl = (j && j.data && j.data.klines) || [];
-      const m = Object.create(null);
-      kl.forEach(s => {
-        const a = String(s).split(",");
-        if (a.length < 6) return;
-        const big = parseFloat(a[4]) || 0;      // 大单净额
-        const xbig = parseFloat(a[5]) || 0;     // 超大单净额
-        m[a[0]] = xbig + 0.2 * big;             // 公式里的「主力买入」
-      });
-      KL_MF = m;
-      if (cb) cb();
+      if (j && j.days && Object.keys(j.days).length) {
+        useDays(j.days, "cos");
+        return;
+      }
+      // ② 缓存没有（新股/当天没跑到）→ 才回退直连东财
+      const u = "https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get?lmt=0&klt=101&secid="
+        + emSecid(c6)
+        + "&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61";
+      return fetch(u, { cache: "no-store" })
+        .then(r => r.json())
+        .then(jj => {
+          const kl = (jj && jj.data && jj.data.klines) || [];
+          const days = Object.create(null);
+          kl.forEach(s => {
+            const a = String(s).split(",");
+            if (a.length < 6) return;
+            days[a[0]] = [Number(a[1]) || 0,
+                          (Number(a[5]) || 0) + 0.2 * (Number(a[4]) || 0)];
+          });
+          if (Object.keys(days).length) useDays(days, "em");
+          else { KL_MF = Object.create(null); if (cb) cb(); }
+        });
     })
     .catch(() => { KL_MF = Object.create(null); if (cb) cb(); });
 }
-
 function computeChips(rows, i0, i1, M, wfn) {
   M = M || 20;
   if (!rows || i1 <= i0) return null;
