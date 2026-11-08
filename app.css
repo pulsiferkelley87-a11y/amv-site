@@ -680,3 +680,8 @@ button.btn-outline { }
 }
 .table tbody tr:hover td { background: var(--soft); }
 .table tbody tr:last-child td { border-bottom: 0; }
+
+/* 个股信号改成 React 岛之后，旧的标签行/自选行要隐藏，避免两套 UI 并存 */
+.card:has(#sigReact) .tabs,
+.card:has(#sigReact) div:has(> #favList),
+.card:has(#sigReact) #sigList { display: none !important; }
