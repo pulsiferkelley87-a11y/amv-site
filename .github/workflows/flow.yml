@@ -1,0 +1,63 @@
+name: TDX Flow Warm
+
+on:
+  workflow_dispatch:
+    inputs:
+      codes:
+        description: '逗号分隔股票代码（留空=全市场）'
+        required: false
+        default: ''
+      limit:
+        description: '只跑前 N 只（调试用）'
+        required: false
+        default: ''
+  schedule:
+    # 交易日 16:20 北京时间（UTC 08:20）—— 比分钟线预热晚 10 分钟，错开跑
+    - cron: '20 8 * * 1-5'
+
+concurrency:
+  group: tdx-flow
+  cancel-in-progress: true
+
+jobs:
+  flow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
+      COS_SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
+      COS_BUCKET: ${{ secrets.COS_BUCKET || 'amv-live-1500351250' }}
+      COS_REGION: ${{ secrets.COS_REGION || 'ap-guangzhou' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 连通性自检（东财资金流）
+        run: |
+          python - <<'PY'
+          import json, urllib.request
+          u = ("https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get"
+               "?lmt=0&klt=101&secid=1.600000&fields1=f1,f2,f3,f7"
+               "&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61")
+          r = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0",
+                                                 "Referer": "https://quote.eastmoney.com/"})
+          j = json.loads(urllib.request.urlopen(r, timeout=20).read().decode())
+          kl = ((j.get("data") or {}).get("klines")) or []
+          print("东财资金流可达，样例返回", len(kl), "天")
+          if not kl:
+              raise SystemExit("东财返回空数据")
+          PY
+
+      - name: 抓主力资金日线并写 COS
+        run: |
+          ARGS="--workers 4"
+          if [ -n "${{ github.event.inputs.codes }}" ]; then
+            ARGS="$ARGS --codes ${{ github.event.inputs.codes }}"
+          fi
+          if [ -n "${{ github.event.inputs.limit }}" ]; then
+            ARGS="$ARGS --limit ${{ github.event.inputs.limit }}"
+          fi
+          python scripts/warm_flow.py $ARGS
