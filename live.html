@@ -6,6 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <title>实盘监测 · 活跃市值</title>
 <link rel="stylesheet" href="app.css?v=20261109e">
+<link rel="stylesheet" href="shadcn/assets/signal-ee9nzAM4.css?v=20261109f">
 </head>
 <body>
 <header>
@@ -86,7 +87,8 @@
       <button class="tab" onclick="setSigTab('down', event)">🔽 拐头向下</button>
       <button class="tab" onclick="setSigTab('hot', event)">🔥 高位偏离</button>
     </div>
-    <div class="scroll" id="sigList" style="max-height:420px;"></div>
+    <div class="scroll" id="sigList" style="max-height:420px;display:none;"></div>
+      <div id="sigReact"></div>
   </div>
   <div class="grid">
     <div class="card">
@@ -3211,8 +3213,9 @@ function setTheme(t){document.documentElement.setAttribute("data-theme",t);local
 function toggleTheme(){setTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");}
 (function(){var t=localStorage.getItem("amv-theme");if(!t){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}setTheme(t);})();
 </script>  <script src="ui-clean.js?v=20261109e"></script>
-  <div id="verStamp" style="margin-top:10px;font-size:11px;color:var(--muted);">页面版本 <b>20261109e</b> ｜ <a href="shadcn/" style="color:var(--accent);">shadcn 组件区（React）</a> ｜ 若看到的不是这个版本，请 Ctrl+F5 强制刷新</div>
+  <div id="verStamp" style="margin-top:10px;font-size:11px;color:var(--muted);">页面版本 <b>20261109f</b> ｜ <a href="shadcn/" style="color:var(--accent);">shadcn 组件区（React）</a> ｜ 若看到的不是这个版本，请 Ctrl+F5 强制刷新</div>
   <script src="ui-layout.js?v=20261109e"></script>
   <script src="ui-btn.js?v=20261109e"></script>
+<script type="module" src="shadcn/assets/signal-Df8IgAKo.js?v=20261109f"></script>
 </body>
 </html>
