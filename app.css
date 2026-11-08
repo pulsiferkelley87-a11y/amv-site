@@ -555,3 +555,128 @@ video { max-width: 100%; }
   .pane-bar::-webkit-scrollbar { display: none; }
   .pane-btn { padding: 5px 11px; font-size: var(--fs-xs); }
 }
+
+/* ============================================================================
+ * 18. shadcn/ui 组件层（原生 CSS 版）
+ *
+ * 为什么不是 `npx shadcn add`：shadcn/ui 是 React 组件库，CLI 第一句就要求选
+ * 组件基座（Base UI / React Aria / Radix UI）并生成 .tsx，需要 React + Tailwind + 构建步骤。
+ * 本站是纯静态页（无 package.json / 无 node_modules / 无打包），装了也用不上。
+ *
+ * 这里把它的**设计语言**移植过来：同样的尺寸/圆角/描边/focus ring/交互态，
+ * 换成我们的 CSS 变量，所以主题保持一致，但用法对齐 shadcn：
+ *
+ *   <button class="btn btn-outline btn-sm">次要</button>
+ *   <button class="btn btn-default">主要</button>
+ *   <div class="card"><div class="card-header"><h3 class="card-title">标题</h3>
+ *        <p class="card-description">说明</p></div>
+ *        <div class="card-content">…</div>
+ *        <div class="card-footer">…</div></div>
+ *   <div class="table-wrap"><table class="table">…</table></div>
+ *
+ * 将来若要迁到 React，这份类名和 shadcn 的 className 是一一对应的，不用重写结构。
+ * ==========================================================================*/
+
+/* ── Button ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: var(--card);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color .15s, color .15s, border-color .15s, box-shadow .15s;
+}
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.btn:disabled { opacity: .5; cursor: not-allowed; pointer-events: none; }
+.btn svg { width: 16px; height: 16px; flex: 0 0 auto; }
+
+.btn-default {           /* shadcn default：主色实心 */
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.btn-default:hover { background: color-mix(in srgb, var(--accent) 88%, #000); color: #fff; }
+
+.btn-outline {           /* 描边 */
+  background: var(--card);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.btn-outline:hover { background: var(--soft); color: var(--text); border-color: var(--border-strong); }
+
+.btn-secondary {
+  background: var(--soft);
+  color: var(--text);
+  border-color: transparent;
+}
+.btn-secondary:hover { background: color-mix(in srgb, var(--soft) 80%, var(--border)); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--muted);
+  border-color: transparent;
+}
+.btn-ghost:hover { background: var(--soft); color: var(--text); }
+
+.btn-destructive {
+  background: var(--red);
+  color: #fff;
+  border-color: var(--red);
+}
+.btn-destructive:hover { background: color-mix(in srgb, var(--red) 88%, #000); color: #fff; }
+
+.btn-link { background: transparent; border-color: transparent; color: var(--accent); height: auto; padding: 0; }
+.btn-link:hover { text-decoration: underline; }
+
+.btn-sm { height: 28px; padding: 0 10px; font-size: var(--fs-xs); border-radius: var(--r-sm); }
+.btn-lg { height: 38px; padding: 0 16px; font-size: var(--fs-md); }
+.btn-icon { width: 32px; padding: 0; }
+
+/* 让页面里所有普通 button 默认长成 shadcn 的 outline 样式（它们多数带内联样式，
+   由 ui-btn.js 剥掉视觉内联样式后统一接管） */
+button:not([class]),
+button.btn-outline { }
+
+/* ── Card ── */
+.card-header { display: flex; flex-direction: column; gap: 4px; margin-bottom: var(--sp-3); }
+.card-title { margin: 0; font-size: var(--fs-md); font-weight: 700; line-height: 1.4; }
+.card-description { margin: 0; font-size: var(--fs-xs); color: var(--muted); }
+.card-content { min-width: 0; }
+.card-footer { display: flex; align-items: center; gap: var(--sp-2); margin-top: var(--sp-3); }
+
+/* ── Table（shadcn 风格：无竖线、行 hover、表头弱化） ── */
+.table-wrap {
+  position: relative;
+  width: 100%;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  max-height: min(62vh, 560px);
+}
+.table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+.table caption { caption-side: bottom; padding: var(--sp-2); color: var(--muted); font-size: var(--fs-xs); }
+.table th, .table td { padding: 8px 12px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+.table th:first-child, .table td:first-child { text-align: left; }
+.table thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--card);
+  color: var(--muted);
+  font-size: var(--fs-xs); font-weight: 600;
+  border-bottom: 1px solid var(--border-strong);
+}
+.table tbody tr:hover td { background: var(--soft); }
+.table tbody tr:last-child td { border-bottom: 0; }
