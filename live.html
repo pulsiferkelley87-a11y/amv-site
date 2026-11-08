@@ -212,10 +212,31 @@ let BLK_TAB = "concept";
 let STK_TAB = "up";
 let MEMBERS = {}; // 板块成分（从 concept_blocks.json 加载）
 
+
+/* concept_blocks.json 有 804KB，是整页最大的资源，但首屏完全用不到
+ * （只服务「龙头·补涨」和「板块归属」两块）。而且原来两处各自 fetch 了一次。
+ * 改成：全局共享一个 Promise + 空闲时才开始拉，首屏不再为它等待。 */
+let CB_PROMISE = null;
+function getConceptBlocks() {
+  if (!CB_PROMISE) {
+    CB_PROMISE = new Promise(resolve => {
+      const go = () => {
+        fetch("concept_blocks.json?v=" + Date.now())
+          .then(r => (r.ok ? r.json() : null))
+          .then(j => resolve(Array.isArray(j) ? j : null))
+          .catch(() => resolve(null));
+      };
+      if (window.requestIdleCallback) requestIdleCallback(go, { timeout: 2500 });
+      else setTimeout(go, 1200);
+    });
+  }
+  return CB_PROMISE;
+}
+
 function loadMembers() {
-  fetch("concept_blocks.json?v=" + new Date().getTime())
-    .then(r => r.json())
+  getConceptBlocks()
     .then(j => {
+      if (!j) return;
       j.forEach(b => { MEMBERS[b.name] = b.stocks; });
       renderLeader();  // 成分加载完成后刷新龙头·补涨
     })
@@ -2849,7 +2870,7 @@ function loadSectorData() {
     };
     return next();
   };
-  Promise.all([get("industry_map.json"), get("concept_blocks.json")]).then(res => {
+  Promise.all([get("industry_map.json"), getConceptBlocks()]).then(res => {
     IND_OF = res[0] || null;
     BLOCKS = Array.isArray(res[1]) ? res[1] : null;
     if (BLOCKS) {
