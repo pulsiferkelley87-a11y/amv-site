@@ -75,3 +75,43 @@
 /* ── 图表别太高：一张图吃掉一屏同样是"乱" ── */
 .chart { height: 260px !important; }
 .chart.tall { height: 300px !important; }
+
+/* ============================================================================
+ * 移动端横向溢出修复（2026-11-08 实测发现）
+ *
+ * 现象：390px 视口下，实盘页有 1193 个元素超出屏幕、最多超出 272px；
+ *       文档本身不能横向滚动（html 上有 overflow-x:clip），所以**内容被直接裁掉**，
+ *       比出现滚动条更糟 —— 手机上根本看不到右边那截。
+ *
+ * 根因两条，都不是"表格太宽"本身：
+ *   1. grid / flex 子项默认 `min-width:auto`，不会缩到内容最小宽度以下。
+ *      表格 min-width:620px 把列顶宽 → 卡片跟着变 644px → 超出视口。
+ *   2. `.scroll` 只写了 overflow-y，横向滚动没生效，宽表格直接把父级撑开。
+ *
+ * 修法：让容器能收缩 + 让滚动发生在容器内部（这是唯一正确的做法）。
+ * ==========================================================================*/
+
+.grid > *,
+.flex > *,
+.card { min-width: 0; }
+
+/* 宽表格一律在容器内横向滚动，不许顶大父级 */
+.scroll {
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+.scroll > table { max-width: none; }
+
+/* 没包在 .scroll 里的表格（老代码）在窄屏兜底，别把卡片顶宽 */
+@media (max-width: 760px) {
+  /* 不限层级：主页有表格嵌在 .card-body > div > table 里，直接子选择器命中不到 */
+  .card table {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
