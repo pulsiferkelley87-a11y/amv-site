@@ -3211,7 +3211,7 @@ function setTheme(t){document.documentElement.setAttribute("data-theme",t);local
 function toggleTheme(){setTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");}
 (function(){var t=localStorage.getItem("amv-theme");if(!t){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}setTheme(t);})();
 </script>  <script src="ui-clean.js?v=20261109e"></script>
-  <div id="verStamp" style="margin-top:10px;font-size:11px;color:var(--muted);">页面版本 <b>20261109e</b> ｜ 若看到的不是这个版本，请 Ctrl+F5 强制刷新</div>
+  <div id="verStamp" style="margin-top:10px;font-size:11px;color:var(--muted);">页面版本 <b>20261109e</b> ｜ <a href="shadcn/" style="color:var(--accent);">shadcn 组件区（React）</a> ｜ 若看到的不是这个版本，请 Ctrl+F5 强制刷新</div>
   <script src="ui-layout.js?v=20261109e"></script>
   <script src="ui-btn.js?v=20261109e"></script>
 </body>
