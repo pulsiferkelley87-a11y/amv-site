@@ -1,0 +1,30 @@
+{
+  "_table-B5qFXZUy.js": {
+    "file": "assets/table-B5qFXZUy.js",
+    "name": "table"
+  },
+  "index.html": {
+    "file": "assets/app-Bn8Nl0Hd.js",
+    "name": "app",
+    "src": "index.html",
+    "isEntry": true,
+    "imports": [
+      "_table-B5qFXZUy.js"
+    ],
+    "css": [
+      "assets/app-5_tIU2z1.css"
+    ]
+  },
+  "src/signal-mount.jsx": {
+    "file": "assets/signal-Df8IgAKo.js",
+    "name": "signal",
+    "src": "src/signal-mount.jsx",
+    "isEntry": true,
+    "imports": [
+      "_table-B5qFXZUy.js"
+    ],
+    "css": [
+      "assets/signal-ee9nzAM4.css"
+    ]
+  }
+}
