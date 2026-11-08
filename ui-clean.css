@@ -61,8 +61,9 @@
 .card.is-collapsed h2 { margin-bottom: 0 !important; }
 
 /* ── 图表别撑太高 ── */
-.chart { height: 300px !important; }
-.card svg { max-height: 420px; }
+/* 注意：不要给 .card svg 设 max-height —— K 线/分时是 viewBox 自绘 SVG，
+   限高会触发 preserveAspectRatio 居中缩放，图被压扁、两边留白、坐标全错位。
+   ECharts 的容器高度已经由 .chart 控制，不需要再限制 svg。 */
 
 /* ── 手机上更紧凑 ── */
 @media (max-width: 720px) {
@@ -70,3 +71,7 @@
   .card h2 { font-size: 13px !important; }
   .card h2 > span:not(.cb) { display: none; }   /* 手机上一律不显示副标题说明 */
 }
+
+/* ── 图表别太高：一张图吃掉一屏同样是"乱" ── */
+.chart { height: 260px !important; }
+.chart.tall { height: 300px !important; }
