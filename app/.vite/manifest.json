@@ -1,61 +1,83 @@
 {
-  "_card-DzPPuiMy.js": {
-    "file": "assets/card-DzPPuiMy.js",
+  "_Chart-9gq-dLZ7.js": {
+    "file": "assets/Chart-9gq-dLZ7.js",
+    "name": "Chart",
+    "imports": [
+      "_table-pTfcP3PL.js",
+      "_card-Do-U7Kls.js",
+      "_input-DLsYcx7g.js"
+    ]
+  },
+  "_card-Do-U7Kls.js": {
+    "file": "assets/card-Do-U7Kls.js",
     "name": "card",
     "imports": [
-      "_table-B9hGueoz.js"
+      "_table-pTfcP3PL.js"
     ]
   },
-  "_input-BTY1dePs.css": {
-    "file": "assets/input-BTY1dePs.css",
-    "src": "_input-BTY1dePs.css"
+  "_input-BVrl9aUr.css": {
+    "file": "assets/input-BVrl9aUr.css",
+    "src": "_input-BVrl9aUr.css"
   },
-  "_input-CgTi7nZh.js": {
-    "file": "assets/input-CgTi7nZh.js",
+  "_input-DLsYcx7g.js": {
+    "file": "assets/input-DLsYcx7g.js",
     "name": "input",
     "imports": [
-      "_table-B9hGueoz.js"
+      "_table-pTfcP3PL.js"
     ],
     "css": [
-      "assets/input-BTY1dePs.css"
+      "assets/input-BVrl9aUr.css"
     ]
   },
-  "_table-B9hGueoz.js": {
-    "file": "assets/table-B9hGueoz.js",
+  "_table-pTfcP3PL.js": {
+    "file": "assets/table-pTfcP3PL.js",
     "name": "table"
   },
+  "home.html": {
+    "file": "assets/home-Dq2DhuNB.js",
+    "name": "home",
+    "src": "home.html",
+    "isEntry": true,
+    "imports": [
+      "_card-Do-U7Kls.js",
+      "_table-pTfcP3PL.js",
+      "_input-DLsYcx7g.js",
+      "_Chart-9gq-dLZ7.js"
+    ]
+  },
   "index.html": {
-    "file": "assets/index-CDJCIa3O.js",
+    "file": "assets/index-CCUhZxt8.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
     "imports": [
-      "_card-DzPPuiMy.js",
-      "_table-B9hGueoz.js"
+      "_card-Do-U7Kls.js",
+      "_table-pTfcP3PL.js"
     ],
     "css": [
-      "assets/index-8GODZm1d.css"
+      "assets/index-LMV_4PSA.css"
     ]
   },
   "live.html": {
-    "file": "assets/live-CtBGb85Z.js",
+    "file": "assets/live-D0wvnjlA.js",
     "name": "live",
     "src": "live.html",
     "isEntry": true,
     "imports": [
-      "_card-DzPPuiMy.js",
-      "_table-B9hGueoz.js",
-      "_input-CgTi7nZh.js"
+      "_card-Do-U7Kls.js",
+      "_table-pTfcP3PL.js",
+      "_input-DLsYcx7g.js",
+      "_Chart-9gq-dLZ7.js"
     ]
   },
   "src/signal-mount.jsx": {
-    "file": "assets/signal-Btozwjar.js",
+    "file": "assets/signal-BOIU98ND.js",
     "name": "signal",
     "src": "src/signal-mount.jsx",
     "isEntry": true,
     "imports": [
-      "_table-B9hGueoz.js",
-      "_input-CgTi7nZh.js"
+      "_table-pTfcP3PL.js",
+      "_input-DLsYcx7g.js"
     ]
   }
 }
