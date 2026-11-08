@@ -685,3 +685,5 @@ button.btn-outline { }
 .card:has(#sigReact) .tabs,
 .card:has(#sigReact) div:has(> #favList),
 .card:has(#sigReact) #sigList { display: none !important; }
+/* 标题里残留的「查个股：…」表单（React 岛自带搜索框） */
+.card:has(#sigReact) h2 > span:not(.cb) { display: none !important; }
