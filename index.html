@@ -31,7 +31,7 @@
 
 <!-- 图表库改为 defer：不再阻塞首屏 -->
 <script defer src="echarts.min.js"></script>
-<link rel="stylesheet" href="app.css?v=20261109b">
+<link rel="stylesheet" href="app.css?v=20261109c">
 </head>
 <body>
 <a class="skip-link" href="#main">跳到主要内容</a>
@@ -41,7 +41,7 @@
   </div>
 </noscript>
 <header>
-  <h1>活跃市值 0AMV 监测台 <a href="live.html?v=20261109b" style="font-size:13px;color:var(--blue);text-decoration:none;">⚡ 实盘页</a></h1>
+  <h1>活跃市值 0AMV 监测台 <a href="live.html?v=20261109c" style="font-size:13px;color:var(--blue);text-decoration:none;">⚡ 实盘页</a></h1>
   <div class="meta" id="meta">加载中…</div>
   <div class="meta datebar">
     <span class="dlbl">历史回看</span>
@@ -219,7 +219,7 @@
 // 固定构建号加载：发版时改 BUILD_ID 即可，平时命中浏览器缓存。
 // （原实现每次刷新都取当前毫秒时间戳，导致 app21.js 与 app-data.js 每次重下）
 (function () {
-  var BUILD_ID = "20261109a";
+  var BUILD_ID = "20261109c";
   // 旧浏览器（无 DecompressionStream）：先把数据落地，再跑主脚本。
   // 原顺序会让 app21.js 末尾的顶层 load() 在 window.DATA 就绪前执行并提前返回，主图表空白。
   if (typeof DecompressionStream === "undefined") {
@@ -233,12 +233,11 @@
 function setTheme(t){document.documentElement.setAttribute("data-theme",t);localStorage.setItem("amv-theme",t);var b=document.getElementById("themeBtn");if(b)b.textContent=t==="dark"?"☀️":"🌙";try{if(window.refreshCharts)window.refreshCharts();}catch(e){}try{if(window.renderStocksChart)window.renderStocksChart();}catch(e){}}
 function toggleTheme(){setTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");}
 (function(){var t=localStorage.getItem("amv-theme");if(!t){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}setTheme(t);})();
-</script><script src="fundamentals.js?v=20261105c"></script>
+</script><script src="fundamentals.js?v=20261109c"></script>
 <script src="realtime-quote.js"></script>
 <script src="live-quote-bar.js"></script>
   <script src="ui-dashboard.js"></script>
-  <script src="ui-clean.js?v=20261108a"></script>
-  <script src="ui-groups.js?v=20261108a"></script>
-<div id="verStamp" style="margin-top:10px;font-size:11px;color:var(--muted);">页面版本 <b>20261109b</b> ｜ 若看到的不是这个版本，请 Ctrl+F5 强制刷新</div>
+  <script src="ui-clean.js?v=20261109c"></script>
+  <div id="verStamp" style="margin-top:10px;font-size:11px;color:var(--muted);">页面版本 <b>20261109c</b> ｜ 若看到的不是这个版本，请 Ctrl+F5 强制刷新</div>
 </body>
 </html>
