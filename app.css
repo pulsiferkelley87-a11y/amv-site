@@ -521,3 +521,37 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in
 video { max-width: 100%; }
 
 .anchornav { display: none !important; }   /* 旧导航，已由分组导航替代 */
+
+/* ── 17. 分区（ui-layout.js 注入） ───────────────────────── */
+.pane-bar {
+  position: sticky; top: var(--header-h); z-index: 50;
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+  padding: var(--sp-2) 0 var(--sp-3);
+  margin-bottom: var(--sp-2);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.pane-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--border); border-radius: 999px;
+  background: var(--card); color: var(--text);
+  font-size: var(--fs-sm); font-weight: 600; cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.pane-btn:hover { border-color: var(--accent); color: var(--accent); }
+.pane-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pane-btn .cnt { font-size: 10px; font-weight: 500; opacity: .75; }
+
+.pane { display: block; }
+.pane[hidden] { display: none; }
+
+@media (max-width: 720px) {
+  .pane-bar {
+    flex-wrap: nowrap; overflow-x: auto; gap: 5px;
+    padding: var(--sp-2) 0; scrollbar-width: none;
+  }
+  .pane-bar::-webkit-scrollbar { display: none; }
+  .pane-btn { padding: 5px 11px; font-size: var(--fs-xs); }
+}
