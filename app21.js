@@ -502,6 +502,13 @@ function renderMain() {
   };
   const axOff = alignTo(o.date, o.amv);
   const axSelf = alignTo(ps.date, ps.amv);
+  // 水平锚定：逐股段在官方有值处直接取官方值。
+  // 云端拼接目前只做「末端对齐」，中段会鼓出 20-30%（2026-11-06 起就固化了）。
+  // 写在这里是为了让下一次云端重算即使又拼歪，图上也不会再出现鼓包。
+  for (let i = 0; i < axSelf.length; i++) {
+    const sv0 = axSelf[i], ov0 = axOff[i];
+    if (sv0 != null && ov0 != null && ov0 > 0) axSelf[i] = ov0;
+  }
   // 热启动兜底：逐股递推初值未锚定官方时，会出现「从官方 28% 用两周爬回来」的假 V。
   // 这种点一律置空（宁可断线，也不画假走势）。
   for (let i = 0; i < axSelf.length; i++) {
