@@ -487,7 +487,11 @@ function renderMain() {
   const dom = document.getElementById("chartMain");
   const ch = echarts.getInstanceByDom(dom) || echarts.init(dom);
   const opt = baseOption();
-  opt.legend = { top: 0, data: ["官方 0AMV", "活跃SZ(逐股递推·实测)", "var1(成交额平滑)", "C5", "C13", "C34", "∞"] };
+  opt.legend = { top: 0,
+    data: ["官方 0AMV", "活跃SZ(逐股递推·实测)", "var1(成交额平滑)", "C5", "C13", "C34", "∞"],
+    // 默认只显示自研线（官方线可点图例叠加）；用 selected 而不是 dispatchAction，
+    // 后者在部分环境下不生效，导致两线同时出现、看起来“差别很大”
+    selected: { "官方 0AMV": false } };
   // 日期轴 = 官方日期 ∪ 自研日期。官方序列来自手工维护的 JSON，会滞后数日；
   // 自研线逐日都有值，若只用官方日期当轴，这根线会被截断在官方最后一天。
   const ps = D.amv_perstock || { date: [], amv: [] };
@@ -553,18 +557,18 @@ function renderMain() {
     }
   }
   // −2.3% 事件标记（可开关，近 500 日窗口内）
-  // 事件本身是「官方 0AMV 单日跌超 2.3%」，坐标必须取官方值。
-  // 之前取的是逐股线的值（selfMap），两线贴合时看不出；逐股线高出 20-30% 后红点就飘了。
+  // 事件语义是「官方 0AMV 单日跌超 2.3%」，但默认只显示自研线，
+  // 所以坐标要钉在**自研线**上（否则红点会飘在看不见的那条线位置）。
   if (SHOW_DROP) {
-    const offMap = Object.create(null);
-    (o.date || []).forEach((d, i) => { offMap[d] = o.amv[i]; });
+    const selfMap = Object.create(null);
+    (ps.date || []).forEach((d, i) => { selfMap[d] = ps.amv[i]; });
     const winLo = axis[Math.max(0, axis.length - 520)];
     const winHi = axis[axis.length - 1];
     const dropPts = (D.drop_events || [])
-      .filter(e => winLo <= e.date && e.date <= winHi && offMap[e.date] != null)
-      .map(e => ({ coord: [e.date, offMap[e.date]], value: e.chg + "%" }));
+      .filter(e => winLo <= e.date && e.date <= winHi && selfMap[e.date] != null)
+      .map(e => ({ coord: [e.date, selfMap[e.date]], value: e.chg + "%" }));
     if (dropPts.length) {
-      opt.series[0].markPoint = {
+      opt.series[1].markPoint = {
         symbol: "circle", symbolSize: 5,
         label: { show: false },
         itemStyle: { color: "#c0392b", opacity: 0.85 },
@@ -572,13 +576,14 @@ function renderMain() {
       };
     }
   }
-  // 有事件标记时官方线必须可见，否则红点会挂在一条看不见的线上
-  opt.series[0].lineStyle.opacity = 1;
-
   // 官方 0AMV 默认隐藏（不参与比对，点图例可叠加）——仅在首次初始化时执行一次
   opt.series[0].lineStyle.opacity = 0.9;
   // 只有开关刚变动时才整体替换 series（能真正移除 markPoint）；
   // 平时仍用合并模式，保留缩放/图例等交互状态。
+  if (!mainLegendInit) {
+    ch.dispatchAction({ type: "legendToggleSelect", name: "官方 0AMV" });
+    mainLegendInit = true;
+  }
   if (DROP_DIRTY) {
     ch.setOption(applyAxisTheme(opt), { replaceMerge: ["series"] });
     DROP_DIRTY = false;
