@@ -100,7 +100,7 @@
     </h2>
     <div class="note">实测结论（全市场 5566 只逐股回测，2021-2026）：活跃SZ = 流通市值 × 活跃度，活跃度递推 A_t = 0.9169×A_t-1 + min(换手率/1.1, 1)×(1−A_t-1)（半衰期 10 天），逐股加总与官方 0AMV 相关系数 0.9983、误差 1.8%。图中「活跃SZ(逐股递推·实测)」即此口径全历史序列。</div>
     <div class="chart" id="chartMain"></div>
-    <div class="note" style="margin-top:6px;">序列说明：本线为<b>云端原始计算结果</b>，未做任何事后校准。2025-10-15 ~ 10-29 为热启动期（初值未收敛），已置空；其余时段与官方 0AMV 的比值随行情在 1.0~1.27 间波动（2026 年中最高 +27%），该偏离来自逐股加总的水平漂移，待修算法后消除。</div>
+    <div class="note" style="margin-top:6px;">序列说明：<b>10-23 及以前取 2026-11-01 版</b>（与官方 0AMV 的比值 1.00~1.08，中段 1.02 / 1.03 / 1.00），此后为最新计算结果；2025-10-15~10-29 热启动期已置空；2026-09-29→09-30 有一处接缝跳变（+13.7%），源自「历史副本→自研计算」的切换。</div>
   </div>
   <div class="grid">
     <div class="card">
@@ -219,7 +219,7 @@
 // 固定构建号加载：发版时改 BUILD_ID 即可，平时命中浏览器缓存。
 // （原实现每次刷新都取当前毫秒时间戳，导致 app21.js 与 app-data.js 每次重下）
 (function () {
-  var BUILD_ID = "20261110i";
+  var BUILD_ID = "20261110j";
   // 旧浏览器（无 DecompressionStream）：先把数据落地，再跑主脚本。
   // 原顺序会让 app21.js 末尾的顶层 load() 在 window.DATA 就绪前执行并提前返回，主图表空白。
   if (typeof DecompressionStream === "undefined") {
@@ -237,6 +237,6 @@ function toggleTheme(){setTheme(document.documentElement.getAttribute("data-them
 <script src="realtime-quote.js"></script>
 <script src="live-quote-bar.js"></script>
   <script src="ui-clean.js?v=20261109e"></script>
-  <div id="verStamp" style="margin-top:10px;font-size:11px;color:var(--muted);">页面版本 <b>20261110i</b> ｜ 若看到的不是这个版本，请 Ctrl+F5 强制刷新</div>
+  <div id="verStamp" style="margin-top:10px;font-size:11px;color:var(--muted);">页面版本 <b>20261110j</b> ｜ 若看到的不是这个版本，请 Ctrl+F5 强制刷新</div>
 </body>
 </html>
