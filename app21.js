@@ -315,7 +315,7 @@ function renderSectorsFor(secs, showChg) {
   const ch = echarts.getInstanceByDom(document.getElementById("chartSectors"));
   if (!ch) return;
   const data = secs.slice(0, 15).reverse();
-  ch.setOption({
+  ch.setOption(applyAxisTheme({
     grid: { left: 90, right: 90, top: 10, bottom: 30 },
     xAxis: { type: "value", axisLabel: { formatter: "{value}%" } },
     yAxis: { type: "category", data: data.map(s => s.name) },
@@ -334,7 +334,7 @@ function renderSectorsFor(secs, showChg) {
         },
       },
     }],
-  });
+  }));
   ch.off("click");
   ch.on("click", onSectorClick);
 }
@@ -447,6 +447,30 @@ function themeColors() {
     : { text: "#6b7280", axis: "#c9ccd2", split: "#eef0f3", tooltipBg: "#ffffff", tooltipText: "#1a1d24" };
 }
 
+// 深色模式下 ECharts 的网格线/坐标轴仍是默认浅色（#E0E6F1），会在深底上显示成几道白条。
+// 统一在 setOption 前把颜色按主题注入，避免每张图各写一遍。
+function applyAxisTheme(opt) {
+  const tc = themeColors();
+  const fix = (ax, isY) => {
+    if (!ax) return;
+    ax.axisLabel = Object.assign({ color: tc.text }, ax.axisLabel || {});
+    if (isY) {
+      ax.splitLine = ax.splitLine || {};
+      ax.splitLine.lineStyle = Object.assign({ color: tc.split }, ax.splitLine.lineStyle || {});
+      ax.axisLine = Object.assign({ show: false }, ax.axisLine || {});
+    } else {
+      ax.axisLine = ax.axisLine || {};
+      ax.axisLine.lineStyle = Object.assign({ color: tc.axis }, ax.axisLine.lineStyle || {});
+      ax.splitLine = Object.assign({ show: false }, ax.splitLine || {});
+    }
+  };
+  if (Array.isArray(opt.xAxis)) opt.xAxis.forEach((a) => fix(a, false)); else fix(opt.xAxis, false);
+  if (Array.isArray(opt.yAxis)) opt.yAxis.forEach((a) => fix(a, true)); else fix(opt.yAxis, true);
+  opt.textStyle = Object.assign({ color: tc.text }, opt.textStyle || {});
+  if (opt.legend) opt.legend.textStyle = Object.assign({ color: tc.text }, opt.legend.textStyle || {});
+  return opt;
+}
+
 function baseOption() {
   const tc = themeColors();
   return {
@@ -478,6 +502,12 @@ function renderMain() {
   };
   const axOff = alignTo(o.date, o.amv);
   const axSelf = alignTo(ps.date, ps.amv);
+  // 热启动兜底：逐股递推初值未锚定官方时，会出现「从官方 28% 用两周爬回来」的假 V。
+  // 这种点一律置空（宁可断线，也不画假走势）。
+  for (let i = 0; i < axSelf.length; i++) {
+    const sv = axSelf[i], ov = axOff[i];
+    if (sv != null && ov != null && ov > 0 && sv / ov < 0.7) axSelf[i] = null;
+  }
   const axMa10 = alignTo(o.date, o.ma10 || []);
   const axMa80 = alignTo(o.date, o.ma80 || []);
   opt.xAxis = { type: "category", data: axis };
@@ -529,10 +559,10 @@ function renderMain() {
   // 只有开关刚变动时才整体替换 series（能真正移除 markPoint）；
   // 平时仍用合并模式，保留缩放/图例等交互状态。
   if (DROP_DIRTY) {
-    ch.setOption(opt, { replaceMerge: ["series"] });
+    ch.setOption(applyAxisTheme(opt), { replaceMerge: ["series"] });
     DROP_DIRTY = false;
   } else {
-    ch.setOption(opt);
+    ch.setOption(applyAxisTheme(opt));
   }
   if (!mainLegendInit) {
     ch.dispatchAction({ type: "legendToggleSelect", name: "官方 0AMV" });
@@ -564,7 +594,7 @@ function renderTrio() {
     line(o.amv, "0AMV(活跃)", COLORS.official, 2.5),
     line(o.dmv, "0DMV(死筹)", COLORS.dmv, 1),
   ];
-  ch.setOption(opt);
+  ch.setOption(applyAxisTheme(opt));
   window.addEventListener("resize", () => ch.resize());
 }
 
@@ -595,7 +625,7 @@ function renderRatio() {
       data: [{ yAxis: 0.175, label: { formatter: "当前 17.5%" }, lineStyle: { color: "#999", type: "dashed" } }],
     },
   }];
-  ch.setOption(opt);
+  ch.setOption(applyAxisTheme(opt));
   window.addEventListener("resize", () => ch.resize());
 }
 
@@ -616,7 +646,7 @@ function renderWeekly() {
     { name: "活跃比例(右)", type: "line", yAxisIndex: 1, data: w.ratio, showSymbol: false,
       lineStyle: { width: 1.4, color: COLORS.amber } },
   ];
-  ch.setOption(opt);
+  ch.setOption(applyAxisTheme(opt));
   window.addEventListener("resize", () => ch.resize());
 }
 
@@ -648,7 +678,7 @@ function renderSectors() {
     secs = allBoards.slice(0, 15);
     const ch = echarts.init(document.getElementById("chartSectors"));
     const data = secs.slice().reverse();
-    ch.setOption({
+    ch.setOption(applyAxisTheme({
       grid: { left: 100, right: 80, top: 10, bottom: 30 },
       xAxis: { type: "value", axisLabel: { formatter: "{value}%" } },
       yAxis: { type: "category", data: data.map(s => s.name) },
@@ -663,7 +693,7 @@ function renderSectors() {
           },
         },
       }],
-    });
+    }));
     ch.off("click");
     ch.on("click", p => showConceptStocks(p.name));
     window.addEventListener("resize", () => ch.resize());
@@ -675,7 +705,7 @@ function renderSectors() {
     renderSectorBtnsStyle(secs);
     const ch = echarts.init(document.getElementById("chartSectors"));
     const data = secs.slice().reverse();
-    ch.setOption({
+    ch.setOption(applyAxisTheme({
       grid: { left: 90, right: 70, top: 10, bottom: 30 },
       xAxis: { type: "value", axisLabel: { formatter: "{value}%" } },
       yAxis: { type: "category", data: data.map(s => s.name) },
@@ -684,7 +714,7 @@ function renderSectors() {
         itemStyle: { color: COLORS.blue, borderRadius: [0, 4, 4, 0] },
         label: { show: true, position: "right", formatter: p => p.value + "%", fontSize: 11 },
       }],
-    });
+    }));
     ch.off("click");
     ch.on("click", () => {
       alert("风格板块暂无成分个股数据，仅展示风格层面的贡献占比。");
@@ -721,7 +751,7 @@ function renderSectors() {
       },
     },
   }];
-  ch.setOption(opt);
+  ch.setOption(applyAxisTheme(opt));
   // 柱子点击同样生效
   ch.off("click");
   ch.on("click", onSectorClick);
@@ -1988,7 +2018,7 @@ function openIntraday(code) {
   const dom = document.getElementById("intraChart");
   const ch = _intraCh || echarts.init(dom);
   _intraCh = ch;
-  ch.setOption({
+  ch.setOption(applyAxisTheme({
     animation: false,
     grid: [{ left: 56, right: 56, top: 16, height: 200 }, { left: 56, right: 56, top: 236, height: 56 }],
     axisPointer: { link: [{ xAxisIndex: "all" }] },
@@ -2014,7 +2044,7 @@ function openIntraday(code) {
       { name: "成交量", type: "bar", xAxisIndex: 1, yAxisIndex: 1, data: vols,
         itemStyle: { color: "rgba(120,140,180,.55)" } },
     ],
-  }, { notMerge: true });
+  }), { notMerge: true });
 }
 
 /* 表格行点击：找行内第一个 6 位数字当成股票代码 */
