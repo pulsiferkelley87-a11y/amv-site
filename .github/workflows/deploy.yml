@@ -83,6 +83,10 @@ jobs:
             --exclude 'app20.js' \
             --exclude 'live[0-9]*.html' \
             --exclude 'diag_*.html' \
+            --exclude 'd2.js' \
+            --exclude 'app-data.js' \
+            --exclude 'app/' \
+            --exclude 'shadcn/' \
             ./ _site/
           echo '--- _site 顶层 ---'
           ls -1 _site
