@@ -1,83 +1,127 @@
 {
-  "_Chart-CcWJRplD.js": {
-    "file": "assets/Chart-CcWJRplD.js",
-    "name": "Chart",
+  "_DataTable-BPkB4ash.js": {
+    "file": "assets/DataTable-BPkB4ash.js",
+    "name": "DataTable",
     "imports": [
-      "_table-zb5oIUuU.js",
-      "_card-CpmRoVWa.js",
-      "_input-DIkPoXrt.js"
+      "_client-NHfZfvGM.js",
+      "_card-XDkRoHN9.js",
+      "_table-DyDceMsd.js",
+      "_input-CNDVXDCp.js"
     ]
   },
-  "_card-CpmRoVWa.js": {
-    "file": "assets/card-CpmRoVWa.js",
+  "_card-XDkRoHN9.js": {
+    "file": "assets/card-XDkRoHN9.js",
     "name": "card",
     "imports": [
-      "_table-zb5oIUuU.js"
+      "_client-NHfZfvGM.js",
+      "_table-DyDceMsd.js"
     ]
   },
-  "_input-C4g3Pr67.css": {
-    "file": "assets/input-C4g3Pr67.css",
-    "src": "_input-C4g3Pr67.css"
+  "_client-NHfZfvGM.js": {
+    "file": "assets/client-NHfZfvGM.js",
+    "name": "client"
   },
-  "_input-DIkPoXrt.js": {
-    "file": "assets/input-DIkPoXrt.js",
+  "_format-DMiqwQA8.js": {
+    "file": "assets/format-DMiqwQA8.js",
+    "name": "format",
+    "imports": [
+      "_client-NHfZfvGM.js"
+    ]
+  },
+  "_input-CNDVXDCp.js": {
+    "file": "assets/input-CNDVXDCp.js",
     "name": "input",
     "imports": [
-      "_table-zb5oIUuU.js"
+      "_client-NHfZfvGM.js",
+      "_table-DyDceMsd.js"
     ],
     "css": [
-      "assets/input-C4g3Pr67.css"
+      "assets/input-DNME_8FJ.css"
     ]
   },
-  "_table-zb5oIUuU.js": {
-    "file": "assets/table-zb5oIUuU.js",
-    "name": "table"
+  "_input-DNME_8FJ.css": {
+    "file": "assets/input-DNME_8FJ.css",
+    "src": "_input-DNME_8FJ.css"
+  },
+  "_modulepreload-polyfill-B5Qt9EMX.js": {
+    "file": "assets/modulepreload-polyfill-B5Qt9EMX.js",
+    "name": "modulepreload-polyfill"
+  },
+  "_table-DyDceMsd.js": {
+    "file": "assets/table-DyDceMsd.js",
+    "name": "table",
+    "imports": [
+      "_client-NHfZfvGM.js"
+    ]
+  },
+  "gallery.html": {
+    "file": "assets/gallery-CA6tb_nU.js",
+    "name": "gallery",
+    "src": "gallery.html",
+    "isEntry": true,
+    "imports": [
+      "_modulepreload-polyfill-B5Qt9EMX.js",
+      "_client-NHfZfvGM.js",
+      "_format-DMiqwQA8.js"
+    ],
+    "css": [
+      "assets/gallery-D1rXPy2J.css"
+    ]
   },
   "home.html": {
-    "file": "assets/home-D1diYppn.js",
+    "file": "assets/home-DzMzAyd-.js",
     "name": "home",
     "src": "home.html",
     "isEntry": true,
     "imports": [
-      "_card-CpmRoVWa.js",
-      "_table-zb5oIUuU.js",
-      "_input-DIkPoXrt.js",
-      "_Chart-CcWJRplD.js"
+      "_modulepreload-polyfill-B5Qt9EMX.js",
+      "_client-NHfZfvGM.js",
+      "_input-CNDVXDCp.js",
+      "_table-DyDceMsd.js",
+      "_DataTable-BPkB4ash.js",
+      "_format-DMiqwQA8.js",
+      "_card-XDkRoHN9.js"
     ]
   },
   "index.html": {
-    "file": "assets/index-BC4E5Rx-.js",
+    "file": "assets/index-x4fmDl-F.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
     "imports": [
-      "_card-CpmRoVWa.js",
-      "_table-zb5oIUuU.js"
+      "_modulepreload-polyfill-B5Qt9EMX.js",
+      "_client-NHfZfvGM.js",
+      "_table-DyDceMsd.js",
+      "_card-XDkRoHN9.js"
     ],
     "css": [
-      "assets/index-DtZoHX-d.css"
+      "assets/index-D8jVSMdC.css"
     ]
   },
   "live.html": {
-    "file": "assets/live-DvNxrR8L.js",
+    "file": "assets/live-DUgpgFSP.js",
     "name": "live",
     "src": "live.html",
     "isEntry": true,
     "imports": [
-      "_card-CpmRoVWa.js",
-      "_table-zb5oIUuU.js",
-      "_input-DIkPoXrt.js",
-      "_Chart-CcWJRplD.js"
+      "_modulepreload-polyfill-B5Qt9EMX.js",
+      "_client-NHfZfvGM.js",
+      "_input-CNDVXDCp.js",
+      "_table-DyDceMsd.js",
+      "_DataTable-BPkB4ash.js",
+      "_format-DMiqwQA8.js",
+      "_card-XDkRoHN9.js"
     ]
   },
   "src/signal-mount.jsx": {
-    "file": "assets/signal-uDOynNEd.js",
+    "file": "assets/signal-Bv19yvYd.js",
     "name": "signal",
     "src": "src/signal-mount.jsx",
     "isEntry": true,
     "imports": [
-      "_table-zb5oIUuU.js",
-      "_input-DIkPoXrt.js"
+      "_client-NHfZfvGM.js",
+      "_input-CNDVXDCp.js",
+      "_table-DyDceMsd.js"
     ]
   }
 }
