@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: pages-live
-  cancel-in-progress: true   # 只保留最新部署，不积压
+  cancel-in-progress: false  # 不取消在跑的部署：取消会让 Pages 卡在旧版本
 
 jobs:
   deploy:
