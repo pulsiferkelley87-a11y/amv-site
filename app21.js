@@ -553,25 +553,28 @@ function renderMain() {
     }
   }
   // −2.3% 事件标记（可开关，近 500 日窗口内）
+  // 事件本身是「官方 0AMV 单日跌超 2.3%」，坐标必须取官方值。
+  // 之前取的是逐股线的值（selfMap），两线贴合时看不出；逐股线高出 20-30% 后红点就飘了。
   if (SHOW_DROP) {
-    // 标记必须挂在"默认可见"的系列上：官方 0AMV 在首次渲染时被 legendToggleSelect 关掉，
-    // 而 ECharts 不会渲染已取消选中系列的 markPoint，所以钉在原 series[0] 上永远看不见。
-    const selfMap = Object.create(null);
-    (ps.date || []).forEach((d, i) => { selfMap[d] = ps.amv[i]; });
-    const winLo = axis[Math.max(0, axis.length - 520)];   // 只标记当前缩放窗口附近，避免上千个钉
+    const offMap = Object.create(null);
+    (o.date || []).forEach((d, i) => { offMap[d] = o.amv[i]; });
+    const winLo = axis[Math.max(0, axis.length - 520)];
     const winHi = axis[axis.length - 1];
     const dropPts = (D.drop_events || [])
-      .filter(e => winLo <= e.date && e.date <= winHi && selfMap[e.date] != null)
-      .map(e => ({ coord: [e.date, selfMap[e.date]], value: e.chg + "%" }));
+      .filter(e => winLo <= e.date && e.date <= winHi && offMap[e.date] != null)
+      .map(e => ({ coord: [e.date, offMap[e.date]], value: e.chg + "%" }));
     if (dropPts.length) {
-      opt.series[1].markPoint = {
-        symbol: "circle", symbolSize: 5,          // 事件占全部交易日约 20%，用大图钉会糊成一片
+      opt.series[0].markPoint = {
+        symbol: "circle", symbolSize: 5,
         label: { show: false },
         itemStyle: { color: "#c0392b", opacity: 0.85 },
         data: dropPts,
       };
     }
   }
+  // 有事件标记时官方线必须可见，否则红点会挂在一条看不见的线上
+  opt.series[0].lineStyle.opacity = 1;
+
   // 官方 0AMV 默认隐藏（不参与比对，点图例可叠加）——仅在首次初始化时执行一次
   opt.series[0].lineStyle.opacity = 0.9;
   // 只有开关刚变动时才整体替换 series（能真正移除 markPoint）；
@@ -581,10 +584,6 @@ function renderMain() {
     DROP_DIRTY = false;
   } else {
     ch.setOption(applyAxisTheme(opt));
-  }
-  if (!mainLegendInit) {
-    ch.dispatchAction({ type: "legendToggleSelect", name: "官方 0AMV" });
-    mainLegendInit = true;
   }
   window.addEventListener("resize", () => ch.resize());
 }
