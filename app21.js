@@ -537,6 +537,21 @@ function renderMain() {
     line(alignTo(o.date, s.c34), "C34", COLORS.c34, 1),
     line(alignTo(o.date, s.cinf), "∞", COLORS.cinf, 1),
   ];
+  // 热启动期阴影：那段数据被置空后线条会断开，不加标注会让人以为是渲染 bug
+  {
+    const iA = axis.indexOf("2025-10-15"), iB = axis.indexOf("2025-10-29");
+    if (iA >= 0 && iB >= 0) {
+      opt.series[1].markArea = {
+        silent: true,
+        itemStyle: { color: "rgba(192,57,43,.10)" },
+        label: {
+          show: true, position: "insideTop", fontSize: 10, color: "#c0392b",
+          formatter: "热启动期（数据无效）",
+        },
+        data: [[{ xAxis: "2025-10-15" }, { xAxis: "2025-10-29" }]],
+      };
+    }
+  }
   // −2.3% 事件标记（可开关，近 500 日窗口内）
   if (SHOW_DROP) {
     // 标记必须挂在"默认可见"的系列上：官方 0AMV 在首次渲染时被 legendToggleSelect 关掉，
