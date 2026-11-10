@@ -195,7 +195,7 @@ header .time {
 
 @media (max-width: 640px) {
   .card { padding: var(--sp-3); border-radius: var(--r-sm); }
-  .card h2 > span:not(.cb) { display: none; }   /* 手机不显示副标题 */
+  .card h2 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }   /* 手机不显示副标题 */
 }
 
 /* ── 6. 分组导航（ui-groups.js 注入） ─────────────────────── */
