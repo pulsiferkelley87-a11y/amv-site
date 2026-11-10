@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <title>实盘监测 · 活跃市值</title>
-<link rel="stylesheet" href="app.css?v=20261109e">
+<link rel="stylesheet" href="app.css?v=20261111a">
 </head>
 <body>
 <header>
@@ -72,9 +72,9 @@
       <span style="font-size:12px;color:var(--muted);font-weight:normal;">查个股：
         <input id="sigSearch" placeholder="代码或名称" style="padding:3px 8px;border:1px solid var(--border);border-radius:5px;width:150px;font-size:12.5px;">
         <button onclick="showSignal()" style="padding:2px 10px;border:1px solid var(--border);border-radius:5px;background:var(--card);cursor:pointer;font-size:12.5px;">查看</button>
-        <span id="sigResult" style="margin-left:8px;font-size:13px;"></span>
-      </span>
+        </span>
     </h2>
+      <span id="sigResult" style="margin-left:8px;font-size:13px;"></span>
     <div style="margin:4px 0;font-size:12px;">⭐ 自选：
       <input id="favInput" placeholder="代码如 600825" style="padding:3px 8px;border:1px solid var(--border);border-radius:5px;width:130px;font-size:12.5px;">
       <button onclick="addFav()" style="padding:2px 10px;border:1px solid var(--border);border-radius:5px;background:var(--card);cursor:pointer;font-size:12.5px;">添加</button>
@@ -3211,6 +3211,6 @@ function setTheme(t){document.documentElement.setAttribute("data-theme",t);local
 function toggleTheme(){setTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");}
 (function(){var t=localStorage.getItem("amv-theme");if(!t){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}setTheme(t);})();
 </script>  <script src="ui-clean.js?v=20261109e"></script>
-  <div id="verStamp" style="margin-top:10px;font-size:11px;color:var(--muted);">页面版本 <b>20261109f</b> ｜ 若看到的不是这个版本，请 Ctrl+F5 强制刷新</div>
+  <div id="verStamp" style="margin-top:10px;font-size:11px;color:var(--muted);">页面版本 <b>20261111a</b> ｜ 若看到的不是这个版本，请 Ctrl+F5 强制刷新</div>
 </body>
 </html>
