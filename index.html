@@ -31,7 +31,7 @@
 
 <!-- 图表库改为 defer：不再阻塞首屏 -->
 <script defer src="echarts.min.js"></script>
-<link rel="stylesheet" href="app.css?v=20261109e">
+<link rel="stylesheet" href="app.css?v=20261111a">
 </head>
 <body>
 <a class="skip-link" href="#main">跳到主要内容</a>
@@ -175,8 +175,8 @@
     <div style="margin:6px 0;font-size:12px;">
       查个股：<input id="sigSearch" placeholder="代码或名称，如 300308 / 宁德时代" style="padding:4px 10px;border:1px solid var(--border);border-radius:5px;width:220px;font-size:13px;">
       <button onclick="showSignal()" style="padding:3px 12px;border:1px solid var(--border);border-radius:5px;background:var(--card);cursor:pointer;">查看信号</button>
-      <span id="sigResult" style="margin-left:10px;font-size:13px;"></span>
-    </div>
+      
+      <span id="sigResult" style="margin-left:10px;font-size:13px;"></span></div>
     <div class="grid" style="margin-top:8px;">
       <div>
         <b style="font-size:13px;">🔼 拐头向上（今日上穿 MA10，资金重新激活）</b>
@@ -219,7 +219,7 @@
 // 固定构建号加载：发版时改 BUILD_ID 即可，平时命中浏览器缓存。
 // （原实现每次刷新都取当前毫秒时间戳，导致 app21.js 与 app-data.js 每次重下）
 (function () {
-  var BUILD_ID = "20261110j";
+  var BUILD_ID = "20261111a";
   // 旧浏览器（无 DecompressionStream）：先把数据落地，再跑主脚本。
   // 原顺序会让 app21.js 末尾的顶层 load() 在 window.DATA 就绪前执行并提前返回，主图表空白。
   if (typeof DecompressionStream === "undefined") {
@@ -237,6 +237,6 @@ function toggleTheme(){setTheme(document.documentElement.getAttribute("data-them
 <script src="realtime-quote.js"></script>
 <script src="live-quote-bar.js"></script>
   <script src="ui-clean.js?v=20261109e"></script>
-  <div id="verStamp" style="margin-top:10px;font-size:11px;color:var(--muted);">页面版本 <b>20261110j</b> ｜ 若看到的不是这个版本，请 Ctrl+F5 强制刷新</div>
+  <div id="verStamp" style="margin-top:10px;font-size:11px;color:var(--muted);">页面版本 <b>20261111a</b> ｜ 若看到的不是这个版本，请 Ctrl+F5 强制刷新</div>
 </body>
 </html>
