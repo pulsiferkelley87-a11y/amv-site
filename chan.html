@@ -715,9 +715,9 @@ function keyLevels(bars) {
     if (b.l <= bars[i - 1].l && b.l <= bars[i - 2].l && b.l <= bars[i + 1].l && b.l <= bars[i + 2].l) lows.push(b.l);
   }
   const above = [...new Set(highs.filter((x) => x > c * 1.005).map((x) => +x.toFixed(2)))]
-    .sort((a, b) => a - b).slice(0, 3);
+    .sort((a, b) => a - b).slice(0, 2);
   const below = [...new Set(lows.filter((x) => x < c * 0.995).map((x) => +x.toFixed(2)))]
-    .sort((a, b) => b - a).slice(0, 2);
+    .sort((a, b) => b - a).slice(0, 1);
   return [
     ...above.map((p, i) => ({ p, t: "压力" + (i + 1), k: "up" })),
     ...below.map((p, i) => ({ p, t: "支撑" + (i + 1), k: "down" })),
@@ -1110,7 +1110,7 @@ function drawChipOverlay() {
     g.setLineDash([]);
     g.fillStyle = "#93c5fd";
     g.font = "10px system-ui, sans-serif";
-    g.fillText("POC " + ((peak.p0 + peak.p1) / 2).toFixed(2), gx + 2, py - 3);
+    g.fillText("POC " + ((peak.p0 + peak.p1) / 2).toFixed(2), gx + 2, rect.y + rect.height - 6);
   }
 }
 
