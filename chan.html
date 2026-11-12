@@ -897,8 +897,6 @@ function draw(bars, r) {
       dataZoom: [
         { type: "inside", zoomOnMouseWheel: true, moveOnMouseMove: true, moveOnMouseWheel: false,
           start: Math.max(0, 100 - (250 / bars.length) * 100), end: 100 },
-        { type: "slider", height: 16, bottom: 4, borderColor: "#243044", fillerColor: "rgba(99,102,241,.2)",
-          textStyle: { color: "#8b98ad" }, handleStyle: { color: "#6366f1" } },
       ],
       series,
     },
