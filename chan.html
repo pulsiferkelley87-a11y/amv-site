@@ -791,6 +791,7 @@ function draw(bars, r) {
               name: `${l.t} ${l.p.toFixed(2)}`,
               yAxis: +l.p.toFixed(2),
               lineStyle: { color: l.k === "up" ? "#f97316" : "#38bdf8", type: "dashed", width: 1 },
+              label: { position: l.k === "up" ? "end" : "start" },
             })),
           }
         : undefined,
