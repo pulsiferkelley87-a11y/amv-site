@@ -810,7 +810,7 @@ function draw(bars, r) {
       markLine: f.levels
         ? {
             silent: true, symbol: "none",
-            label: { color: "#e2e8f0", fontSize: 10, distance: 2, backgroundColor: "rgba(15,23,42,.85)", padding: [1, 3] },
+            label: { show: false },
             data: [
               ...keyLevels(bars).map((l) => ({
                 name: `${l.t} ${l.p.toFixed(2)}`,
@@ -869,7 +869,7 @@ function draw(bars, r) {
     {
       animation: false,
       backgroundColor: "transparent",
-      grid: { left: 52, right: f.chips || f.flow ? 132 : 16, top: 20, bottom: 26 },
+      grid: { left: 52, right: f.levels ? 176 : (f.chips || f.flow ? 132 : 16), top: 20, bottom: 26 },
       tooltip: {
         trigger: "axis", axisPointer: { type: "cross", crossStyle: { color: "#3b475c" } },
         backgroundColor: "rgba(15,22,34,.95)", borderColor: "#243044", textStyle: { color: "#e6ebf3", fontSize: 12 },
@@ -1084,7 +1084,7 @@ function drawChipOverlay() {
   if (!bins) return;
 
   const gx = rect.x + rect.width + 8;
-  const maxW = Math.max(40, Math.min(112, host.clientWidth - gx - 6));
+  const maxW = Math.max(36, Math.min(CUR.flags.levels ? 104 : 112, host.clientWidth - gx - (CUR.flags.levels ? 62 : 6)));
   const peak = bins.reduce((a, b) => (b.w > a.w ? b : a), bins[0]);
   bins.forEach((b) => {
     const y0 = chart.convertToPixel({ yAxisIndex: 0 }, b.p0);
@@ -1101,6 +1101,23 @@ function drawChipOverlay() {
     }
     g.fillRect(gx, top, bw, hh);
   });
+  // 关键位文字（画在最右侧留白，避免压住筹码柱）
+  if (CUR.flags.levels) {
+    g.font = "10px system-ui, sans-serif";
+    keyLevels(CUR.bars).forEach((l) => {
+      const yy = chart.convertToPixel({ yAxisIndex: 0 }, l.p);
+      if (yy == null || yy < rect.y + 8 || yy > rect.y + rect.height - 4) return;
+      g.fillStyle = l.k === "up" ? "#fca5a5" : "#86efac";
+      g.fillText(l.t + " " + l.p.toFixed(2), gx + maxW + 6, yy + 3);
+    });
+    const hi = Math.max(...CUR.bars.slice(-120).map((b) => b.h));
+    const yh = chart.convertToPixel({ yAxisIndex: 0 }, hi);
+    if (yh != null && yh > rect.y && yh < rect.y + rect.height) {
+      g.fillStyle = "#7dd3fc";
+      g.fillText("突破 " + hi.toFixed(2), gx + maxW + 6, yh - 4);
+    }
+  }
+
   // POC：最密档中心
   const py = chart.convertToPixel({ yAxisIndex: 0 }, (peak.p0 + peak.p1) / 2);
   if (py != null && py > rect.y && py < rect.y + rect.height) {
