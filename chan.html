@@ -1687,7 +1687,7 @@ function kvSVG() {
   }
   if (CUR.flags.sig && res.sig) {
     res.sig.forEach((s) => {
-      const a = rowOf(s.i);
+      const a = s.i - i0;
       if (a < 0 || a > m - 1) return;
       const buy = s.type.indexOf("买") >= 0;
       const col = buy ? "#f87171" : "#34d399";
