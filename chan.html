@@ -212,6 +212,7 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
     <div class="card">
       <div class="bar">
         <input type="text" id="code" value="600031" placeholder="代码">
+        <span id="codeName" style="font-size:13px;color:#cbd5e1;font-weight:600;min-width:64px"></span>
         <button class="btn" id="loadK">分析</button>
         <button class="btn on" data-per="day">日线</button>
         <button class="btn" data-per="week">周线</button>
@@ -230,6 +231,7 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
         <button class="btn" id="subBtn">副图：量</button>
         <button class="btn" id="conceptBtn">概念</button>
         <button class="btn" id="multiBtn">多级别</button>
+        <button class="btn" id="helpBtn">缠论说明</button>
         <button class="btn" id="csvBtn">导出CSV</button>
         <button class="btn" id="favBtn">加自选</button>
         <span class="muted" id="klineMeta"></span>
@@ -304,6 +306,95 @@ let CUR = { bars: [], res: null, per: "day", flags: { stroke: 1, seg: 1, pivot: 
     btn.classList.toggle("on", CUR.flags.sub === "macd");
     kvPaint();
   });
+})();
+
+
+const HELP_HTML = `
+<style>
+  .hp h4{margin:14px 0 6px;font-size:13px;color:#e2e8f0}
+  .hp h4:first-child{margin-top:0}
+  .hp p,.hp li{font-size:12.5px;line-height:1.75;color:#b6c2d4;margin:4px 0}
+  .hp ul{padding-left:18px;margin:4px 0}
+  .hp code{background:rgba(148,163,184,.16);padding:1px 5px;border-radius:4px;font-size:12px;color:#e2e8f0}
+  .hp .k{display:inline-block;min-width:10px;height:10px;border-radius:2px;vertical-align:middle;margin-right:4px}
+  .hp table{border-collapse:collapse;width:100%;margin:6px 0}
+  .hp th,.hp td{border-bottom:1px solid rgba(148,163,184,.18);padding:4px 6px;font-size:12px;text-align:left;color:#b6c2d4}
+  .hp th{color:#8b98ad;font-weight:500}
+</style>
+<div class="hp">
+  <h4>一、这张图在看什么</h4>
+  <p>缠论只做一件事：<b>把价格走势拆成有级别的结构</b>，然后等结构走完（背驰）时找买卖点。图上四层东西，从粗到细：</p>
+  <table>
+    <tr><th>图层</th><th>图上样子</th><th>含义</th></tr>
+    <tr><td>线段</td><td>紫色粗虚线</td><td>比笔更大的方向，一段通常含 3 笔以上</td></tr>
+    <tr><td>笔</td><td>橙色折线</td><td>相邻顶底分型之间的最小走势单位</td></tr>
+    <tr><td>中枢</td><td>蓝色方框</td><td>连续三笔重叠的价格区间，多空反复争夺的地方</td></tr>
+    <tr><td>买卖点</td><td>红/绿圆点 + 文字</td><td>一买/二买/三买（红），一卖/二卖/三卖（绿）</td></tr>
+  </table>
+
+  <h4>二、四类结构怎么判定（页面口径）</h4>
+  <ul>
+    <li><b>分型</b>：三根合并 K 线，中间那根高点最高=顶分型，低点最低=底分型。</li>
+    <li><b>笔</b>：顶分型 → 底分型（或反向）且中间至少隔 4 根合并 K 线，顶底交替出现。</li>
+    <li><b>线段</b>：用「特征序列」找终结 —— 上升段里取所有下跌笔，若某一笔高点同时高于左右两笔，该段结束。</li>
+    <li><b>中枢</b>：连续三笔的重叠区间 <code>[ZD, ZG]</code>，<code>ZG=三笔高点最小值</code>、<code>ZD=三笔低点最大值</code>；后续笔仍落在区间内就继续延伸，跑出去即「离开笔」。</li>
+  </ul>
+
+  <h4>三、买卖点是怎么算出来的</h4>
+  <ul>
+    <li><b>一买</b>：下跌线段出现<b>背驰</b> —— 当前段幅度变小，且 MACD 面积也变小（<code>幅度 &lt; 前段×0.9 且 面积 &lt; 前段×0.85</code>），说明跌势衰竭。</li>
+    <li><b>二买</b>：一买之后第一次回调，<b>不破</b>一买低点。</li>
+    <li><b>三买</b>：价格离开中枢向上后回抽，<b>不跌回 ZG</b>（中枢上沿），强势确认。</li>
+    <li>卖点完全对称：一卖=上涨背驰，二卖=反弹不破一卖高点，三卖=跌破 ZD 后反抽不回中枢。</li>
+  </ul>
+  <p>⚠️ 一买依赖背驰，背驰用「幅度 × MACD 面积」比较相邻同向段 —— 这是<b>近似口径</b>，不是缠论原教旨的区间套递归。</p>
+
+  <h4>四、按钮都干什么</h4>
+  <table>
+    <tr><th>按钮</th><th>作用</th></tr>
+    <tr><td>日线/周线/月线/60分/30分</td><td>切换周期重算结构与信号；周月线由日线聚合，60/30 分取分钟数据</td></tr>
+    <tr><td>笔 / 线段 / 中枢 / 买卖点</td><td>图层开关，各自独立</td></tr>
+    <tr><td>均线</td><td>MA5/10/20/60</td></tr>
+    <tr><td>筹码带</td><td>按可见区间的成交量做 20 档分布：<span class="k" style="background:#3b82f6"></span>蓝=核心(≥66%峰)、<span class="k" style="background:#94a3b8"></span>灰=边缘，虚线是 POC（最密价位）</td></tr>
+    <tr><td>主力带</td><td>同上，但权重换成主力净流入（东财口径，近似 L2），只画净流入为正的档</td></tr>
+    <tr><td>关键位</td><td>最近 250 根的摆动高低点：红=压力带、绿=支撑带、蓝=最近 120 根最高价（突破线）</td></tr>
+    <tr><td>副图</td><td><b>量</b>=成交量；<b>MACD</b>=柱+DIF+DEA，和背驰用的是同一份数据</td></tr>
+    <tr><td>概念</td><td>该股所属行业板块与当日涨跌（数据来自主站 app-data.js 的 sector_members）</td></tr>
+    <tr><td>多级别</td><td>日线/60分/30分 三级别各自有多少笔、段、中枢、信号，现价在哪个级别中枢里</td></tr>
+    <tr><td>导出CSV</td><td>把当前周期 K 线导出成 csv</td></tr>
+    <tr><td>加自选</td><td>存到浏览器本地（localStorage），点标签直接切股票</td></tr>
+  </table>
+
+  <h4>五、读图顺序（建议）</h4>
+  <ol>
+    <li>先看<b>线段方向</b>：紫虚线朝上还是朝下，决定只找买点还是只找卖点。</li>
+    <li>再看<b>中枢位置</b>：现价在中枢上方=强势，内部=震荡，下方=弱势。</li>
+    <li>打开<b>MACD 副图</b>：当前段和上一段同向段比，柱面积是不是明显缩小（背驰）。</li>
+    <li>等<b>信号点</b>出现：一买最凶但最容易失败，三买最稳但位置最高。</li>
+    <li>最后用<b>筹码带 POC / 关键位</b>定止损：跌回中枢 ZG 下方、或跌破 POC，信号作废。</li>
+  </ol>
+
+  <h4>六、操作</h4>
+  <ul>
+    <li>滚轮 = 缩放（20~500 根）；按住拖动 = 平移；双击 = 回到最近 250 根</li>
+    <li>鼠标移动 = 十字光标（日期 + OHLC + 涨跌幅 + 成交量）</li>
+    <li>点某根蜡烛 = 下方显示该日分时（只有精选池 124 只有分钟数据）</li>
+    <li>手机：双指捏合缩放，单指拖动平移</li>
+  </ul>
+
+  <h4>七、已知局限（别当圣杯）</h4>
+  <ul>
+    <li>筹码带是<b>日线成交量近似</b>，不是逐笔成本分布；主力带是东财日频净额代理，不是 L2。</li>
+    <li>背驰用「幅度 × MACD 面积」，没有做区间套递归，极端行情会误报。</li>
+    <li>信号是<b>结构识别</b>，不是回测过的策略；全市场回测里二买/三买胜率约 60%、均收益 3~4%，一买只有 57%，且未扣成本。</li>
+    <li>60/30 分只有精选池有数据，其余股票会提示「无数据」。</li>
+    <li>概念只有行业分类（56 个板块），没有题材概念库。</li>
+  </ul>
+</div>`;
+
+(function () {
+  const b = document.querySelector("#helpBtn");
+  if (b) b.addEventListener("click", () => openModal("缠论怎么用（页面说明）", HELP_HTML));
 })();
 
 $$("nav .tab").forEach((b) =>
@@ -740,7 +831,9 @@ async function loadKline(code) {
   const res = analyze(use);
   CUR.bars = use; CUR.res = res;
   loadFlow(code);
-  $("#klineMeta").textContent = `${code} ｜ ${use.length} 根 ｜ 笔 ${res.sl.length} ｜ 段 ${res.segs.length} ｜ 中枢 ${res.pivots.length} ｜ 信号 ${res.sig.length}`;
+  setCodeName(code);
+  const nm = (NAMES && NAMES[code]) || "";
+  $("#klineMeta").textContent = `${code} ${nm} ｜ ${use.length} 根 ｜ 笔 ${res.sl.length} ｜ 段 ${res.segs.length} ｜ 中枢 ${res.pivots.length} ｜ 信号 ${res.sig.length}`;
   drawSVG(use, res);
   drawStruct(use, res);
   const lg = document.querySelector("#klLegend");
@@ -1072,6 +1165,24 @@ window.__runScan = runScan;
 
 // ---------- 筹码带 / 主力带 / 分时 / 自选 ----------
 let FLOW = null;
+let NAMES = null;
+async function loadNames() {
+  if (NAMES) return NAMES;
+  try {
+    NAMES = await (await fetch(COS + "/chan/names.json?t=" + Math.floor(Date.now() / 86400000))).json();
+  } catch (e) { NAMES = {}; }
+  return NAMES;
+}
+function setCodeName(code) {
+  const el = document.querySelector("#codeName");
+  loadNames().then((m) => {
+    const nm = (m && m[code]) || "";
+    if (el) el.textContent = nm;
+    const meta = document.querySelector("#klineMeta");
+    if (nm && meta) meta.textContent = meta.textContent.replace(code + "  ｜", code + " " + nm + " ｜");
+  });
+}
+loadNames();
 
 function chipsFor(bars, i0, i1, M, flowMap) {
   M = M || 40;
