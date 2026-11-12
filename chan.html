@@ -165,6 +165,7 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
   <section id="market">
     <div class="grid g4" id="mkKpi"></div>
     <div class="card"><h3>市场宽度 <small>近 250 日涨跌家数</small></h3><div class="bd" id="mkBreadth" style="height:320px"></div></div>
+  <div class="grid g2" id="mkBlocks" style="margin-top:12px"></div>
   </section>
 </main>
 
@@ -181,7 +182,7 @@ const fmt = (v, n = 2) => (v == null || isNaN(v) ? "—" : (+v).toFixed(n));
 const pct = (v) => (v == null || isNaN(v) ? "—" : (v > 0 ? "+" : "") + (+v).toFixed(2) + "%");
 const cls = (v) => (v > 0 ? "up" : v < 0 ? "down" : "");
 
-let SCAN = null, LIVE = null;
+let SCAN = null, LIVE = null, HIST = null;
 let chart = null, macdChart = null;
 let CUR = { bars: [], res: null, per: "day", flags: { stroke: 1, seg: 1, pivot: 1, sig: 1, ma: 1 } };
 
@@ -194,6 +195,7 @@ $$("nav .tab").forEach((b) =>
       if (!chart && CUR.res) draw(CUR.bars, CUR.res);
       chart && chart.resize(); macdChart && macdChart.resize();
     }, 50);
+    if (b.dataset.t === "market") setTimeout(ensureMarket, 50);
   })
 );
 
@@ -208,10 +210,22 @@ async function loadScan() {
 }
 
 async function loadLive() {
+  fetch(COS + "/breadth_history.json?t=" + Date.now())
+    .then((r) => r.json())
+    .then((j) => { HIST = j; if (location.hash.indexOf("market") >= 0) renderMarket(); })
+    .catch(() => {});
   try {
     LIVE = await (await fetch(COS + "/live_data.json?t=" + Date.now())).json();
-  } catch { LIVE = null; }
+  } catch (e) { LIVE = null; }
   renderIdx(); renderMarket();
+}
+
+async function ensureMarket() {
+  if (!HIST) {
+    try { HIST = await (await fetch(COS + "/breadth_history.json?t=" + Date.now())).json(); }
+    catch (e) { HIST = { history: [] }; }
+  }
+  renderMarket();
 }
 
 function renderIdx() {
@@ -340,38 +354,60 @@ function renderBT() {
 function renderMarket() {
   const box = $("#mkKpi");
   if (!LIVE) { box.innerHTML = '<div class="card"><div class="bd muted">行情数据加载失败</div></div>'; return; }
-  const t = LIVE.market || LIVE.market_totals || {};
+  const t = LIVE.breadth || {};
+  const amt = t.amount_sum ? (t.amount_sum / 1e12).toFixed(2) + " 万亿" : "—";
   const cards = [
-    ["上涨家数", t.up ?? t.rise ?? "—", "up"],
-    ["下跌家数", t.down ?? t.fall ?? "—", "down"],
-    ["涨停", t.limitUp ?? t.zt ?? "—", "up"],
-    ["成交额", t.amount ? (t.amount / 1e12).toFixed(2) + " 万亿" : "—", ""],
+    ["上涨家数", t.up ?? "—", "up"],
+    ["下跌家数", t.down ?? "—", "down"],
+    ["涨停 / 跌停", (t.limit_up ?? "—") + " / " + (t.limit_down ?? "—"), ""],
+    ["两市成交额", amt, ""],
   ];
   box.innerHTML = cards
     .map(([l, v, c]) => `<div class="card kpi"><div class="bd"><div class="lab">${l}</div>
       <div class="val ${c}">${v}</div></div></div>`)
     .join("");
 
-  const hist = LIVE.breadth_history || LIVE.breadth || [];
-  if (!hist.length) { $("#mkBreadth").innerHTML = '<div class="muted">无宽度历史</div>'; return; }
-  const el = $("#mkBreadth");
-  const c = echarts.init(el);
-  const arr = hist.slice(-250);
-  c.setOption({
-    backgroundColor: "transparent",
-    grid: { left: 44, right: 16, top: 16, bottom: 28 },
-    xAxis: { type: "category", data: arr.map((x) => x.d || x.date), axisLine: { lineStyle: { color: "#2a3446" } }, axisLabel: { color: "#8b98ad" } },
-    yAxis: { type: "value", axisLabel: { color: "#8b98ad" }, splitLine: { lineStyle: { color: "rgba(148,163,184,.12)" } } },
-    series: [
-      { name: "上涨", type: "bar", data: arr.map((x) => x.up ?? x.rise), itemStyle: { color: "#ef4444" }, barMaxWidth: 6 },
-      { name: "下跌", type: "bar", data: arr.map((x) => -(x.down ?? x.fall ?? 0)), itemStyle: { color: "#22c55e" }, barMaxWidth: 6 },
-    ],
-    tooltip: { trigger: "axis" },
-  });
-  window.addEventListener("resize", () => c.resize());
-}
+  // 市场宽度（近 250 日涨跌家数）
+  // 板块强度 TOP10（先画，避免等宽度数据）
+  const blocks = (LIVE.blocks || []).filter((b) => b && b.name && typeof b.pct === "number");
+  const row = (b) => `<tr><td>${b.name}</td><td class="muted">${b.type || ""}</td>
+    <td class="${b.pct >= 0 ? "up" : "down"} tabular-nums">${b.pct >= 0 ? "+" : ""}${b.pct.toFixed(2)}%</td>
+    <td class="tabular-nums">${b.n ?? b.total ?? ""}</td></tr>`;
+  const tbl = (title, list) => `<div class="card"><div class="hd">${title}</div>
+    <div class="bd" style="padding:0"><table><thead><tr><th>板块</th><th>类型</th><th>涨跌幅</th><th>成分</th></tr></thead>
+    <tbody>${list.map(row).join("")}</tbody></table></div></div>`;
+  const wrap = $("#mkBlocks");
+  if (wrap && blocks.length) {
+    const top = [...blocks].sort((a, b) => b.pct - a.pct).slice(0, 10);
+    const bot = [...blocks].sort((a, b) => a.pct - b.pct).slice(0, 10);
+    wrap.innerHTML = tbl("板块领涨 TOP10", top) + tbl("板块领跌 TOP10", bot);
+  }
 
-// ---------- K 线 ----------
+  const hist = (HIST && HIST.history) || [];
+  const el = $("#mkBreadth");
+  if (!hist.length) { el.innerHTML = '<div class="muted" style="padding:16px">宽度历史加载中…</div>'; return; }
+  // 用自绘 SVG 画宽度柱（不依赖 echarts 实例，避免 canvas 被重建后空白）
+  const arr = hist.slice(-250);
+  const W = 1000, H = 300, mid = H / 2, pad = 6;
+  const maxV = Math.max(1, ...arr.map((x) => Math.max(x.up || 0, x.down || 0)));
+  const bw = (W - pad * 2) / arr.length;
+  let bars = "";
+  arr.forEach((x, i) => {
+    const upH = ((x.up || 0) / maxV) * (mid - 8);
+    const dnH = ((x.down || 0) / maxV) * (mid - 8);
+    const px = pad + i * bw;
+    bars += `<rect x="${px.toFixed(1)}" y="${(mid - upH).toFixed(1)}" width="${Math.max(1, bw - 0.8).toFixed(1)}" height="${upH.toFixed(1)}" fill="#ef4444" opacity=".85"/>`;
+    bars += `<rect x="${px.toFixed(1)}" y="${mid}" width="${Math.max(1, bw - 0.8).toFixed(1)}" height="${dnH.toFixed(1)}" fill="#22c55e" opacity=".85"/>`;
+  });
+  const last = arr[arr.length - 1] || {};
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:320px;display:block">
+    <line x1="0" y1="${mid}" x2="${W}" y2="${mid}" stroke="rgba(148,163,184,.35)" stroke-width="1"/>
+    ${bars}
+  </svg>
+  <div class="muted" style="font-size:12px;padding:6px 10px">
+    ${arr[0].date} ~ ${last.date} ｜ 最新：涨 ${last.up} / 跌 ${last.down}
+  </div>`;
+}
 function emSecid(code) {
   // 东财：1=沪 0=深/北
   return (/^(6|9)/.test(code) ? '1.' : '0.') + code;
