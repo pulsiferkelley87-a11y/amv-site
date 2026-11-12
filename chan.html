@@ -196,6 +196,7 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
             </div>
             <div id="minBox" style="display:none;margin-top:8px"></div>
             <div id="macd"></div>
+            <div id="klLegend" style="font-size:11px;color:#8b98ad;margin-top:6px;line-height:1.6"></div>
             <div id="favBar" class="bar" style="margin-top:8px;font-size:12px"></div>
           </div>
           <div class="side">
@@ -685,6 +686,11 @@ async function loadKline(code) {
   $("#klineMeta").textContent = `${code} ｜ ${use.length} 根 ｜ 笔 ${res.sl.length} ｜ 段 ${res.segs.length} ｜ 中枢 ${res.pivots.length} ｜ 信号 ${res.sig.length}`;
   draw(use, res);
   drawStruct(use, res);
+  const lg = document.querySelector("#klLegend");
+  if (lg) lg.innerHTML = "日K（前复权）｜橙 MA5 · 蓝 MA10 · 紫 MA20 · 紫 MA60 ｜ "
+    + "<span style='color:#ef4444'>红=压力带</span> · <span style='color:#22c55e'>绿=支撑带</span> · "
+    + "<span style='color:#38bdf8'>蓝=突破线</span> ｜ 筹码带：<span style='color:#3b82f6'>蓝=核心(≥66%峰)</span> "
+    + "<span style='color:#94a3b8'>灰=边缘</span>，POC=最密档 ｜ 主力带：<span style='color:#8b5cf6'>紫</span>";
 }
 
 function ma(arr, n) {
@@ -708,11 +714,13 @@ function keyLevels(bars) {
     if (b.h >= bars[i - 1].h && b.h >= bars[i - 2].h && b.h >= bars[i + 1].h && b.h >= bars[i + 2].h) highs.push(b.h);
     if (b.l <= bars[i - 1].l && b.l <= bars[i - 2].l && b.l <= bars[i + 1].l && b.l <= bars[i + 2].l) lows.push(b.l);
   }
-  const above = highs.filter((x) => x > c * 1.005).sort((a, b) => a - b).slice(0, 1);
-  const below = lows.filter((x) => x < c * 0.995).sort((a, b) => b - a).slice(0, 1);
+  const above = [...new Set(highs.filter((x) => x > c * 1.005).map((x) => +x.toFixed(2)))]
+    .sort((a, b) => a - b).slice(0, 3);
+  const below = [...new Set(lows.filter((x) => x < c * 0.995).map((x) => +x.toFixed(2)))]
+    .sort((a, b) => b - a).slice(0, 2);
   return [
-    ...above.map((p) => ({ p, t: "压力", k: "up" })),
-    ...below.map((p) => ({ p, t: "支撑", k: "down" })),
+    ...above.map((p, i) => ({ p, t: "压力" + (i + 1), k: "up" })),
+    ...below.map((p, i) => ({ p, t: "支撑" + (i + 1), k: "down" })),
   ];
 }
 
@@ -779,31 +787,46 @@ function draw(bars, r) {
     {
       name: "K线", type: "candlestick", data: ohlc,
       itemStyle: { color: "#ef4444", color0: "#22c55e", borderColor: "#ef4444", borderColor0: "#22c55e" },
+      markArea: (f.pivot || f.levels)
+        ? {
+            silent: true,
+            label: { show: false },
+            data: [
+              ...(f.pivot
+                ? r.pivots.slice(-8).map((pv) => [
+                    { xAxis: pv.d0, yAxis: +pv.zd.toFixed(2), itemStyle: { color: "rgba(99,102,241,.10)", borderColor: "rgba(99,102,241,.45)", borderWidth: 1 } },
+                    { xAxis: pv.d1, yAxis: +pv.zg.toFixed(2) },
+                  ])
+                : []),
+              ...(f.levels
+                ? keyLevels(bars).map((l) => [
+                    { yAxis: l.k === "up" ? l.p : +(l.p * 0.985).toFixed(2), itemStyle: { color: l.k === "up" ? "rgba(239,68,68,.12)" : "rgba(34,197,94,.12)" } },
+                    { yAxis: l.k === "up" ? +(l.p * 1.015).toFixed(2) : l.p },
+                  ])
+                : []),
+            ],
+          }
+        : undefined,
       markLine: f.levels
         ? {
             silent: true, symbol: "none",
-            label: {
-              color: "#e2e8f0", fontSize: 10, position: "end", distance: 2,
-              backgroundColor: "rgba(15,23,42,.85)", padding: [1, 3],
-              formatter: (x) => x.name.replace("压力 ", "R ").replace("支撑 ", "S "),
-            },
-            data: keyLevels(bars).map((l) => ({
-              name: `${l.t} ${l.p.toFixed(2)}`,
-              yAxis: +l.p.toFixed(2),
-              lineStyle: { color: l.k === "up" ? "#f97316" : "#38bdf8", type: "dashed", width: 1 },
-              label: { position: l.k === "up" ? "end" : "start" },
-            })),
-          }
-        : undefined,
-      markArea: f.pivot
-        ? {
-            silent: true,
-            itemStyle: { color: "rgba(99,102,241,.10)", borderColor: "rgba(99,102,241,.45)", borderWidth: 1 },
-            label: { show: false },
-            data: r.pivots.slice(-8).map((p) => [
-              { xAxis: p.d0, yAxis: +p.zd.toFixed(2) },
-              { xAxis: p.d1, yAxis: +p.zg.toFixed(2) },
-            ]),
+            label: { color: "#e2e8f0", fontSize: 10, distance: 2, backgroundColor: "rgba(15,23,42,.85)", padding: [1, 3] },
+            data: [
+              ...keyLevels(bars).map((l) => ({
+                name: `${l.t} ${l.p.toFixed(2)}`,
+                yAxis: +l.p.toFixed(2),
+                lineStyle: { color: l.k === "up" ? "#ef4444" : "#22c55e", type: "dashed", width: 1 },
+                label: { position: l.k === "up" ? "end" : "start" },
+              })),
+              (() => {
+                const hi = Math.max(...bars.slice(-120).map((b) => b.h));
+                return {
+                  name: `突破 ${hi.toFixed(2)}`,
+                  yAxis: +hi.toFixed(2),
+                  lineStyle: { color: "#38bdf8", type: "solid", width: 1 },
+                };
+              })(),
+            ],
           }
         : undefined,
     },
@@ -1062,6 +1085,7 @@ function drawChipOverlay() {
 
   const gx = rect.x + rect.width + 8;
   const maxW = Math.max(40, Math.min(112, host.clientWidth - gx - 6));
+  const peak = bins.reduce((a, b) => (b.w > a.w ? b : a), bins[0]);
   bins.forEach((b) => {
     const y0 = chart.convertToPixel({ yAxisIndex: 0 }, b.p0);
     const y1 = chart.convertToPixel({ yAxisIndex: 0 }, b.p1);
@@ -1069,9 +1093,25 @@ function drawChipOverlay() {
     const top = Math.min(y0, y1), hh = Math.max(1, Math.abs(y1 - y0) - 0.6);
     if (top < rect.y - 2 || top > rect.y + rect.height) return;
     const bw = Math.max(0.6, b.w * maxW);
-    g.fillStyle = CUR.flags.flow ? "rgba(239,68,68,.55)" : "rgba(99,102,241,.55)";
+    if (CUR.flags.flow) {
+      g.fillStyle = "rgba(139,92,246,.60)";                 // 主力带：紫
+    } else {
+      g.fillStyle = b.w >= 0.66 ? "rgba(59,130,246,.80)"     // 核心区 ≥66% 峰
+                                : "rgba(148,163,184,.32)";   // 边缘
+    }
     g.fillRect(gx, top, bw, hh);
   });
+  // POC：最密档中心
+  const py = chart.convertToPixel({ yAxisIndex: 0 }, (peak.p0 + peak.p1) / 2);
+  if (py != null && py > rect.y && py < rect.y + rect.height) {
+    g.strokeStyle = "rgba(147,197,253,.85)";
+    g.setLineDash([3, 3]);
+    g.beginPath(); g.moveTo(gx, py); g.lineTo(gx + maxW, py); g.stroke();
+    g.setLineDash([]);
+    g.fillStyle = "#93c5fd";
+    g.font = "10px system-ui, sans-serif";
+    g.fillText("POC " + ((peak.p0 + peak.p1) / 2).toFixed(2), gx + 2, py - 3);
+  }
 }
 
 async function loadFlow(code) {
