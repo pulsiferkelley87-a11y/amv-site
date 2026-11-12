@@ -101,6 +101,8 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
 }
 @media(max-width:760px){
   .bar{flex-wrap:nowrap;overflow-x:auto;gap:6px;padding:8px 10px}
+  .bar::-webkit-scrollbar,nav::-webkit-scrollbar{display:none}
+  .bar,nav{scrollbar-width:none;-ms-overflow-style:none}
   .bar .btn{padding:5px 9px;font-size:12px;border-radius:8px}
   .bar input{padding:5px 8px;font-size:12px;width:92px}
   section{scroll-margin-top:110px}
