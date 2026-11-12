@@ -1687,7 +1687,8 @@ function kvSVG() {
   const dispEnd = KV.end, dispStart = Math.max(0, dispEnd - KV.count + 1);
   const pad = 3, i0 = Math.max(0, dispStart - pad), i1 = Math.min(n - 1, dispEnd + pad);
   const rows = bars.slice(i0, i1 + 1), m = rows.length;
-  const W = 1000, H = 440, PL = 54, PR = 12, PT = 10, PB = 22, volH = 68;
+  const GUT = (CUR.flags.chips || CUR.flags.flow) ? 136 : 0;
+  const W = 1000, H = 440, PL = 54, PR = 12 + GUT, PT = 10, PB = 22, volH = 68;
   const ih = H - PT - PB - volH, iw = W - PL - PR, bw = iw / Math.max(1, m);
   let hi = -Infinity, lo = Infinity, maxV = 0;
   rows.forEach((b) => { if (b.h > hi) hi = b.h; if (b.l < lo) lo = b.l; if (b.v > maxV) maxV = b.v; });
@@ -1715,26 +1716,31 @@ function kvSVG() {
   const flowMap = (typeof FLOW !== "undefined" && FLOW && FLOW.days) || null;
   if (CUR.flags.chips || CUR.flags.flow) {
     const useFlow = !!CUR.flags.flow;
-    const cp = chipsFor(bars, dispStart, dispEnd, 20, useFlow ? flowMap : null);
-    if (cp) {
-      const xR = W - PR - 2, maxW = Math.min(iw * 0.3, 220);
+    const cp = chipsFor(bars, dispStart, dispEnd, 44, useFlow ? flowMap : null);
+    if (cp && cp.length) {
+      const xR = W - 14, maxW = Math.max(56, GUT - 14);
       let peak = 0;
-      for (let j = 0; j < cp.M; j++) peak = Math.max(peak, cp.dens[j]);
+      cp.forEach((o) => { if (o.w > peak) peak = o.w; });
+      peak = peak || 1;
       let bb = "";
-      for (let j = 0; j < cp.M; j++) {
-        const d = cp.dens[j];
-        if (!(d > 0)) continue;
-        const w = (d / (peak || 1)) * maxW;
-        const yT = Y(cp.bound(j + 1)), yB = Y(cp.bound(j));
-        const core = d >= peak * 0.66;
+      let poc = cp[0], pocW = -1;
+      cp.forEach((o) => {
+        if (!(o.w > 0)) return;
+        if (o.w > pocW) { pocW = o.w; poc = o; }
+        const w = (o.w / peak) * maxW;
+        const yT = Y(o.p1), yB = Y(o.p0);
+        const core = o.w >= 0.66;
         const fill = useFlow ? (core ? "#8b5cf6" : "#94a3b8") : (core ? "#3b82f6" : "#94a3b8");
         bb += `<rect x="${(xR - w).toFixed(1)}" y="${yT.toFixed(1)}" width="${w.toFixed(1)}"`
-          + ` height="${Math.max(0.9, yB - yT).toFixed(1)}" fill="${fill}" opacity="${core ? 0.6 : 0.24}"/>`;
-      }
-      const yP = Y(cp.poc);
+          + ` height="${Math.max(0.9, yB - yT).toFixed(1)}" fill="${fill}" opacity="${core ? 0.65 : 0.26}"/>`;
+      });
+      const pocP = (poc.p0 + poc.p1) / 2;
+      const yP = Y(pocP);
       chipsSvg = `<g>${bb}`
-        + `<line x1="${(xR - maxW).toFixed(1)}" y1="${yP.toFixed(1)}" x2="${xR.toFixed(1)}" y2="${yP.toFixed(1)}" stroke="${useFlow ? "#8b5cf6" : "#3b82f6"}" stroke-width="1.2" stroke-dasharray="4,3"/>`
-        + `<text x="${(xR - maxW + 2).toFixed(1)}" y="${(yP - 4).toFixed(1)}" font-size="9.5" fill="${useFlow ? "#c4b5fd" : "#93c5fd"}">${useFlow ? "主力POC" : "POC"} ${fmt2(cp.poc)}</text></g>`;
+        + `<line x1="${(xR - maxW).toFixed(1)}" y1="${yP.toFixed(1)}" x2="${xR.toFixed(1)}" y2="${yP.toFixed(1)}"`
+        + ` stroke="${useFlow ? "#8b5cf6" : "#3b82f6"}" stroke-width="1.2" stroke-dasharray="4,3"/>`
+        + `<text x="${(xR - maxW + 2).toFixed(1)}" y="${(yP - 4).toFixed(1)}" font-size="9.5"`
+        + ` fill="${useFlow ? "#c4b5fd" : "#93c5fd"}">${useFlow ? "主力POC" : "POC"} ${fmt2(pocP)}</text></g>`;
     }
   }
 
