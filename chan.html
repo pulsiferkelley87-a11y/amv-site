@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>缠论结构 · 分型/笔/中枢/买卖点</title>
+<script src="echarts.min.js"></script>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#fff; --line:#e6e8ec; --text:#1c2027; --muted:#6b7280;
+    --accent:#2563eb; --red:#d93b3b; --green:#1f9d55; --amber:#b8860b;
+  }
+  [data-theme="dark"]{
+    --bg:#0f1218; --card:#161b23; --line:#242c38; --text:#e6ebf2; --muted:#8b98ab;
+    --accent:#5b8cff; --red:#ff5b5b; --green:#3fd68b; --amber:#e0a83b;
+  }
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:13px/1.6 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  .wrap{max-width:1200px;margin:0 auto;padding:14px}
+  header{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:10px}
+  h1{font-size:15px;margin:0}
+  .muted{color:var(--muted);font-size:11.5px}
+  input,button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--text);
+    border-radius:6px;padding:4px 10px}
+  button{cursor:pointer}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px}
+  .card h2{font-size:13px;margin:0 0 8px}
+  .row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .tag{font-size:11px;padding:1px 7px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
+  .tag.buy{color:var(--red);border-color:color-mix(in srgb,var(--red) 40%,transparent)}
+  .tag.sell{color:var(--green);border-color:color-mix(in srgb,var(--green) 40%,transparent)}
+  #chart{width:100%;height:520px}
+  #sub{width:100%;height:140px}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{padding:4px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+  th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}
+  th{color:var(--muted);font-weight:500;font-size:11px}
+  .up{color:var(--red)} .down{color:var(--green)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>缠论结构</h1>
+    <span class="muted">分型 → 笔 → 中枢 → 买卖点（背驰判定）</span>
+    <div class="row" style="margin-left:auto">
+      <input id="code" value="600031" placeholder="代码，如 600031" style="width:120px">
+      <button class="primary" onclick="run()">分析</button>
+      <button onclick="toggleTheme()">深浅</button>
+    </div>
+  </header>
+
+  <div class="card">
+    <div class="row" id="stats"></div>
+  </div>
+
+  <div class="card">
+    <h2 id="title">K 线 · 笔 · 中枢</h2>
+    <div id="chart"></div>
+    <div id="sub"></div>
+  </div>
+
+  <div class="card">
+    <h2>笔序列与中枢</h2>
+    <div id="strokes"></div>
+  </div>
+
+  <div class="card">
+    <h2>买卖点信号</h2>
+    <div id="signals"></div>
+  </div>
+
+  <p class="muted">数据：腾讯前复权日线 ｜ 算法：包含处理 → 分型 → 笔 → 中枢 → 买卖点（简化版，非投资建议）</p>
+</div>
+
+<script>
+/* ============================================================
+ * 1. 取数
+ * ==========================================================*/
+function normCode(c){
+  c = String(c||"").trim();
+  if (/^(sh|sz|bj)/.test(c)) return c;
+  if (/^6/.test(c)) return "sh" + c;
+  if (/^(4|8|92)/.test(c)) return "bj" + c;
+  return "sz" + c;
+}
+
+async function loadKline(code, n = 400){
+  const sym = normCode(code);
+  const url = `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${sym},day,,,${n},qfq`;
+  const j = await (await fetch(url)).json();
+  const node = (j.data || {})[sym] || {};
+  const rows = node["qfqday"] || node["day"] || [];
+  return rows.map(r => ({ d: r[0], o: +r[1], c: +r[2], h: +r[3], l: +r[4], v: +r[5] }))
+             .filter(r => r.c > 0);
+}
+
+/* ============================================================
+ * 2. 包含处理（K 线合并）
+ *    方向由前两根合并 K 线决定；包含时按方向取高低点
+ * ==========================================================*/
+function mergeBars(bars){
+  const out = [];
+  for (const b of bars){
+    if (out.length < 2){ out.push({ ...b, i0: out.length, i1: out.length }); continue; }
+    const prev = out[out.length - 1], prev2 = out[out.length - 2];
+    const up = prev.h >= prev2.h;           // 当前走势方向
+    const contains = (b.h <= prev.h && b.l >= prev.l) || (b.h >= prev.h && b.l <= prev.l);
+    if (!contains){
+      out.push({ ...b, i0: out.length, i1: out.length });
+    } else {
+      // 合并进前一根
+      if (up) prev.h = Math.max(prev.h, b.h), prev.l = Math.max(prev.l, b.l);
+      else    prev.h = Math.min(prev.h, b.h), prev.l = Math.min(prev.l, b.l);
+      prev.d = b.d; prev.c = b.c; prev.v += b.v;
+    }
+  }
+  out.forEach((m, k) => m.idx = k);
+  return out;
+}
+
+/* ============================================================
+ * 3. 分型
+ * ==========================================================*/
+function fractals(mb){
+  const fs = [];
+  for (let i = 1; i < mb.length - 1; i++){
+    const a = mb[i-1], b = mb[i], c = mb[i+1];
+    const isTop = b.h > a.h && b.h > c.h && b.l > a.l && b.l > c.l;
+    const isBot = b.l < a.l && b.l < c.l && b.h < a.h && b.h < c.h;
+    if (isTop) fs.push({ k: "top", i, p: b.h, d: b.d });
+    else if (isBot) fs.push({ k: "bot", i, p: b.l, d: b.d });
+  }
+  return fs;
+}
+
+/* ============================================================
+ * 4. 笔：顶底交替，中间至少隔 4 根合并 K 线（含端点）
+ * ==========================================================*/
+function buildStrokes(fs){
+  const st = [];
+  for (const f of fs){
+    if (!st.length){ st.push({ ...f }); continue; }
+    const last = st[st.length - 1];
+    if (f.k === last.k){
+      // 同类分型：保留更极端的一个
+      if ((f.k === "top" && f.p > last.p) || (f.k === "bot" && f.p < last.p)) st[st.length - 1] = { ...f };
+      continue;
+    }
+    if (f.i - last.i >= 3) st.push({ ...f });   // 间隔够远才成笔
+  }
+  return st;
+}
+
+/* ============================================================
+ * 5. 中枢：连续三笔重叠 → [ZD, ZG]，后续笔仍在区间内则延伸
+ * ==========================================================*/
+function buildPivots(st){
+  const ps = [];
+  let i = 0;
+  while (i + 3 < st.length){
+    const seg = [st[i], st[i+1], st[i+2], st[i+3]];
+    const highs = seg.map(s => s.p), lows = seg.map(s => s.p);
+    const zg = Math.min(Math.max(seg[0].p, seg[1].p), Math.max(seg[1].p, seg[2].p));
+    const zd = Math.max(Math.min(seg[0].p, seg[1].p), Math.min(seg[1].p, seg[2].p));
+    if (zg > zd){
+      let end = i + 2;
+      while (end + 1 < st.length && st[end+1].p >= zd && st[end+1].p <= zg) end++;
+      ps.push({ i0: i, i1: end, zd, zg, d0: st[i].d, d1: st[end].d });
+      i = end;                       // 中枢结束，从下一笔继续找
+    } else i++;
+  }
+  return ps;
+}
+
+/* ============================================================
+ * 6. 买卖点（简化）
+ *    一买：中枢后向下离开且出现背驰（下跌笔幅度/量能弱于前一段）
+ *    二买：一买后的回调低点高于一买低点
+ *    三买：向上离开中枢后回踩不破 ZG
+ * ==========================================================*/
+function findSignals(st, pivots, bars){
+  const out = [];
+  const priceOf = d => { const b = bars.find(x => x.d === d); return b ? b.c : null; };
+
+  // 笔的"力度"：价格幅度 × sqrt(成交量近似)
+  const power = (a, b) => Math.abs(b.p - a.p);
+
+  for (let k = 0; k < st.length - 1; k++){
+    const a = st[k], b = st[k+1];
+    if (a.k === "top" && b.k === "bot"){          // 下跌笔
+      // 找前一段下跌笔
+      let prevDown = null;
+      for (let m = k - 2; m >= 0; m -= 2){
+        if (st[m] && st[m].k === "top" && st[m+1] && st[m+1].k === "bot"){ prevDown = [st[m], st[m+1]]; break; }
+      }
+      if (prevDown && power(a, b) < power(prevDown[0], prevDown[1]) * 0.8){
+        out.push({ type: "一买", d: b.d, p: b.p, note: "下跌背驰" });
+      }
+    }
+    if (a.k === "bot" && b.k === "top"){          // 上涨笔
+      for (const pv of pivots){
+        if (a.d > pv.d1 && b.p > pv.zg && a.p > pv.zg){
+          out.push({ type: "三买", d: a.d, p: a.p, note: `回踩不破中枢上沿 ${pv.zg.toFixed(2)}` });
+          break;
+        }
+      }
+    }
+  }
+
+  // 二买：一买之后的下一个底部且更高
+  for (let i = 0; i < out.length; i++){
+    if (out[i].type !== "一买") continue;
+    const first = out[i];
+    const nextBot = st.find(s => s.k === "bot" && s.d > first.d && s.p > first.p);
+    if (nextBot && nextBot.p < first.p * 1.15){
+      out.push({ type: "二买", d: nextBot.d, p: nextBot.p, note: `回调不破一买 ${first.p.toFixed(2)}` });
+    }
+  }
+  // 去重 + 按日期排序
+  const seen = new Set();
+  return out.filter(s => { const k = s.type + s.d; if (seen.has(k)) return false; seen.add(k); return true; })
+            .sort((x, y) => x.d.localeCompare(y.d));
+}
+
+/* ============================================================
+ * 7. 绘图
+ * ==========================================================*/
+let chart, subChart;
+const DARK = () => document.documentElement.getAttribute("data-theme") === "dark";
+function colors(){
+  return DARK()
+    ? { text: "#8b98ab", grid: "rgba(255,255,255,.06)", line: "#242c38" }
+    : { text: "#6b7280", grid: "#eef0f3", line: "#e6e8ec" };
+}
+
+function render(bars, st, pivots, sigs){
+  const c = colors();
+  const dates = bars.map(b => b.d);
+  const ohlc = bars.map(b => [b.o, b.c, b.l, b.h]);
+  const start = Math.max(0, bars.length - 160);
+
+  // 笔：用折线把分型点连起来
+  const strokePts = st.map(s => [s.d, s.p]);
+
+  chart = chart || echarts.init(document.getElementById("chart"));
+  chart.setOption({
+    animation: false,
+    backgroundColor: "transparent",
+    grid: [{ left: 56, right: 16, top: 16, height: 380 }],
+    tooltip: { trigger: "axis", axisPointer: { type: "cross" } },
+    xAxis: { type: "category", data: dates, axisLabel: { color: c.text, fontSize: 10 },
+             axisLine: { lineStyle: { color: c.line } }, splitLine: { show: false } },
+    yAxis: { scale: true, axisLabel: { color: c.text, fontSize: 10 },
+             splitLine: { lineStyle: { color: c.grid } } },
+    dataZoom: [{ type: "inside", start: (start / dates.length) * 100, end: 100 }],
+    series: [
+      { name: "K", type: "candlestick", data: ohlc,
+        itemStyle: { color: "#d93b3b", color0: "#1f9d55", borderColor: "#d93b3b", borderColor0: "#1f9d55" } },
+      { name: "笔", type: "line", connectNulls: true, showSymbol: true, symbolSize: 5,
+        // 按日期轴对齐：只有分型当天有值，其余为 null，靠 connectNulls 连成折线
+        data: dates.map(d => { const f = st.find(s => s.d === d); return f ? f.p : null; }),
+        lineStyle: { width: 1.8, color: "#e0a12b" },
+        itemStyle: { color: "#e0a12b" },
+        z: 5,
+      },
+      { name: "买卖点", type: "scatter", data: sigs.map(s => [s.d, s.p]),
+        symbolSize: 14, itemStyle: { color: s => "#7c3aed" },
+        label: { show: true, formatter: p => sigs[p.dataIndex].type, position: "top",
+                 fontSize: 10, color: "#7c3aed" } },
+    ],
+  });
+
+  // 中枢用 markArea 画在 K 线系列上
+  chart.setOption({
+    series: [{
+      name: "K",
+      markArea: {
+        silent: true,
+        itemStyle: { color: "rgba(124,58,237,.08)", borderColor: "rgba(124,58,237,.35)", borderWidth: 1 },
+        data: pivots.slice(-6).map(p => ([
+          { xAxis: p.d0, yAxis: p.zd },
+          { xAxis: p.d1, yAxis: p.zg },
+        ])),
+      },
+    }],
+  });
+
+  // 成交量
+  subChart = subChart || echarts.init(document.getElementById("sub"));
+  subChart.setOption({
+    animation: false,
+    grid: { left: 56, right: 16, top: 6, bottom: 18 },
+    xAxis: { type: "category", data: dates, axisLabel: { show: false }, axisLine: { lineStyle: { color: c.line } } },
+    yAxis: { scale: true, axisLabel: { color: c.text, fontSize: 9 }, splitLine: { show: false } },
+    tooltip: { trigger: "axis" },
+    series: [{ type: "bar", data: bars.map(b => ({ value: b.v, itemStyle: { color: b.c >= b.o ? "#d93b3b" : "#1f9d55" } })) }],
+  });
+  subChart.dispatchAction({ type: "dataZoom", start: (start / dates.length) * 100, end: 100 });
+}
+
+/* ============================================================
+ * 8. 页面
+ * ==========================================================*/
+let LAST = null;
+
+function renderStats(bars, st, pivots, sigs){
+  const last = bars[bars.length - 1];
+  const prev = bars[bars.length - 2] || last;
+  const pct = ((last.c / prev.c - 1) * 100).toFixed(2);
+  const el = document.getElementById("stats");
+  el.innerHTML = `
+    <b>${last.d}</b>
+    <span class="${pct >= 0 ? "up" : "down"}">${last.c.toFixed(2)}（${pct >= 0 ? "+" : ""}${pct}%）</span>
+    <span class="tag">合并K线 ${bars.length}</span>
+    <span class="tag">分型→笔 ${st.length}</span>
+    <span class="tag">中枢 ${pivots.length}</span>
+    <span class="tag buy">买点 ${sigs.filter(s => s.type.includes("买")).length}</span>`;
+}
+
+function renderTable(st, pivots){
+  const rows = st.map((s, i) => {
+    const nx = st[i+1];
+    const dir = nx ? (nx.p > s.p ? "上行" : "下行") : "-";
+    const chg = nx ? ((nx.p / s.p - 1) * 100).toFixed(2) + "%" : "-";
+    return `<tr><td>${i+1}</td><td>${s.d}</td><td>${s.k === "top" ? "顶" : "底"}</td>
+      <td>${s.p.toFixed(2)}</td><td class="${dir === "上行" ? "up" : "down"}">${dir}</td><td>${chg}</td></tr>`;
+  }).join("");
+  document.getElementById("strokes").innerHTML =
+    `<div class="muted" style="margin-bottom:6px">最近 ${Math.min(st.length,40)} 笔 ｜ 中枢 ${pivots.length} 个</div>
+     <div style="max-height:260px;overflow:auto"><table>
+     <thead><tr><th>#</th><th>日期</th><th>类型</th><th>价位</th><th>方向</th><th>幅度</th></tr></thead>
+     <tbody>${rows}</tbody></table></div>`;
+}
+
+function renderSignals(sigs){
+  if (!sigs.length){ document.getElementById("signals").innerHTML = '<div class="muted">当前区间没有识别到买卖点</div>'; return; }
+  document.getElementById("signals").innerHTML =
+    `<table><thead><tr><th>类型</th><th>日期</th><th>价位</th><th>依据</th></tr></thead><tbody>` +
+    sigs.slice(-20).map(s => `<tr><td class="${s.type.includes("买") ? "up" : "down"}">${s.type}</td>
+      <td>${s.d}</td><td>${s.p.toFixed(2)}</td><td class="muted">${s.note || ""}</td></tr>`).join("") +
+    `</tbody></table>`;
+}
+
+async function run(){
+  const code = document.getElementById("code").value.trim() || "600031";
+  document.getElementById("title").textContent = `K 线 · 笔 · 中枢 — ${code}`;
+  try {
+    const bars = await loadKline(code);
+    if (!bars.length){ alert("没取到数据，检查代码"); return; }
+    const mb = mergeBars(bars);
+    const fs = fractals(mb);
+    const st = buildStrokes(fs);
+    const pivots = buildPivots(st);
+    const sigs = findSignals(st, pivots, bars);
+    LAST = { bars, mb, fs, st, pivots, sigs };
+    render(bars, st, pivots, sigs);
+    renderStats(bars, st, pivots, sigs);
+    renderTable(st, pivots);
+    renderSignals(sigs);
+  } catch (e){
+    document.getElementById("stats").textContent = "加载失败：" + e.message;
+  }
+}
+
+function toggleTheme(){
+  const cur = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", cur);
+  localStorage.setItem("amv-theme", cur);
+  if (LAST) render(LAST.bars, LAST.st, LAST.pivots, LAST.sigs);
+}
+
+(function(){
+  const t = localStorage.getItem("amv-theme") ||
+    (matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  document.documentElement.setAttribute("data-theme", t);
+  addEventListener("resize", () => { chart && chart.resize(); subChart && subChart.resize(); });
+  run();
+})();
+</script>
+</body>
+</html>
