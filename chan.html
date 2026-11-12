@@ -107,11 +107,14 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
   .bar input{padding:5px 8px;font-size:12px;width:92px}
   section{scroll-margin-top:110px}
   .bar .btn, .bar input, .bar select{flex:0 0 auto}
+  #kvSvg{height:300px;min-height:0}
   #klineMeta{display:none}
   .bar{min-width:0}
   .card,.kl,.kl>div{min-width:0}
   body{overflow-x:hidden}
 }
+#macd{display:none}
+@media(min-width:761px){#kvSvg{min-height:380px}}
 </style>
 </head>
 <body>
@@ -296,7 +299,7 @@ $$("nav .tab").forEach((b) =>
     $$("nav .tab").forEach((x) => x.classList.toggle("on", x === b));
     $$("main section").forEach((s) => s.classList.toggle("on", s.id === b.dataset.t));
     if (b.dataset.t === "kline") setTimeout(() => {
-      if (!chart && CUR.res) draw(CUR.bars, CUR.res);
+      if (!chart && CUR.res) drawSVG(CUR.bars, CUR.res);
       chart && chart.resize(); macdChart && macdChart.resize();
     }, 50);
     if (b.dataset.t === "market") setTimeout(ensureMarket, 50);
@@ -726,7 +729,7 @@ async function loadKline(code) {
   CUR.bars = use; CUR.res = res;
   loadFlow(code);
   $("#klineMeta").textContent = `${code} ｜ ${use.length} 根 ｜ 笔 ${res.sl.length} ｜ 段 ${res.segs.length} ｜ 中枢 ${res.pivots.length} ｜ 信号 ${res.sig.length}`;
-  draw(use, res);
+  drawSVG(use, res);
   drawStruct(use, res);
   const lg = document.querySelector("#klLegend");
   if (lg) lg.innerHTML = "日K（前复权）｜橙 MA5 · 蓝 MA10 · 紫 MA20 · 紫 MA60 ｜ "
@@ -1016,7 +1019,7 @@ $$("#kline .bar button[data-flag]").forEach((b) =>
       if (ob) ob.classList.remove("on");
     }
     b.classList.toggle("on", !!CUR.flags[k]);
-    draw(CUR.bars, CUR.res);
+    drawSVG(CUR.bars, CUR.res);
   })
 );
 $("#refresh").onclick = () => { loadScan(); loadLive(); };
@@ -1184,7 +1187,7 @@ async function loadFlow(code) {
     const j = await (await fetch(COS + "/flow/" + code + ".json?t=" + Date.now())).json();
     if (j && j.days) FLOW = j;
   } catch (e) { /* 没有就算了 */ }
-  if (CUR.flags.flow) drawChipOverlay();
+  if (CUR.flags.flow) drawChipOverlaySVG();
 }
 
 let APPDATA = null;
@@ -1367,6 +1370,290 @@ loadScan();
 loadLive();
 loadKline("600031");
 window.addEventListener("resize", () => { chart && chart.resize(); macdChart && macdChart.resize(); });
+
+/* ============================================================
+ * SVG K 线（画法对齐主站 live.html）
+ * 蜡烛 + 成交量 + MA5/10/20/60 + 筹码带/主力带 + 关键位带
+ * + 缠论叠加：笔 / 线段 / 中枢 / 买卖点
+ * 缩放：滚轮 20~500 根、拖动平移、双击复位；点蜡烛看当天分时
+ * ============================================================ */
+const KV = { count: 150, end: 0, drag: null, moved: false, hover: -1 };
+const kvClamp = (v, a, b) => Math.max(a, Math.min(b, v));
+function kvInit() {
+  if (!CUR.bars || !CUR.bars.length) return;
+  KV.end = CUR.bars.length - 1;
+  KV.count = Math.min(150, CUR.bars.length);
+}
+
+function kvMA(bars, p) {
+  const out = new Array(bars.length).fill(null);
+  let sum = 0;
+  for (let i = 0; i < bars.length; i++) {
+    sum += bars[i].c;
+    if (i >= p) sum -= bars[i - p].c;
+    if (i >= p - 1) out[i] = sum / p;
+  }
+  return out;
+}
+
+function kvSVG() {
+  const bars = CUR.bars;
+  if (!bars || !bars.length) return "";
+  const res = CUR.res || { sl: [], segs: [], pivots: [], sig: [] };
+  const n = bars.length;
+  if (!(KV.end > 0) || KV.end > n - 1) { KV.end = n - 1; KV.count = Math.min(150, n); }
+  KV.end = kvClamp(KV.end, 1, n - 1);
+  KV.count = kvClamp(KV.count, 20, 500);
+  const dispEnd = KV.end, dispStart = Math.max(0, dispEnd - KV.count + 1);
+  const pad = 3, i0 = Math.max(0, dispStart - pad), i1 = Math.min(n - 1, dispEnd + pad);
+  const rows = bars.slice(i0, i1 + 1), m = rows.length;
+  const W = 1000, H = 440, PL = 54, PR = 12, PT = 10, PB = 22, volH = 68;
+  const ih = H - PT - PB - volH, iw = W - PL - PR, bw = iw / Math.max(1, m);
+  let hi = -Infinity, lo = Infinity, maxV = 0;
+  rows.forEach((b) => { if (b.h > hi) hi = b.h; if (b.l < lo) lo = b.l; if (b.v > maxV) maxV = b.v; });
+  if (!isFinite(hi) || !isFinite(lo)) return "";
+  const rg = (hi - lo) || 1; maxV = maxV || 1;
+  const X = (i) => PL + i * bw + bw / 2;
+  const Y = (v) => PT + (1 - (v - lo) / rg) * ih;
+  const VY = (v) => H - PB - (v / maxV) * volH;
+  const fmt2 = (v) => (Math.round(v * 100) / 100).toFixed(2);
+  window.__KV = { flags: { ...CUR.flags }, sl: (res.sl || []).length, i0, i1, n,
+    firstSl: (res.sl && res.sl[0]) ? { i0: res.sl[0].i0, i1: res.sl[0].i1, p0: res.sl[0].p0 } : null };
+
+  // 网格 + 价格刻度
+  let grid = "";
+  for (let k = 0; k <= 4; k++) {
+    const gy = PT + (k / 4) * ih, val = hi - (k / 4) * rg;
+    grid += `<line x1="${PL}" y1="${gy.toFixed(1)}" x2="${W - PR}" y2="${gy.toFixed(1)}" stroke="rgba(148,163,184,.14)" stroke-width="1"/>`
+      + `<text x="${PL - 6}" y="${(gy + 3).toFixed(1)}" font-size="10" fill="#8b98ad" text-anchor="end">${fmt2(val)}</text>`;
+  }
+  // 成交量基线
+  grid += `<line x1="${PL}" y1="${H - PB}" x2="${W - PR}" y2="${H - PB}" stroke="rgba(148,163,184,.25)" stroke-width="1"/>`;
+
+  // 筹码带 / 主力带（右侧内部，TDX 层序：VA底 → 峰 → POC → K线在下层）
+  let chipsSvg = "";
+  const flowMap = (typeof FLOW !== "undefined" && FLOW && FLOW.days) || null;
+  if (CUR.flags.chips || CUR.flags.flow) {
+    const useFlow = !!CUR.flags.flow;
+    const cp = chipsFor(bars, dispStart, dispEnd, 20, useFlow ? flowMap : null);
+    if (cp) {
+      const xR = W - PR - 2, maxW = Math.min(iw * 0.3, 220);
+      let peak = 0;
+      for (let j = 0; j < cp.M; j++) peak = Math.max(peak, cp.dens[j]);
+      let bb = "";
+      for (let j = 0; j < cp.M; j++) {
+        const d = cp.dens[j];
+        if (!(d > 0)) continue;
+        const w = (d / (peak || 1)) * maxW;
+        const yT = Y(cp.bound(j + 1)), yB = Y(cp.bound(j));
+        const core = d >= peak * 0.66;
+        const fill = useFlow ? (core ? "#8b5cf6" : "#94a3b8") : (core ? "#3b82f6" : "#94a3b8");
+        bb += `<rect x="${(xR - w).toFixed(1)}" y="${yT.toFixed(1)}" width="${w.toFixed(1)}"`
+          + ` height="${Math.max(0.9, yB - yT).toFixed(1)}" fill="${fill}" opacity="${core ? 0.6 : 0.24}"/>`;
+      }
+      const yP = Y(cp.poc);
+      chipsSvg = `<g>${bb}`
+        + `<line x1="${(xR - maxW).toFixed(1)}" y1="${yP.toFixed(1)}" x2="${xR.toFixed(1)}" y2="${yP.toFixed(1)}" stroke="${useFlow ? "#8b5cf6" : "#3b82f6"}" stroke-width="1.2" stroke-dasharray="4,3"/>`
+        + `<text x="${(xR - maxW + 2).toFixed(1)}" y="${(yP - 4).toFixed(1)}" font-size="9.5" fill="${useFlow ? "#c4b5fd" : "#93c5fd"}">${useFlow ? "主力POC" : "POC"} ${fmt2(cp.poc)}</text></g>`;
+    }
+  }
+
+  // 关键位带
+  let levelSvg = "";
+  if (CUR.flags.levels) {
+    const lv = keyLevels(bars);
+    const band = (p, color, tag) => {
+      const up = p * 1.015, dn = p * 0.985;
+      const yT = Y(Math.min(up, hi)), yB = Y(Math.max(dn, lo));
+      const py = Y(p);
+      return `<rect x="${PL}" y="${yT.toFixed(1)}" width="${iw.toFixed(1)}" height="${Math.max(1, yB - yT).toFixed(1)}" fill="${color}" opacity="0.1"/>`
+        + `<line x1="${PL}" y1="${py.toFixed(1)}" x2="${W - PR}" y2="${py.toFixed(1)}" stroke="${color}" stroke-width="1" stroke-dasharray="5,4" opacity="0.85"/>`
+        + `<text x="${W - PR - 6}" y="${(py - 3).toFixed(1)}" font-size="9.5" fill="${color}" text-anchor="end">${tag} ${fmt2(p)}</text>`;
+    };
+    lv.forEach((l) => { levelSvg += band(l.p, l.k === "up" ? "#ef4444" : "#22c55e", l.t); });
+    const hh120 = Math.max.apply(null, bars.slice(-120).map((b) => b.h));
+    if (hh120 > 0) {
+      const py = Y(hh120);
+      levelSvg += `<line x1="${PL}" y1="${py.toFixed(1)}" x2="${W - PR}" y2="${py.toFixed(1)}" stroke="#38bdf8" stroke-width="1.2"/>`
+        + `<text x="${W - PR - 6}" y="${(py - 3).toFixed(1)}" font-size="9.5" fill="#7dd3fc" text-anchor="end">突破 ${fmt2(hh120)}</text>`;
+    }
+  }
+
+  // 蜡烛 + 成交量
+  let candles = "", volbars = "";
+  rows.forEach((b, i) => {
+    const up = b.c >= b.o, col = up ? "#d64545" : "#2fa36b";
+    const cx = X(i), cw = Math.max(1, bw * 0.68);
+    candles += `<line x1="${cx.toFixed(1)}" y1="${Y(b.h).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${Y(b.l).toFixed(1)}" stroke="${col}" stroke-width="1"/>`;
+    const yT = Y(Math.max(b.o, b.c)), yB = Y(Math.min(b.o, b.c));
+    candles += `<rect data-d="${b.d}" x="${(cx - cw / 2).toFixed(1)}" y="${yT.toFixed(1)}" width="${cw.toFixed(1)}" height="${Math.max(1.2, yB - yT).toFixed(1)}" fill="${col}"/>`;
+    volbars += `<rect data-d="${b.d}" x="${(cx - cw / 2).toFixed(1)}" y="${VY(b.v).toFixed(1)}" width="${cw.toFixed(1)}" height="${Math.max(1, H - PB - VY(b.v)).toFixed(1)}" fill="${col}" opacity="0.5"/>`;
+  });
+
+  // 均线（全序列计算，裁剪到可视区）
+  const maDefs = [[5, "#e0a03b"], [10, "#3b82f6"], [20, "#a855f7"], [60, "#8b5cf6"]];
+  let maSvg = "";
+  maDefs.forEach(([p, col]) => {
+    const arr = kvMA(bars, p);
+    let d = "";
+    for (let gi = i0; gi <= i1; gi++) {
+      const v = arr[gi];
+      if (v == null) continue;
+      const i = gi - i0;
+      d += (d ? "L" : "M") + X(i).toFixed(1) + " " + Y(v).toFixed(1);
+    }
+    if (d) maSvg += `<path d="${d}" fill="none" stroke="${col}" stroke-width="1.1" opacity="0.9"/>`;
+  });
+
+  // 缠论：笔 / 线段 / 中枢 / 买卖点
+  let chanSvg = "";
+  const mi = res.mi || [];
+  const rawOf = (gi) => (mi[gi] !== undefined ? mi[gi] : gi);
+  const rowOf = (gi) => rawOf(gi) - i0;
+  if (CUR.flags.stroke && res.sl) {
+    let d = "";
+    res.sl.forEach((s) => {
+      const a = rowOf(s.i0), b = rowOf(s.i1);
+      if (b < 0 || a > m - 1) return;
+      d += (d ? "L" : "M") + X(a).toFixed(1) + " " + Y(s.p0).toFixed(1)
+        + "L" + X(b).toFixed(1) + " " + Y(s.p1).toFixed(1);
+    });
+    if (d) chanSvg += `<path d="${d}" fill="none" stroke="#f59e0b" stroke-width="1.3" opacity="0.9"/>`;
+  }
+  if (CUR.flags.seg && res.segs) {
+    res.segs.forEach((s) => {
+      if (s.i0 == null || s.i1 == null || s.p0 == null) return;
+      const a = rowOf(s.i0), b = rowOf(s.i1);
+      if (b < 0 || a > m - 1) return;
+      chanSvg += `<line x1="${X(a).toFixed(1)}" y1="${Y(s.p0).toFixed(1)}" x2="${X(b).toFixed(1)}" y2="${Y(s.p1).toFixed(1)}" stroke="#a78bfa" stroke-width="1.8" stroke-dasharray="6,4" opacity="0.9"/>`;
+    });
+  }
+  if (CUR.flags.pivot && res.pivots) {
+    res.pivots.forEach((p) => {
+      const a = rowOf(p.i0), b = rowOf(p.i1);
+      if (b < 0 || a > m - 1) return;
+      const x1 = X(Math.max(0, a)), x2 = X(Math.min(m - 1, b));
+      const yT = Y(p.zg), yB = Y(p.zd);
+      chanSvg += `<rect x="${x1.toFixed(1)}" y="${yT.toFixed(1)}" width="${Math.max(2, x2 - x1).toFixed(1)}" height="${Math.max(1, yB - yT).toFixed(1)}" fill="rgba(59,130,246,.10)" stroke="rgba(96,165,250,.45)" stroke-width="1"/>`;
+    });
+  }
+  if (CUR.flags.sig && res.sig) {
+    res.sig.forEach((s) => {
+      const a = rowOf(s.i);
+      if (a < 0 || a > m - 1) return;
+      const buy = s.type.indexOf("买") >= 0;
+      const col = buy ? "#f87171" : "#34d399";
+      const yy = Y(s.p) + (buy ? 14 : -10);
+      chanSvg += `<circle cx="${X(a).toFixed(1)}" cy="${Y(s.p).toFixed(1)}" r="3" fill="${col}"/>`
+        + `<text x="${X(a).toFixed(1)}" y="${yy.toFixed(1)}" font-size="9" fill="${col}" text-anchor="middle">${s.type}</text>`;
+    });
+  }
+
+  // 十字光标
+  const cross = `<g id="kvCross" style="display:none">
+      <line id="kvV" x1="0" y1="${PT}" x2="0" y2="${H - PB}" stroke="#94a3b8" stroke-width="0.8" stroke-dasharray="3,3"/>
+      <line id="kvH" x1="${PL}" y1="0" x2="${W - PR}" y2="0" stroke="#94a3b8" stroke-width="0.8" stroke-dasharray="3,3"/>
+      <rect id="kvBox" x="${PL}" y="${PT}" width="188" height="86" rx="4" fill="#0f172a" stroke="rgba(148,163,184,.35)" opacity="0.96"/>
+      <text id="kvText" x="${PL + 8}" y="${PT + 15}" font-size="10.5" fill="#cbd5e1"></text>
+    </g>`;
+
+  const legend = `日K（前复权）｜橙MA5 蓝MA10 紫MA20 紫MA60 ｜ 红=压力带 绿=支撑带 蓝=突破线 ｜ 筹码带：蓝=核心(≥66%峰) 灰=边缘，POC=最密档 ｜ ${(rows[dispStart - i0] || {}).d} ~ ${(rows[dispEnd - i0] || {}).d}`;
+
+  return `<svg id="kvSvg" viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="none"
+      style="display:block;width:100%;height:auto;touch-action:none;cursor:crosshair">
+    <rect x="0" y="0" width="${W}" height="${H}" fill="transparent"/>
+    ${grid}${levelSvg}${chipsSvg}${volbars}${candles}${maSvg}${chanSvg}${cross}
+    <text x="${PL}" y="${H - 5}" font-size="9.5" fill="#8b98ad">${legend}</text>
+  </svg>`;
+}
+
+function kvPaint() {
+  const host = document.querySelector("#klWrap");
+  if (!host || !CUR.bars) return;
+  host.innerHTML = kvSVG();
+  kvBind();
+}
+
+function kvBind() {
+  const svg = document.querySelector("#kvSvg");
+  if (!svg) return;
+  const n = CUR.bars.length;
+  svg.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    KV.count = kvClamp(Math.round(KV.count * (e.deltaY > 0 ? 1.2 : 0.8)), 20, 500);
+    kvPaint();
+  }, { passive: false });
+
+  svg.addEventListener("pointerdown", (e) => { KV.drag = e.clientX; KV.moved = false; });
+  window.addEventListener("pointerup", () => { KV.drag = null; });
+  svg.addEventListener("pointermove", (e) => {
+    if (KV.drag != null) {
+      const dx = e.clientX - KV.drag;
+      if (Math.abs(dx) > 3) {
+        const iw = 1000 - 66, bw = iw / KV.count;
+        const shift = Math.round(dx / (bw * (svg.clientWidth / 1000)));
+        if (shift) {
+          KV.end = kvClamp(KV.end - shift, 0, n - 1);
+          KV.drag = e.clientX; KV.moved = true;
+          kvPaint();
+        }
+      }
+      return;
+    }
+    // 十字光标
+    const rect = svg.getBoundingClientRect();
+    const px = ((e.clientX - rect.left) / rect.width) * 1000;
+    const dispStart = Math.max(0, KV.end - KV.count + 1);
+    const i0 = Math.max(0, dispStart - 3);
+    const bw = (1000 - 66) / Math.min(CUR.bars.length, KV.count + 6);
+    const idx = Math.round((px - 54 - bw / 2) / bw);
+    const gi = i0 + idx;
+    if (gi < 0 || gi >= n) return;
+    const b = CUR.bars[gi];
+    const g = svg.querySelector("#kvCross");
+    const v = svg.querySelector("#kvV"), h = svg.querySelector("#kvH");
+    const t = svg.querySelector("#kvText");
+    if (!g) return;
+    const rowsLo = -Infinity;
+    void rowsLo;
+    g.style.display = "";
+    v.setAttribute("x1", px.toFixed(1)); v.setAttribute("x2", px.toFixed(1));
+    const yv = e.clientY - rect.top;
+    h.setAttribute("y1", yv.toFixed(1)); h.setAttribute("y2", yv.toFixed(1));
+    const prev = gi > 0 ? CUR.bars[gi - 1].c : b.o;
+    const pct = ((b.c - prev) / prev) * 100;
+    const lbl = `<tspan x="62" dy="0">${b.d}</tspan>`
+      + `<tspan x="62" dy="13">开 ${b.o.toFixed(2)}  高 ${b.h.toFixed(2)}</tspan>`
+      + `<tspan x="62" dy="13">低 ${b.l.toFixed(2)}  收 ${b.c.toFixed(2)}</tspan>`
+      + `<tspan x="62" dy="13">涨跌 ${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</tspan>`
+      + `<tspan x="62" dy="13">量 ${(b.v / 10000).toFixed(1)} 万手</tspan>`;
+    t.innerHTML = lbl;
+  });
+  svg.addEventListener("pointerleave", () => {
+    const g = svg.querySelector("#kvCross");
+    if (g) g.style.display = "none";
+  });
+  svg.addEventListener("dblclick", () => {
+    KV.count = Math.min(250, n); KV.end = n - 1; kvPaint();
+  });
+  svg.addEventListener("click", (e) => {
+    if (KV.moved) { KV.moved = false; return; }
+    const d = e.target.getAttribute && e.target.getAttribute("data-d");
+    if (d && typeof showMinute === "function") showMinute(d);
+  });
+}
+
+// SVG 版绘制入口（替代 echarts 版）
+function drawSVG(bars, res) {
+  if (bars) CUR.bars = bars;
+  if (res) CUR.res = res;
+  if (!KV.count || KV.end >= (CUR.bars || []).length) kvInit();
+  kvPaint();
+}
+
+// 覆盖旧的 canvas 筹码层：统一走 SVG
+function drawChipOverlaySVG() { kvPaint(); }
+
 </script>
 </body>
 </html>
