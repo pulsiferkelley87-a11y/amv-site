@@ -1101,21 +1101,28 @@ function drawChipOverlay() {
     }
     g.fillRect(gx, top, bw, hh);
   });
-  // 关键位文字（画在最右侧留白，避免压住筹码柱）
+  // 关键位文字（画在最右侧留白，自动避让重叠）
   if (CUR.flags.levels) {
-    g.font = "10px system-ui, sans-serif";
+    const labels = [];
     keyLevels(CUR.bars).forEach((l) => {
       const yy = chart.convertToPixel({ yAxisIndex: 0 }, l.p);
       if (yy == null || yy < rect.y + 8 || yy > rect.y + rect.height - 4) return;
-      g.fillStyle = l.k === "up" ? "#fca5a5" : "#86efac";
-      g.fillText(l.t + " " + l.p.toFixed(2), host.clientWidth - 62, yy + 3);
+      labels.push({ y: yy, text: l.t + " " + l.p.toFixed(2), color: l.k === "up" ? "#fca5a5" : "#86efac" });
     });
     const hi = Math.max(...CUR.bars.slice(-120).map((b) => b.h));
     const yh = chart.convertToPixel({ yAxisIndex: 0 }, hi);
     if (yh != null && yh > rect.y && yh < rect.y + rect.height) {
-      g.fillStyle = "#7dd3fc";
-      g.fillText("突破 " + hi.toFixed(2), host.clientWidth - 62, yh - 4);
+      labels.push({ y: yh - 4, text: "突破 " + hi.toFixed(2), color: "#7dd3fc" });
     }
+    labels.sort((a, b) => a.y - b.y);
+    for (let i = 1; i < labels.length; i++) {
+      if (labels[i].y - labels[i - 1].y < 13) labels[i].y = labels[i - 1].y + 13;
+    }
+    g.font = "10px system-ui, sans-serif";
+    labels.forEach((l) => {
+      g.fillStyle = l.color;
+      g.fillText(l.text, host.clientWidth - 62, l.y + 3);
+    });
   }
 
   // POC：最密档中心
