@@ -87,7 +87,8 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
   .kl .side{margin-top:8px}
   #chart{height:300px}
   #macd{height:110px}
-  #klLegend{font-size:10px;line-height:1.5}
+  #klineMeta{white-space:nowrap}
+#klLegend{font-size:10px;line-height:1.5}
   #minBox svg{height:110px!important}
   table{display:block;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch}
   thead, tbody{display:table}
@@ -97,6 +98,12 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
   #favBar{gap:4px}
   .kpi .val{font-size:22px}
   main section .grid.g4{gap:8px}
+}
+@media(max-width:760px){
+  #klineMeta{display:none}
+  .bar{min-width:0}
+  .card,.kl,.kl>div{min-width:0}
+  body{overflow-x:hidden}
 }
 </style>
 </head>
