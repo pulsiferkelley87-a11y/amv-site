@@ -1081,22 +1081,24 @@ async function showConcepts() {
       const m = txt.match(/var\s+DATA\s*=\s*(\{[\s\S]*\})\s*;?\s*$/);
       APPDATA = JSON.parse(m ? m[1] : txt);
     }
-    const all = (APPDATA.blocks || []).filter((b) => (b.codes || b.members || []).map(String).includes(code));
-    if (!all.length) {
-      openModal(code + " 所属板块", '<div class="muted">没有该股的概念归属数据</div>');
+    const sm = APPDATA.sector_members || {};
+    const sInfo = {};
+    for (const s of APPDATA.sectors || []) sInfo[s.name] = s;
+    const hit = Object.keys(sm).filter((name) => (sm[name] || []).map(String).includes(code));
+    if (!hit.length) {
+      openModal(code + " 所属板块", '<div class="muted">该股不在现有板块成员表里（表里共 ' + Object.keys(sm).length + ' 个板块）</div>');
       return;
     }
-    const byType = {};
-    for (const b of all) {
-      const k = b.type || "其它";
-      (byType[k] = byType[k] || []).push(b);
-    }
-    const html = Object.keys(byType).map((k) => `
-      <div style="margin-bottom:12px">
-        <div class="muted" style="margin-bottom:6px">${k}（${byType[k].length}）</div>
-        <div>${byType[k].map((b) => `<span class="pill" style="margin:0 6px 6px 0;display:inline-block">${b.name}</span>`).join("")}</div>
-      </div>`).join("");
-    openModal(`${code} 所属板块（${all.length}）`, html);
+    const html = hit.map((name) => {
+      const s = sInfo[name] || {};
+      const pctv = s.pct == null ? "" : (s.pct > 0 ? "+" : "") + s.pct.toFixed(2) + "%";
+      return `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line)">
+        <span>${name}</span>
+        <span class="tabular-nums ${s.pct > 0 ? "up" : s.pct < 0 ? "down" : "muted"}">${pctv}</span>
+      </div>`;
+    }).join("");
+    openModal(`${code} 所属板块（${hit.length}）`, html +
+      '<div class="muted" style="margin-top:10px;font-size:12px">来源：app-data.js 的 sectors / sector_members（行业中类，不是概念题材库）</div>');
   } catch (e) {
     openModal(code + " 所属板块", '<div class="muted">概念数据取不到（app-data.js 解析失败）</div>');
   }
