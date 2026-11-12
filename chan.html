@@ -1108,13 +1108,13 @@ function drawChipOverlay() {
       const yy = chart.convertToPixel({ yAxisIndex: 0 }, l.p);
       if (yy == null || yy < rect.y + 8 || yy > rect.y + rect.height - 4) return;
       g.fillStyle = l.k === "up" ? "#fca5a5" : "#86efac";
-      g.fillText(l.t + " " + l.p.toFixed(2), gx + maxW + 6, yy + 3);
+      g.fillText(l.t + " " + l.p.toFixed(2), host.clientWidth - 62, yy + 3);
     });
     const hi = Math.max(...CUR.bars.slice(-120).map((b) => b.h));
     const yh = chart.convertToPixel({ yAxisIndex: 0 }, hi);
     if (yh != null && yh > rect.y && yh < rect.y + rect.height) {
       g.fillStyle = "#7dd3fc";
-      g.fillText("突破 " + hi.toFixed(2), gx + maxW + 6, yh - 4);
+      g.fillText("突破 " + hi.toFixed(2), host.clientWidth - 62, yh - 4);
     }
   }
 
