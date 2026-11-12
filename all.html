@@ -124,6 +124,8 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
   <div class="brand">缠论 · <b>缠中说禅</b></div>
   <button class="btn" id="refresh">刷新数据</button>
   <button class="btn ghost" id="scanBtn">全市场扫描</button>
+  <a class="btn ghost" href="index.html" title="原主页">主页</a>
+  <a class="btn ghost" href="live.html" title="原实盘页">实盘页</a>
   <div class="idx" id="idxBar"></div>
 </header>
 
@@ -432,20 +434,21 @@ async function loadScan() {
   } catch (e) {
     SCAN = null;
   }
-  renderHome(); renderPick(); renderBT();
+  renderHome(); renderPick(); renderBT(); try { renderAllHome(); } catch (e) {}
 }
 
 async function loadLive() {
   fetch(COS + "/bull_bear.json?t=" + Date.now()).then((r) => r.json())
-    .then((j) => { BB = j; if (location.hash.indexOf("live") >= 0) renderLive(); }).catch(() => {});
+    .then((j) => { BB = j; if (location.hash.indexOf("live") >= 0) renderLive(); try { renderAllHome(); } catch (e) {} }).catch(() => {});
   fetch(COS + "/breadth_history.json?t=" + Date.now())
     .then((r) => r.json())
-    .then((j) => { HIST = j; if (location.hash.indexOf("market") >= 0) renderMarket(); })
+    .then((j) => { HIST = j; if (location.hash.indexOf("market") >= 0) renderMarket(); try { renderAllHome(); } catch (e) {} })
     .catch(() => {});
   try {
     LIVE = await (await fetch(COS + "/live_data.json?t=" + Date.now())).json();
   } catch (e) { LIVE = null; }
   renderIdx(); renderMarket();
+  try { renderAllHome(); } catch (e) {}
 }
 
 async function ensureMarket() {
