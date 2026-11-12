@@ -152,6 +152,16 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
   </section>
 
   <!-- 缠论K线 -->
+  <div id="modal" style="display:none;position:fixed;inset:0;background:rgba(3,7,18,.72);z-index:99;align-items:center;justify-content:center">
+    <div style="background:var(--card);border:1px solid var(--line);border-radius:var(--radius);width:min(760px,92vw);max-height:80vh;overflow:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)">
+        <b id="modalTitle" style="font-size:13px"></b>
+        <button class="btn" id="modalClose">关闭 ✕</button>
+      </div>
+      <div id="modalBody" style="padding:12px 14px;font-size:13px"></div>
+    </div>
+  </div>
+
   <section id="kline">
     <div class="card">
       <div class="bar">
@@ -160,6 +170,8 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
         <button class="btn on" data-per="day">日线</button>
         <button class="btn" data-per="week">周线</button>
         <button class="btn" data-per="month">月线</button>
+        <button class="btn" data-per="m60">60分</button>
+        <button class="btn" data-per="m30">30分</button>
         <span style="width:10px"></span>
         <button class="btn on" data-flag="stroke">笔</button>
         <button class="btn on" data-flag="seg">线段</button>
@@ -170,6 +182,8 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
         <button class="btn" data-flag="flow">主力带</button>
         <button class="btn" data-flag="levels">关键位</button>
         <button class="btn" id="conceptBtn">概念</button>
+        <button class="btn" id="multiBtn">多级别</button>
+        <button class="btn" id="csvBtn">导出CSV</button>
         <button class="btn" id="favBtn">加自选</button>
         <span class="muted" id="klineMeta"></span>
       </div>
@@ -561,7 +575,31 @@ function emSecid(code) {
   // 东财：1=沪 0=深/北
   return (/^(6|9)/.test(code) ? '1.' : '0.') + code;
 }
-const KLT = { day: 101, week: 102, month: 103 };
+const KLT = { day: 101, week: 102, month: 103, m60: 60, m30: 30 };
+async function fromMinuteP7(code, stepMin) {
+  // 用 p7 分钟数据聚合出 30/60 分 K（只有精选池 124 只有）
+  const out = [];
+  const today = new Date();
+  for (let back = 0; back < 40 && out.length < 300; back++) {
+    const dd = new Date(today.getTime() - back * 86400000);
+    const ymd = `${dd.getFullYear()}${String(dd.getMonth() + 1).padStart(2, "0")}${String(dd.getDate()).padStart(2, "0")}`;
+    let j;
+    try { j = await (await fetch(`${COS}/minute/${code}/${ymd}/p7.json?t=1`)).json(); } catch (e) { continue; }
+    const bars = (j && j.bars) || [];
+    for (let i = 0; i < bars.length; i += stepMin) {
+      const chunk = bars.slice(i, i + stepMin).filter((b) => b && isFinite(b.c));
+      if (!chunk.length) continue;
+      out.push({
+        d: ymd.slice(0, 4) + "-" + ymd.slice(4, 6) + "-" + ymd.slice(6) + " " + (chunk[0].t || ""),
+        o: chunk[0].o, c: chunk[chunk.length - 1].c,
+        h: Math.max(...chunk.map((b) => b.h)), l: Math.min(...chunk.map((b) => b.l)),
+        v: chunk.reduce((s, b) => s + (b.vol || 0), 0),
+      });
+    }
+  }
+  return out.sort((a, b) => (a.d < b.d ? -1 : 1));
+}
+
 async function fetchBars(code, per = 'day') {
   // ① 优先读 COS 上的本地 dump（信号池股票都有，日线）
   if (per === 'day') {
@@ -572,7 +610,28 @@ async function fetchBars(code, per = 'day') {
       }
     } catch (e) { /* 没有就落到东财 */ }
   }
-  // ② 东财
+  // ② 30/60 分：先东财，失败回退分钟聚合
+  if (per === "m60" || per === "m30") {
+    const step = per === "m60" ? 60 : 30;
+    try {
+      const klt = KLT[per];
+      const u = "https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=" + emSecid(code)
+        + "&klt=" + klt + "&fqt=1&beg=0&end=20500101"
+        + "&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&_=" + Date.now();
+      const jj = await (await fetch(u)).json();
+      const kk = jj?.data?.klines || [];
+      if (kk.length > 30) {
+        return kk.map((s) => {
+          const [d, o, c, h, l, v] = s.split(',');
+          return { d, o: +o, c: +c, h: +h, l: +l, v: +v };
+        });
+      }
+    } catch (e) { /* 落回聚合 */ }
+    const agg = await fromMinuteP7(code, step);
+    if (agg.length) return agg;
+    throw new Error("no minute data");
+  }
+  // ③ 东财
   const klt = KLT[per] || 101;
   const u = "https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=" + emSecid(code)
     + "&klt=" + klt + "&fqt=1&beg=0&end=20500101"
@@ -612,9 +671,11 @@ function toMonth(bars) {
 async function loadKline(code) {
   $("#klineMeta").textContent = "加载中…";
   let bars;
-  try { bars = await fetchBars(code, "day"); } catch { $("#klineMeta").textContent = "拉取失败"; return; }
-  if (CUR.per === "week") bars = toWeek(bars);
-  else if (CUR.per === "month") bars = toMonth(bars);
+  const wantWeek = CUR.per === "week", wantMonth = CUR.per === "month";
+  try { bars = await fetchBars(code, wantWeek || wantMonth ? "day" : CUR.per); }
+  catch { $("#klineMeta").textContent = CUR.per === "m60" || CUR.per === "m30" ? "该股没有分钟数据" : "拉取失败"; return; }
+  if (wantWeek) bars = toWeek(bars);
+  else if (wantMonth) bars = toMonth(bars);
   if (!bars.length) { $("#klineMeta").textContent = "无数据（北交所暂不支持）"; return; }
   const per = CUR.per;
   const use = bars;
@@ -1012,22 +1073,32 @@ async function loadFlow(code) {
 
 let APPDATA = null;
 async function showConcepts() {
-  const box = document.querySelector("#favBar");
   const code = document.querySelector("#code").value.trim();
-  box.innerHTML = '<span class="muted">概念加载中…（首次要下 11 MB，之后走缓存）</span>';
+  openModal(code + " 所属板块", '<div class="muted">读取中…（首次要下 11 MB 概念表）</div>');
   try {
     if (!APPDATA) {
       const txt = await (await fetch(COS + "/app-data.js?t=" + Date.now())).text();
       const m = txt.match(/var\s+DATA\s*=\s*(\{[\s\S]*\})\s*;?\s*$/);
       APPDATA = JSON.parse(m ? m[1] : txt);
     }
-    const blocks = (APPDATA.blocks || []).filter((b) => (b.codes || b.members || []).map(String).includes(code));
-    box.innerHTML = blocks.length
-      ? `<span class="muted">${code} 所属：</span>` + blocks.slice(0, 14).map((b) =>
-          `<span class="pill" style="margin-right:6px">${b.name}</span>`).join("")
-      : `<span class="muted">${code} 没有概念归属数据</span>`;
+    const all = (APPDATA.blocks || []).filter((b) => (b.codes || b.members || []).map(String).includes(code));
+    if (!all.length) {
+      openModal(code + " 所属板块", '<div class="muted">没有该股的概念归属数据</div>');
+      return;
+    }
+    const byType = {};
+    for (const b of all) {
+      const k = b.type || "其它";
+      (byType[k] = byType[k] || []).push(b);
+    }
+    const html = Object.keys(byType).map((k) => `
+      <div style="margin-bottom:12px">
+        <div class="muted" style="margin-bottom:6px">${k}（${byType[k].length}）</div>
+        <div>${byType[k].map((b) => `<span class="pill" style="margin:0 6px 6px 0;display:inline-block">${b.name}</span>`).join("")}</div>
+      </div>`).join("");
+    openModal(`${code} 所属板块（${all.length}）`, html);
   } catch (e) {
-    box.innerHTML = '<span class="muted">概念数据取不到（app-data.js 解析失败）</span>';
+    openModal(code + " 所属板块", '<div class="muted">概念数据取不到（app-data.js 解析失败）</div>');
   }
 }
 
@@ -1069,6 +1140,91 @@ function renderFavs() {
   bar.querySelectorAll("[data-fav]").forEach((el) =>
     el.addEventListener("click", () => { document.querySelector("#code").value = el.dataset.fav; loadKline(el.dataset.fav); }));
 }
+
+
+// ---------- 弹窗 ----------
+function openModal(title, html) {
+  const m = document.querySelector("#modal");
+  document.querySelector("#modalTitle").textContent = title;
+  document.querySelector("#modalBody").innerHTML = html;
+  m.style.display = "flex";
+}
+function closeModal() { document.querySelector("#modal").style.display = "none"; }
+document.querySelector("#modalClose").addEventListener("click", closeModal);
+document.querySelector("#modal").addEventListener("click", (e) => { if (e.target.id === "modal") closeModal(); });
+
+// ---------- 双指缩放（手机） ----------
+(function pinchZoom() {
+  const wrap = document.querySelector("#klWrap");
+  if (!wrap) return;
+  const dist = (e) => {
+    const a = e.touches[0], b = e.touches[1];
+    return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1;
+  };
+  const zoom = () => {
+    const dz = (chart && chart.getOption().dataZoom || [{}])[0] || {};
+    return { start: dz.start ?? 0, end: dz.end ?? 100 };
+  };
+  let p0 = null;
+  wrap.addEventListener("touchstart", (e) => {
+    if (e.touches.length === 2) { p0 = { d: dist(e), z: zoom() }; }
+  }, { passive: true });
+  wrap.addEventListener("touchmove", (e) => {
+    if (!p0 || e.touches.length !== 2 || !chart) return;
+    e.preventDefault();
+    const n = CUR.bars.length || 1;
+    const curSpan = ((p0.z.end - p0.z.start) / 100) * n;
+    const want = Math.max(20, Math.min(500, curSpan * (p0.d / dist(e))));
+    const mid = (p0.z.start + p0.z.end) / 2;
+    const half = (want / n) * 50;
+    const start = Math.max(0, Math.min(100 - half * 2, mid - half));
+    chart.dispatchAction({ type: "dataZoom", start, end: start + half * 2 });
+    if (macdChart) macdChart.dispatchAction({ type: "dataZoom", start, end: start + half * 2 });
+  }, { passive: false });
+  wrap.addEventListener("touchend", () => { p0 = null; });
+})();
+
+// ---------- 导出 CSV ----------
+document.querySelector("#csvBtn").addEventListener("click", () => {
+  const code = document.querySelector("#code").value.trim();
+  const rows = [["date", "open", "high", "low", "close", "volume"]];
+  for (const b of CUR.bars) rows.push([b.d, b.o, b.h, b.l, b.c, b.v]);
+  const csv = "\ufeff" + rows.map((r) => r.join(",")).join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.download = `${code}_${CUR.per}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+// ---------- 多级别（区间套的直观版） ----------
+document.querySelector("#multiBtn").addEventListener("click", async () => {
+  const code = document.querySelector("#code").value.trim();
+  openModal(`${code} 多级别结构`, '<div class="muted">计算中…（30分/60分要拉分钟数据，慢一点）</div>');
+  const levels = [
+    ["日线", "day"], ["60分", "m60"], ["30分", "m30"],
+  ];
+  const rows = [];
+  for (const [name, per] of levels) {
+    try {
+      let bars = await fetchBars(code, per);
+      if (!bars || bars.length < 30) throw new Error("少");
+      const r = analyze(bars);
+      const last = bars[bars.length - 1].c;
+      const inPivot = (r.pivots || []).filter((pv) => last >= pv.zd && last <= pv.zg).length > 0;
+      rows.push(`<tr><td>${name}</td><td class="tabular-nums">${bars.length}</td>
+        <td class="tabular-nums">${r.sl.length}</td><td class="tabular-nums">${r.segs.length}</td>
+        <td class="tabular-nums">${r.pivots.length}</td><td class="tabular-nums">${r.sig.length}</td>
+        <td class="${inPivot ? "up" : "muted"}">${inPivot ? "在中枢内" : "中枢外"}</td></tr>`);
+    } catch (e) {
+      rows.push(`<tr><td>${name}</td><td colspan="6" class="muted">无数据（该股没有分钟数据）</td></tr>`);
+    }
+  }
+  openModal(`${code} 多级别结构`, `<table><thead><tr>
+    <th>级别</th><th>K线</th><th>笔</th><th>段</th><th>中枢</th><th>信号</th><th>现价位置</th>
+  </tr></thead><tbody>${rows.join("")}</tbody></table>
+  <div class="muted" style="margin-top:10px;font-size:12px">说明：这是「区间套」的简化版 —— 同一只股票在三个级别上各自的分型/笔/中枢数量，以及现价是否落在某一级别中枢区间内。</div>`);
+});
 
 // ---------- hash 路由（方便直接打开某个分区）----------
 function activate(name){
