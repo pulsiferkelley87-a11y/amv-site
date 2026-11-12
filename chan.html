@@ -159,6 +159,7 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
         <button class="btn" id="loadK">分析</button>
         <button class="btn on" data-per="day">日线</button>
         <button class="btn" data-per="week">周线</button>
+        <button class="btn" data-per="month">月线</button>
         <span style="width:10px"></span>
         <button class="btn on" data-flag="stroke">笔</button>
         <button class="btn on" data-flag="seg">线段</button>
@@ -167,6 +168,8 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
         <button class="btn on" data-flag="ma">均线</button>
         <button class="btn" data-flag="chips">筹码带</button>
         <button class="btn" data-flag="flow">主力带</button>
+        <button class="btn" data-flag="levels">关键位</button>
+        <button class="btn" id="conceptBtn">概念</button>
         <button class="btn" id="favBtn">加自选</button>
         <span class="muted" id="klineMeta"></span>
       </div>
@@ -228,7 +231,7 @@ const cls = (v) => (v > 0 ? "up" : v < 0 ? "down" : "");
 
 let SCAN = null, LIVE = null, HIST = null, BB = null;
 let chart = null, macdChart = null;
-let CUR = { bars: [], res: null, per: "day", flags: { stroke: 1, seg: 1, pivot: 1, sig: 1, ma: 1, chips: 0, flow: 0 } };
+let CUR = { bars: [], res: null, per: "day", flags: { stroke: 1, seg: 1, pivot: 1, sig: 1, ma: 1, chips: 0, flow: 0, levels: 0 } };
 
 // ---------- tab ----------
 $$("nav .tab").forEach((b) =>
@@ -594,10 +597,24 @@ function toWeek(bars) {
   return out;
 }
 
+function toMonth(bars) {
+  const out = [];
+  for (const b of bars) {
+    const key = String(b.d).slice(0, 7);
+    const last = out[out.length - 1];
+    if (last && last.key === key) {
+      last.h = Math.max(last.h, b.h); last.l = Math.min(last.l, b.l); last.c = b.c; last.v += b.v;
+    } else out.push({ key, d: b.d, o: b.o, c: b.c, h: b.h, l: b.l, v: b.v });
+  }
+  return out;
+}
+
 async function loadKline(code) {
   $("#klineMeta").textContent = "加载中…";
   let bars;
-  try { bars = await fetchBars(code, CUR.per); } catch { $("#klineMeta").textContent = "拉取失败"; return; }
+  try { bars = await fetchBars(code, "day"); } catch { $("#klineMeta").textContent = "拉取失败"; return; }
+  if (CUR.per === "week") bars = toWeek(bars);
+  else if (CUR.per === "month") bars = toMonth(bars);
   if (!bars.length) { $("#klineMeta").textContent = "无数据（北交所暂不支持）"; return; }
   const per = CUR.per;
   const use = bars;
@@ -620,6 +637,24 @@ function ma(arr, n) {
   return out;
 }
 
+function keyLevels(bars) {
+  // 最近 250 根里的摆动高低点 + 20/60 日均线，取离现价最近的上下各两条
+  const n = bars.length, i0 = Math.max(0, n - 250);
+  const c = bars[n - 1].c;
+  const highs = [], lows = [];
+  for (let i = i0 + 2; i < n - 2; i++) {
+    const b = bars[i];
+    if (b.h >= bars[i - 1].h && b.h >= bars[i - 2].h && b.h >= bars[i + 1].h && b.h >= bars[i + 2].h) highs.push(b.h);
+    if (b.l <= bars[i - 1].l && b.l <= bars[i - 2].l && b.l <= bars[i + 1].l && b.l <= bars[i + 2].l) lows.push(b.l);
+  }
+  const above = highs.filter((x) => x > c * 1.005).sort((a, b) => a - b).slice(0, 2);
+  const below = lows.filter((x) => x < c * 0.995).sort((a, b) => b - a).slice(0, 2);
+  return [
+    ...above.map((p) => ({ p, t: "压力", k: "up" })),
+    ...below.map((p) => ({ p, t: "支撑", k: "down" })),
+  ];
+}
+
 function draw(bars, r) {
   if (!bars || !bars.length) return;
   if (document.querySelector("#kline").offsetParent === null) return; // 分区不可见时跳过（避免 0 尺寸初始化）
@@ -634,6 +669,33 @@ function draw(bars, r) {
     chart.__chipHooked = true;
     chart.on("rendered", drawChipOverlay);
     chart.on("datazoom", drawChipOverlay);
+
+    // 主图 / 副图 缩放联动（旧页面是同一套视图，这里保持一致）
+    let syncing = false;
+    const syncZoom = (from, to) => {
+      if (syncing) return;
+      syncing = true;
+      try {
+        const dz = (from.getOption().dataZoom || [{}])[0] || {};
+        const n = CUR.bars.length || 1;
+        let s = dz.start ?? 0, e = dz.end ?? 100;
+        const span = ((e - s) / 100) * n;
+        if (span < 20) { e = Math.min(100, s + (20 / n) * 100); }
+        if (span > 500) { e = s + (500 / n) * 100; }
+        to.dispatchAction({ type: "dataZoom", start: s, end: e });
+      } catch (err) { /* ignore */ }
+      syncing = false;
+    };
+    chart.on("dataZoom", () => { syncZoom(chart, macdChart); drawChipOverlay(); });
+    macdChart.on("dataZoom", () => syncZoom(macdChart, chart));
+
+    // 双击复位到最近 250 根
+    chart.getZr().on("dblclick", () => {
+      const n = CUR.bars.length || 1;
+      const s = Math.max(0, 100 - (250 / n) * 100);
+      chart.dispatchAction({ type: "dataZoom", start: s, end: 100 });
+      macdChart.dispatchAction({ type: "dataZoom", start: s, end: 100 });
+    });
     chart.getZr().on("click", (e) => {
       // 空白处也能点：把像素反算成 K 线下标
       let i = null;
@@ -656,6 +718,17 @@ function draw(bars, r) {
     {
       name: "K线", type: "candlestick", data: ohlc,
       itemStyle: { color: "#ef4444", color0: "#22c55e", borderColor: "#ef4444", borderColor0: "#22c55e" },
+      markLine: f.levels
+        ? {
+            silent: true, symbol: "none",
+            label: { color: "#cbd5e1", fontSize: 10, position: "insideStartTop", formatter: (x) => x.name },
+            data: keyLevels(bars).map((l) => ({
+              name: `${l.t} ${l.p.toFixed(2)}`,
+              yAxis: +l.p.toFixed(2),
+              lineStyle: { color: l.k === "up" ? "#f97316" : "#38bdf8", type: "dashed", width: 1 },
+            })),
+          }
+        : undefined,
       markArea: f.pivot
         ? {
             silent: true,
@@ -733,7 +806,8 @@ function draw(bars, r) {
         splitLine: { lineStyle: { color: "rgba(148,163,184,.10)" } },
       },
       dataZoom: [
-        { type: "inside", start: Math.max(0, 100 - (250 / bars.length) * 100), end: 100 },
+        { type: "inside", zoomOnMouseWheel: true, moveOnMouseMove: true, moveOnMouseWheel: false,
+          start: Math.max(0, 100 - (250 / bars.length) * 100), end: 100 },
         { type: "slider", height: 16, bottom: 4, borderColor: "#243044", fillerColor: "rgba(99,102,241,.2)",
           textStyle: { color: "#8b98ad" }, handleStyle: { color: "#6366f1" } },
       ],
@@ -749,7 +823,8 @@ function draw(bars, r) {
       grid: { left: 52, right: 16, top: 8, bottom: 20 },
       xAxis: { type: "category", data: dates, axisLabel: { show: false }, axisLine: { lineStyle: { color: "#2a3446" } } },
       yAxis: { scale: true, axisLabel: { color: "#8b98ad", fontSize: 10 }, splitLine: { lineStyle: { color: "rgba(148,163,184,.08)" } } },
-      dataZoom: [{ type: "inside", start: Math.max(0, 100 - (250 / bars.length) * 100), end: 100 }],
+      dataZoom: [{ type: "inside", zoomOnMouseWheel: true, moveOnMouseMove: true, moveOnMouseWheel: false,
+          start: Math.max(0, 100 - (250 / bars.length) * 100), end: 100 }],
       series: [
         { name: "MACD", type: "bar", data: r.md.hist.map((v) => +v.toFixed(3)), itemStyle: { color: (p) => (p.value >= 0 ? "#ef4444" : "#22c55e") }, barMaxWidth: 4 },
         { name: "DIF", type: "line", data: r.md.dif.map((v) => +v.toFixed(3)), showSymbol: false, lineStyle: { width: 1, color: "#f59e0b" } },
@@ -935,6 +1010,27 @@ async function loadFlow(code) {
   if (CUR.flags.flow) drawChipOverlay();
 }
 
+let APPDATA = null;
+async function showConcepts() {
+  const box = document.querySelector("#favBar");
+  const code = document.querySelector("#code").value.trim();
+  box.innerHTML = '<span class="muted">概念加载中…（首次要下 11 MB，之后走缓存）</span>';
+  try {
+    if (!APPDATA) {
+      const txt = await (await fetch(COS + "/app-data.js?t=" + Date.now())).text();
+      const m = txt.match(/var\s+DATA\s*=\s*(\{[\s\S]*\})\s*;?\s*$/);
+      APPDATA = JSON.parse(m ? m[1] : txt);
+    }
+    const blocks = (APPDATA.blocks || []).filter((b) => (b.codes || b.members || []).map(String).includes(code));
+    box.innerHTML = blocks.length
+      ? `<span class="muted">${code} 所属：</span>` + blocks.slice(0, 14).map((b) =>
+          `<span class="pill" style="margin-right:6px">${b.name}</span>`).join("")
+      : `<span class="muted">${code} 没有概念归属数据</span>`;
+  } catch (e) {
+    box.innerHTML = '<span class="muted">概念数据取不到（app-data.js 解析失败）</span>';
+  }
+}
+
 async function showMinute(date) {
   const box = document.querySelector("#minBox");
   const code = document.querySelector("#code").value.trim();
@@ -983,6 +1079,7 @@ window.addEventListener('hashchange', () => activate(location.hash.replace('#','
 if (location.hash) activate(location.hash.replace('#',''));
 
 // ---------- 启动 ----------
+$("#conceptBtn").addEventListener("click", showConcepts);
 $("#favBtn").addEventListener("click", () => {
   const c = $("#code").value.trim();
   if (!/^\d{6}$/.test(c)) return;
