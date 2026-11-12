@@ -165,13 +165,21 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
         <button class="btn on" data-flag="pivot">中枢</button>
         <button class="btn on" data-flag="sig">买卖点</button>
         <button class="btn on" data-flag="ma">均线</button>
+        <button class="btn" data-flag="chips">筹码带</button>
+        <button class="btn" data-flag="flow">主力带</button>
+        <button class="btn" id="favBtn">加自选</button>
         <span class="muted" id="klineMeta"></span>
       </div>
       <div class="bd">
         <div class="kl">
           <div>
-            <div id="chart"></div>
+            <div id="klWrap" style="position:relative">
+              <div id="chart"></div>
+              <canvas id="chipCv" style="position:absolute;left:0;top:0;pointer-events:none"></canvas>
+            </div>
+            <div id="minBox" style="display:none;margin-top:8px"></div>
             <div id="macd"></div>
+            <div id="favBar" class="bar" style="margin-top:8px;font-size:12px"></div>
           </div>
           <div class="side">
             <div class="card" style="margin:0 0 8px">
@@ -208,7 +216,7 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
 <footer>缠论引擎 v1 ｜ 数据：通达信日线 · 本地扫描 ｜ <span id="ver"></span></footer>
 
 <script type="module">
-import { analyze } from "./chan-engine.js";
+import { analyze, macd } from "./chan-engine.js";
 import { scanAll } from "./chan-scan.js";
 
 const COS = "https://amv-live-1500351250.cos.ap-guangzhou.myqcloud.com";
@@ -220,7 +228,7 @@ const cls = (v) => (v > 0 ? "up" : v < 0 ? "down" : "");
 
 let SCAN = null, LIVE = null, HIST = null, BB = null;
 let chart = null, macdChart = null;
-let CUR = { bars: [], res: null, per: "day", flags: { stroke: 1, seg: 1, pivot: 1, sig: 1, ma: 1 } };
+let CUR = { bars: [], res: null, per: "day", flags: { stroke: 1, seg: 1, pivot: 1, sig: 1, ma: 1, chips: 0, flow: 0 } };
 
 // ---------- tab ----------
 $$("nav .tab").forEach((b) =>
@@ -595,6 +603,7 @@ async function loadKline(code) {
   const use = bars;
   const res = analyze(use);
   CUR.bars = use; CUR.res = res;
+  loadFlow(code);
   $("#klineMeta").textContent = `${code} ｜ ${use.length} 根 ｜ 笔 ${res.sl.length} ｜ 段 ${res.segs.length} ｜ 中枢 ${res.pivots.length} ｜ 信号 ${res.sig.length}`;
   draw(use, res);
   drawStruct(use, res);
@@ -621,6 +630,22 @@ function draw(bars, r) {
 
   chart = chart || echarts.init($("#chart"));
   macdChart = macdChart || echarts.init($("#macd"));
+  if (!chart.__chipHooked) {
+    chart.__chipHooked = true;
+    chart.on("rendered", drawChipOverlay);
+    chart.on("datazoom", drawChipOverlay);
+    chart.getZr().on("click", (e) => {
+      // 空白处也能点：把像素反算成 K 线下标
+      let i = null;
+      try {
+        const pt = chart.convertFromPixel({ gridIndex: 0 }, [e.offsetX, e.offsetY]);
+        if (pt) i = Math.round(pt[0]);
+      } catch (err) { /* ignore */ }
+      if (i == null || isNaN(i)) return;
+      const b = CUR.bars[Math.max(0, Math.min(CUR.bars.length - 1, i))];
+      if (b) showMinute(b.d);
+    });
+  }
 
   // 笔：连续折线（每笔终点即下一笔起点）
   const strokePts = r.sl.map((s) => [s.d1, s.p1]);
@@ -819,6 +844,136 @@ async function runScan(opts = {}) {
 $("#scanBtn").onclick = () => runScan();
 window.__runScan = runScan;
 
+
+// ---------- 筹码带 / 主力带 / 分时 / 自选 ----------
+let FLOW = null;
+
+function chipsFor(bars, i0, i1, M, flowMap) {
+  M = M || 40;
+  if (!bars || i1 <= i0) return null;
+  let hh = -Infinity, ll = Infinity;
+  for (let i = i0; i <= i1; i++) {
+    if (bars[i].h > hh) hh = bars[i].h;
+    if (bars[i].l < ll) ll = bars[i].l;
+  }
+  if (!(hh > ll) || !(ll > 0)) return null;
+  const R = hh / ll;
+  const bound = (j) => ll * Math.pow(R, j / M);
+  const dens = new Array(M).fill(0);
+  for (let i = i0; i <= i1; i++) {
+    const b = bars[i];
+    let v = b.v;
+    if (flowMap) {
+      const fv = flowMap[b.d];
+      v = fv ? Math.max(0, +fv[0]) : 0;      // 主力模式：只取净流入为正的部分
+    }
+    if (!isFinite(v) || v <= 0) continue;
+    const h = b.h, l = b.l;
+    if (!(h > l)) {
+      let j = Math.floor((Math.log(l / ll) / Math.log(R)) * M);
+      j = Math.max(0, Math.min(M - 1, j));
+      dens[j] += v;
+      continue;
+    }
+    let j0 = Math.floor((Math.log(l / ll) / Math.log(R)) * M);
+    let j1 = Math.floor((Math.log(h / ll) / Math.log(R)) * M);
+    j0 = Math.max(0, Math.min(M - 1, j0));
+    j1 = Math.max(0, Math.min(M - 1, j1));
+    const n = j1 - j0 + 1;
+    for (let j = j0; j <= j1; j++) dens[j] += v / n;
+  }
+  const mx = Math.max(...dens) || 1;
+  return dens.map((w, j) => ({ p0: bound(j), p1: bound(j + 1), w: w / mx }));
+}
+
+function drawChipOverlay() {
+  const cv = document.querySelector("#chipCv");
+  const host = document.querySelector("#chart");
+  if (!cv || !host || !chart) return;
+  const on = CUR.flags.chips || CUR.flags.flow;
+  const dpr = window.devicePixelRatio || 1;
+  const w = host.clientWidth, h = host.clientHeight;
+  if (cv.width !== w * dpr || cv.height !== h * dpr) {
+    cv.width = w * dpr; cv.height = h * dpr;
+    cv.style.width = w + "px"; cv.style.height = h + "px";
+  }
+  const g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  if (!on || !CUR.bars.length) return;
+
+  let rect;
+  try { rect = chart.getModel().getComponent("grid").coordinateSystem.getRect(); } catch (e) { return; }
+  if (!rect) return;
+  const dz = (chart.getOption().dataZoom || [{}])[0] || {};
+  const n = CUR.bars.length;
+  const i0 = Math.max(0, Math.floor(((dz.start ?? 0) / 100) * n));
+  const i1 = Math.min(n - 1, Math.ceil(((dz.end ?? 100) / 100) * n) - 1);
+  const flowMap = CUR.flags.flow && FLOW ? FLOW.days : null;
+  const bins = chipsFor(CUR.bars, i0, i1, 44, flowMap);
+  if (!bins) return;
+
+  const maxW = rect.width * 0.42;
+  bins.forEach((b) => {
+    const y0 = chart.convertToPixel({ yAxisIndex: 0 }, b.p0);
+    const y1 = chart.convertToPixel({ yAxisIndex: 0 }, b.p1);
+    if (y0 == null || y1 == null) return;
+    const top = Math.min(y0, y1), hh = Math.max(1, Math.abs(y1 - y0) - 0.6);
+    if (top < rect.y - 2 || top > rect.y + rect.height) return;
+    const bw = Math.max(0.6, b.w * maxW);
+    g.fillStyle = CUR.flags.flow ? "rgba(239,68,68,.22)" : "rgba(99,102,241,.24)";
+    g.fillRect(rect.x + rect.width - bw, top, bw, hh);
+  });
+}
+
+async function loadFlow(code) {
+  FLOW = null;
+  try {
+    const j = await (await fetch(COS + "/flow/" + code + ".json?t=" + Date.now())).json();
+    if (j && j.days) FLOW = j;
+  } catch (e) { /* 没有就算了 */ }
+  if (CUR.flags.flow) drawChipOverlay();
+}
+
+async function showMinute(date) {
+  const box = document.querySelector("#minBox");
+  const code = document.querySelector("#code").value.trim();
+  const ymd = String(date).replace(/-/g, "");
+  box.style.display = "block";
+  box.innerHTML = '<div class="muted" style="padding:6px">分时加载中…</div>';
+  try {
+    const j = await (await fetch(COS + "/minute/" + code + "/" + ymd + "/p7.json?t=" + Date.now())).json();
+    const raw = j.points || j.bars || j.data || [];
+    const pts = raw.map((r) => (Array.isArray(r) ? [r[0], +r[1]] : [r.t || r.d, +r.c]))
+      .filter((x) => isFinite(x[1]));
+    if (!pts.length) throw new Error("empty");
+    const ys = pts.map((x) => x[1]);
+    const min = Math.min(...ys), max = Math.max(...ys), span = max - min || 1;
+    const W = 900, H = 120;
+    const d = pts.map((x, i) => `${i ? "L" : "M"}${((i / (pts.length - 1)) * W).toFixed(1)},${(H - ((x[1] - min) / span) * (H - 10) - 5).toFixed(1)}`).join("");
+    const up = ys[ys.length - 1] >= ys[0];
+    box.innerHTML = `<div class="muted" style="font-size:12px;margin-bottom:2px">${code} ${date} 分时（${pts.length} 点）</div>
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:140px;display:block">
+        <path d="${d}" fill="none" stroke="${up ? "#ef4444" : "#22c55e"}" stroke-width="1.4"/></svg>`;
+  } catch (e) {
+    box.innerHTML = `<div class="muted" style="font-size:12px;padding:6px">该股 ${date} 没有分钟数据（只有精选池 124 只有）</div>`;
+  }
+}
+
+function favs() {
+  try { return JSON.parse(localStorage.getItem("chan_favs") || "[]"); } catch (e) { return []; }
+}
+function renderFavs() {
+  const bar = document.querySelector("#favBar");
+  if (!bar) return;
+  const list = favs();
+  bar.innerHTML = `<span class="muted">自选：</span>` +
+    (list.length ? list.map((c) => `<span class="pill" data-fav="${c}" style="cursor:pointer;margin-right:6px">${c}</span>`).join("")
+                  : '<span class="muted">还没有，点「加自选」</span>');
+  bar.querySelectorAll("[data-fav]").forEach((el) =>
+    el.addEventListener("click", () => { document.querySelector("#code").value = el.dataset.fav; loadKline(el.dataset.fav); }));
+}
+
 // ---------- hash 路由（方便直接打开某个分区）----------
 function activate(name){
   const b = $$("nav .tab").find(x => x.dataset.t === name);
@@ -828,6 +983,14 @@ window.addEventListener('hashchange', () => activate(location.hash.replace('#','
 if (location.hash) activate(location.hash.replace('#',''));
 
 // ---------- 启动 ----------
+$("#favBtn").addEventListener("click", () => {
+  const c = $("#code").value.trim();
+  if (!/^\d{6}$/.test(c)) return;
+  const list = favs();
+  if (!list.includes(c)) { list.push(c); localStorage.setItem("chan_favs", JSON.stringify(list)); }
+  renderFavs();
+});
+renderFavs();
 $("#ver").textContent = "BUILD " + new Date().toISOString().slice(0, 10);
 loadScan();
 loadLive();
