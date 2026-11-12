@@ -520,8 +520,10 @@ function renderAllHome() {
       const rows = hist.slice(-250);
       const W = 1000, H = 220, mid = H / 2, bw = W / rows.length;
       let up = "", dn = "";
+      const mx = Math.max(1, ...rows.map((r) => Math.max(r.up || 0, r.down || 0)));
+      const k = (H / 2 - 6) / mx;
       rows.forEach((r, i) => {
-        const a = Math.min(220, (r.up || 0) / 12), b = Math.min(220, (r.down || 0) / 12);
+        const a = Math.max(0, (r.up || 0) * k), b = Math.max(0, (r.down || 0) * k);
         const x = i * bw;
         up += `<rect x="${x.toFixed(1)}" y="${(mid - a).toFixed(1)}" width="${Math.max(1, bw * 0.8).toFixed(1)}" height="${a.toFixed(1)}" fill="#ef4444" opacity="0.75"/>`;
         dn += `<rect x="${x.toFixed(1)}" y="${mid}" width="${Math.max(1, bw * 0.8).toFixed(1)}" height="${b.toFixed(1)}" fill="#22c55e" opacity="0.75"/>`;
@@ -568,7 +570,7 @@ function renderHome() {
     .join("");
 
   const list = (SCAN.signals || []).slice(0, 60);
-  $("#homeList").innerHTML = list.length
+  $("#homeList2").innerHTML = list.length
     ? `<table><thead><tr><th class="l">代码</th><th class="l">名称</th><th>类型</th><th>信号日</th>
        <th>买点价</th><th>现价</th><th>至今</th><th>位置</th></tr></thead><tbody>
        ${list.map((s) => `<tr data-code="${s.code}"><td class="l">${s.code}</td><td class="l">${s.name}</td>
@@ -577,11 +579,11 @@ function renderHome() {
        </tbody></table>`
     : '<div class="muted">最近 10 个交易日没有新信号</div>';
 
-  $("#homeList").onclick = (e) => {
+  $("#homeList2").onclick = (e) => {
     const tr = e.target.closest("tr[data-code]");
     if (tr) gotoKline(tr.dataset.code);
   };
-  $("#scanMeta").textContent = `扫描 ${SCAN.ok ?? "—"} 只 ｜ 更新 ${SCAN.updated_at || "—"}`;
+  $("#scanMeta2").textContent = `扫描 ${SCAN.ok ?? "—"} 只 ｜ 更新 ${SCAN.updated_at || "—"}`;
 }
 
 function tag(t) {
@@ -1295,7 +1297,7 @@ async function runScan(opts = {}) {
     const res = await scanAll(analyze, {
       ...opts,
       onProgress: (p) => {
-        $("#scanMeta").textContent =
+        $("#scanMeta2").textContent =
           p.phase === "扫描"
             ? `扫描中 ${p.done}/${p.total} ｜ 成功 ${p.ok ?? 0} 失败 ${p.fail ?? 0}`
             : p.phase;
@@ -1304,7 +1306,7 @@ async function runScan(opts = {}) {
     SCAN = res;
     window.__scanResult = res;
     renderHome(); renderPick(); renderBT();
-    $("#scanMeta").textContent = `扫描 ${res.ok} 只 ｜ 更新 ${res.updated_at} ｜ 用时 ${(res.ms / 1000).toFixed(0)}s`;
+    $("#scanMeta2").textContent = `扫描 ${res.ok} 只 ｜ 更新 ${res.updated_at} ｜ 用时 ${(res.ms / 1000).toFixed(0)}s`;
     try {
       await fetch("/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(res) });
     } catch {}
