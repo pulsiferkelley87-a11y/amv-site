@@ -211,7 +211,7 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
   <section id="kline">
     <div class="card">
       <div class="bar">
-        <input type="text" id="code" value="600031" placeholder="代码">
+        <span style="position:relative;display:inline-block"><input type="text" id="code" value="600031" placeholder="代码/名称" autocomplete="off" style="width:120px"><div id="codePick" style="display:none;position:absolute;left:0;top:30px;z-index:60;background:#0f172a;border:1px solid var(--line);border-radius:8px;min-width:190px;max-height:260px;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.5)"></div></span>
         <span id="codeName" style="font-size:13px;color:#cbd5e1;font-weight:600;min-width:64px"></span>
         <button class="btn" id="loadK">分析</button>
         <button class="btn on" data-per="day">日线</button>
@@ -1103,9 +1103,69 @@ function gotoKline(code) {
   loadKline(code).then(() => { chart && chart.resize(); macdChart && macdChart.resize(); });
 }
 
+
+// ---------- 代码/名称搜索 ----------
+async function resolveCode(q) {
+  q = (q || "").trim();
+  if (!q) return null;
+  if (/^\d{6}$/.test(q)) return q;
+  const m6 = q.match(/\d{6}/);
+  if (m6) return m6[0];
+  const m = (await loadNames()) || {};
+  const hit = [];
+  for (const [c, n] of Object.entries(m)) {
+    if (!n) continue;
+    if (n.includes(q) || n.replace(/\s/g, "").includes(q)) hit.push({ c, n });
+    if (hit.length >= 40) break;
+  }
+  if (hit.length === 1) return hit[0].c;
+  if (hit.length > 1) { showCodePick(hit, q); return null; }
+  return null;
+}
+
+function showCodePick(list, q) {
+  const box = $("#codePick");
+  if (!box) return;
+  box.innerHTML = list.slice(0, 12).map((x) =>
+    `<div class="pick" data-c="${x.c}" style="padding:6px 10px;cursor:pointer;font-size:12.5px;`
+    + `border-bottom:1px solid rgba(148,163,184,.12)">${x.c} <span style="color:#cbd5e1">${x.n}</span></div>`
+  ).join("") + (list.length > 12 ? `<div style="padding:6px 10px;font-size:11.5px;color:#64748b">还有 ${list.length - 12} 个，继续输入缩小范围</div>` : "");
+  box.style.display = "block";
+  box.querySelectorAll(".pick").forEach((el) => {
+    el.onclick = () => {
+      $("#code").value = el.dataset.c;
+      box.style.display = "none";
+      loadKline(el.dataset.c);
+    };
+  });
+  void q;
+}
+
+function hideCodePick() { const b = $("#codePick"); if (b) b.style.display = "none"; }
+
 // ---------- 事件 ----------
-$("#loadK").onclick = () => loadKline(($("#code").value || "").trim());
+$("#loadK").onclick = async () => {
+  const c = await resolveCode($("#code").value);
+  if (c) { $("#code").value = c; loadKline(c); }
+  else if (!$("#codePick") || $("#codePick").style.display === "none") {
+    $("#klineMeta").textContent = "没找到这个代码/名称";
+  }
+};
 $("#code").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#loadK").click(); });
+$("#code").addEventListener("input", async () => {
+  const q = $("#code").value.trim();
+  if (q.length < 1 || /^\d{6}$/.test(q)) { hideCodePick(); return; }
+  const m = (await loadNames()) || {};
+  const hit = [];
+  for (const [c, n] of Object.entries(m)) {
+    if (n && n.includes(q)) hit.push({ c, n });
+    if (hit.length >= 40) break;
+  }
+  if (hit.length) showCodePick(hit, q); else hideCodePick();
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#codePick") && e.target.id !== "code") hideCodePick();
+});
 $$("#kline .bar button[data-per]").forEach((b) =>
   b.addEventListener("click", () => {
     $$("#kline .bar button[data-per]").forEach((x) => x.classList.toggle("on", x === b));
