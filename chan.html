@@ -70,6 +70,34 @@ input[type=text]{background:var(--card2);border:1px solid var(--line);color:var(
 footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
   #live .grid { align-items: start; }
   #live .kpi .sub { font-size: 12px; color: #8b98ad; margin-top: 4px; }
+@media(max-width:760px){
+  header{gap:8px;padding:0 10px;overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch}
+  header .brand{flex:0 0 auto;font-size:13px;white-space:nowrap}
+  header .btn{flex:0 0 auto;font-size:12px;padding:5px 8px;white-space:nowrap}
+  #idxBar{display:none}
+  nav{padding:8px 10px;gap:4px;overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch}
+  nav .tab{flex:0 0 auto;white-space:nowrap;font-size:12px;padding:5px 9px}
+  main{padding:8px}
+  .card{margin-bottom:8px}
+  .card .bd{padding:8px 10px}
+  .bar{overflow-x:auto;flex-wrap:nowrap;gap:4px;padding-bottom:6px;-webkit-overflow-scrolling:touch}
+  .bar .btn{flex:0 0 auto;white-space:nowrap;font-size:12px;padding:5px 7px}
+  .bar input[type=text]{flex:0 0 auto;width:88px;font-size:12px}
+  .kl{grid-template-columns:1fr}
+  .kl .side{margin-top:8px}
+  #chart{height:300px}
+  #macd{height:110px}
+  #klLegend{font-size:10px;line-height:1.5}
+  #minBox svg{height:110px!important}
+  table{display:block;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch}
+  thead, tbody{display:table}
+  thead{width:100%}
+  table{width:100%}
+  #modal > div{width:94vw;max-height:86vh}
+  #favBar{gap:4px}
+  .kpi .val{font-size:22px}
+  main section .grid.g4{gap:8px}
+}
 </style>
 </head>
 <body>
