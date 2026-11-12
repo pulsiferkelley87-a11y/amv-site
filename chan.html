@@ -227,6 +227,7 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
         <button class="btn" data-flag="chips">筹码带</button>
         <button class="btn" data-flag="flow">主力带</button>
         <button class="btn" data-flag="levels">关键位</button>
+        <button class="btn" id="subBtn">副图：量</button>
         <button class="btn" id="conceptBtn">概念</button>
         <button class="btn" id="multiBtn">多级别</button>
         <button class="btn" id="csvBtn">导出CSV</button>
@@ -292,9 +293,19 @@ const cls = (v) => (v > 0 ? "up" : v < 0 ? "down" : "");
 
 let SCAN = null, LIVE = null, HIST = null, BB = null;
 let chart = null, macdChart = null;
-let CUR = { bars: [], res: null, per: "day", flags: { stroke: 1, seg: 1, pivot: 1, sig: 1, ma: 1, chips: 0, flow: 0, levels: 0 } };
+let CUR = { bars: [], res: null, per: "day", flags: { stroke: 1, seg: 1, pivot: 1, sig: 1, ma: 1, chips: 0, flow: 0, levels: 0, sub: "vol" } };
 
 // ---------- tab ----------
+(function () {
+  const btn = document.querySelector("#subBtn");
+  if (btn) btn.addEventListener("click", () => {
+    CUR.flags.sub = CUR.flags.sub === "macd" ? "vol" : "macd";
+    btn.textContent = "副图：" + (CUR.flags.sub === "macd" ? "MACD" : "量");
+    btn.classList.toggle("on", CUR.flags.sub === "macd");
+    kvPaint();
+  });
+})();
+
 $$("nav .tab").forEach((b) =>
   b.addEventListener("click", () => {
     $$("nav .tab").forEach((x) => x.classList.toggle("on", x === b));
@@ -1480,7 +1491,7 @@ function kvSVG() {
     }
   }
 
-  // 蜡烛 + 成交量
+  // 蜡烛 + 副图（成交量 / MACD）
   let candles = "", volbars = "";
   rows.forEach((b, i) => {
     const up = b.c >= b.o, col = up ? "#d64545" : "#2fa36b";
@@ -1490,6 +1501,31 @@ function kvSVG() {
     candles += `<rect data-d="${b.d}" x="${(cx - cw / 2).toFixed(1)}" y="${yT.toFixed(1)}" width="${cw.toFixed(1)}" height="${Math.max(1.2, yB - yT).toFixed(1)}" fill="${col}"/>`;
     volbars += `<rect data-d="${b.d}" x="${(cx - cw / 2).toFixed(1)}" y="${VY(b.v).toFixed(1)}" width="${cw.toFixed(1)}" height="${Math.max(1, H - PB - VY(b.v)).toFixed(1)}" fill="${col}" opacity="0.5"/>`;
   });
+  if (CUR.flags.sub === "macd" && res.md) {
+    const md = res.md;
+    let dmax = 0.0001;
+    for (let gi = i0; gi <= i1; gi++) {
+      dmax = Math.max(dmax, Math.abs(md.dif[gi] || 0), Math.abs(md.dea[gi] || 0), Math.abs(md.hist[gi] || 0));
+    }
+    const MY = (v) => PT + ih + volH / 2 - (v / dmax) * (volH / 2 - 2);
+    let mbars = "", lines = "";
+    for (let gi = i0; gi <= i1; gi++) {
+      const hv = md.hist[gi] || 0;
+      const i = gi - i0, cx = X(i);
+      const y0 = MY(0), y1 = MY(hv);
+      mbars += `<rect x="${(cx - Math.max(1, bw * 0.3)).toFixed(1)}" y="${Math.min(y0, y1).toFixed(1)}" width="${Math.max(1, bw * 0.6).toFixed(1)}" height="${Math.max(0.8, Math.abs(y1 - y0)).toFixed(1)}" fill="${hv >= 0 ? "#d64545" : "#2fa36b"}" opacity="0.65"/>`;
+    }
+    const mk = (arr, color) => {
+      let d = "";
+      for (let gi = i0; gi <= i1; gi++) {
+        d += (d ? "L" : "M") + X(gi - i0).toFixed(1) + " " + MY(arr[gi] || 0).toFixed(1);
+      }
+      return `<path d="${d}" fill="none" stroke="${color}" stroke-width="1.1"/>`;
+    };
+    lines = mbars + mk(md.dif, "#e0a03b") + mk(md.dea, "#3b82f6")
+      + `<line x1="${PL}" y1="${MY(0).toFixed(1)}" x2="${W - PR}" y2="${MY(0).toFixed(1)}" stroke="rgba(148,163,184,.35)" stroke-width="1"/>`;
+    volbars = lines;
+  }
 
   // 均线（全序列计算，裁剪到可视区）
   const maDefs = [[5, "#e0a03b"], [10, "#3b82f6"], [20, "#a855f7"], [60, "#8b5cf6"]];
