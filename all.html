@@ -929,6 +929,9 @@ async function loadKline(code) {
   const use = bars;
   const res = analyze(use);
   CUR.bars = use; CUR.res = res;
+  // 切周期后必须回到最新一根，否则会停在上一周期留下的位置上
+  KV.end = use.length - 1;
+  KV.count = Math.min(KV.count || 150, use.length);
   loadFlow(code);
   setCodeName(code);
   const nm = (NAMES && NAMES[code]) || "";
@@ -936,7 +939,8 @@ async function loadKline(code) {
   drawSVG(use, res);
   drawStruct(use, res);
   const lg = document.querySelector("#klLegend");
-  if (lg) lg.innerHTML = "日K（前复权）｜橙 MA5 · 蓝 MA10 · 紫 MA20 · 紫 MA60 ｜ "
+  const perName = { day: "日K", week: "周K", month: "月K", m60: "60分", m30: "30分" }[per] || "日K";
+  if (lg) lg.innerHTML = perName + "（前复权）｜橙 MA5 · 蓝 MA10 · 紫 MA20 · 紫 MA60 ｜ "
     + "<span style='color:#ef4444'>红=压力带</span> · <span style='color:#22c55e'>绿=支撑带</span> · "
     + "<span style='color:#38bdf8'>蓝=突破线</span> ｜ 筹码带：<span style='color:#3b82f6'>蓝=核心(≥66%峰)</span> "
     + "<span style='color:#94a3b8'>灰=边缘</span>，POC=最密档 ｜ 主力带：<span style='color:#8b5cf6'>紫</span>";
