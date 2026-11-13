@@ -413,9 +413,11 @@ $$("nav .tab").forEach((b) =>
 // ---------- 数据 ----------
 async function loadScan() {
   try {
-    SCAN = await (await fetch("chan_scan.json?t=" + Date.now())).json();
+    // 走 COS：站点文件是构建时快照，COS 才是每次扫描的最新产物
+    SCAN = await (await fetch(COS + "/chan_scan.json?t=" + Date.now())).json();
   } catch (e) {
-    SCAN = null;
+    try { SCAN = await (await fetch("chan_scan.json?t=" + Date.now())).json(); }
+    catch (e2) { SCAN = null; }
   }
   renderHome(); renderPick(); renderBT();
 }
