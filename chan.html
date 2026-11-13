@@ -504,7 +504,7 @@ function renderPick() {
   let rows = SCAN.signals || [];
   if (PICK_TYPE !== "all") rows = rows.filter((s) => s.type === PICK_TYPE);
   if (q) rows = rows.filter((s) => s.code.includes(q) || (s.name || "").toLowerCase().includes(q));
-  rows = rows.slice(0, 400);
+  rows = rows.slice(0, 1500);
   $("#pickCount").textContent = `${rows.length} 条`;
   $("#pickTable").innerHTML = `<table><thead><tr>
     <th class="l">代码</th><th class="l">名称</th><th>类型</th><th>信号日</th><th>距今</th>
