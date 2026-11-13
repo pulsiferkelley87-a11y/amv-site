@@ -1,13 +1,5 @@
 name: TDX Minute Fetch
 
-# 通达信分钟线（分时）取数 —— 全部在云端跑，不依赖任何本机进程。
-#
-# 触发：手动 workflow_dispatch（给 code / date），或每日收盘后定时预热。
-# 产物：
-#   1) 写入 Actions 日志（便于确认云端可达 + 数据正确）
-#   2) 若配置了 COS_* secrets，则上传到 COS：minute/{code}/{date}/p{period}.json
-#      （前端可直接读，和 live_data.json 同一条路）
-
 on:
   workflow_dispatch:
     inputs:
@@ -36,23 +28,22 @@ on:
         required: false
         default: ''
   schedule:
-    # 交易日 16:10（北京时间 = UTC 08:10）预热最近一个交易日
-    - cron: '10 8 * * 1-5'
+    # 收盘后两档（GitHub cron 常被丢，第二档兜底）
+    - cron: '10 8 * * 1-5'   # 北京 16:10
+    - cron: '40 10 * * 1-5'  # 北京 18:40
 
 permissions:
   contents: read
 
 concurrency:
-  # 分片并行时不能互相取消，所以并发组带上 shard
   group: tdx-minute-${{ github.event.inputs.shard }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   fetch:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 90
     env:
-      # secrets 上下文不能用在 if 里，只能放 env；这里统一注入，步骤里用 env.COS_SECRET_ID 判断
       COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
       COS_SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
       COS_BUCKET: ${{ secrets.COS_BUCKET || 'amv-live-1500351250' }}
@@ -67,7 +58,13 @@ jobs:
       - name: Install deps
         run: pip install requests
 
-      - name: 连通性自检（通达信 TQLEX 是否可达）
+      - name: 闸门（今天已有分钟数据就跳过）
+        id: gate
+        if: github.event_name == 'schedule'
+        run: python scripts/need_update.py --today-key "minute/600000/{date}/p7.json" --skip-weekend
+
+      - name: 连通性自检（通达信 TQLEX）
+        if: github.event_name == 'workflow_dispatch' || steps.gate.outputs.run == 'true'
         run: |
           python - <<'PY'
           import json, time, urllib.request
@@ -81,15 +78,11 @@ jobs:
           req = urllib.request.Request(
               "http://tdxhub.icfqs.com:7615/TQLEX?Entry=TdxShare.PBFXT",
               data=body, headers={"Content-Type": "application/json"}, method="POST")
-          try:
-              with urllib.request.urlopen(req, timeout=20) as r:
-                  j = json.loads(r.read().decode())
-              items = (j.get("ListItem") or [])
-              print("OK TQLEX 可达，%.2fs，返回 %d 条" % (time.time() - t0, len(items)))
-              if items:
-                  print("样例:", items[-1].get("Item"))
-          except Exception as e:
-              print("FAIL TQLEX 不可达:", str(e)[:200])
+          with urllib.request.urlopen(req, timeout=20) as r:
+              j = json.loads(r.read().decode())
+          items = (j.get("ListItem") or [])
+          print("OK TQLEX 可达，%.2fs，返回 %d 条" % (time.time() - t0, len(items)))
+          if not items:
               raise SystemExit(1)
           PY
 
@@ -109,44 +102,42 @@ jobs:
           date = (os.environ.get("DATE") or "").strip()
           period = int(os.environ.get("PERIOD") or 7)
           if not date:
-              date = datetime.datetime.utcnow().strftime("%Y%m%d")   # 定时触发时的近似
+              date = (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime("%Y%m%d")
 
           r = tdx_minute.fetch_day(code, date, verbose=True, period=period)
           bars = r["bars"]
           print("RESULT %s %s: %d 根" % (code, r["date"], len(bars)))
-          if bars:
-              print("first:", bars[0])
-              print("last :", bars[-1])
           os.makedirs("out", exist_ok=True)
           path = "out/minute_%s_%s_p%d.json" % (code, r["date"], period)
           open(path, "w", encoding="utf-8").write(
               json.dumps({"code": code, "date": r["date"], "period": period, "bars": bars},
                          ensure_ascii=False))
           print("written:", path)
-          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-              f.write("path=%s\n" % path)
-              f.write("n=%d\n" % len(bars))
           PY
 
-      - name: 回填历史（手动触发 + 填了 backfill）
+      - name: 回填历史（手动 + 填了 backfill）
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.backfill != ''
         run: |
-          # 分片：全市场回填单线程要十几小时，这里按 shard 切给多个 runner 并行
           python scripts/warm_minute.py --backfill ${{ github.event.inputs.backfill }} \
             ${{ github.event.inputs.scope == 'all' && '--all' || '' }} \
             --shard ${{ github.event.inputs.shard }}
 
-      - name: 批量预热（定时触发：全市场 5500 只当日分时）
-        if: github.event_name == 'schedule'
+      - name: 批量预热（定时触发：全市场当日分时，失败重试 2 次）
+        if: github.event_name == 'schedule' && steps.gate.outputs.run == 'true'
         run: |
-          # 全市场：约 5500 只 × 1 次请求 + 1 次 PUT ≈ 60 分钟，6 小时上限内够用
-          python scripts/warm_minute.py --all
+          ok=0
+          for i in 1 2; do
+            echo "== 第 $i 次尝试 warm_minute --all"
+            if python scripts/warm_minute.py --all; then ok=1; break; fi
+            echo "失败，90 秒后重试"; sleep 90
+          done
+          if [ "$ok" != "1" ]; then echo "两次都失败"; exit 1; fi
 
-      - name: 上传到 COS（仓库已有 COS_SECRET_ID/KEY；bucket/region 有默认值）
+      - name: 上传到 COS
         if: env.COS_SECRET_ID != ''
         run: |
           python - <<'PY'
-          import base64, hashlib, hmac, json, os, time, urllib.request
+          import base64, hashlib, hmac, json, os, sys, time, urllib.request
           sid = os.environ.get("COS_SECRET_ID", "")
           skey = os.environ.get("COS_SECRET_KEY", "")
           bucket = os.environ.get("COS_BUCKET", "")
@@ -154,23 +145,38 @@ jobs:
           if not (sid and skey and bucket):
               print("跳过：未配置 COS secrets")
               raise SystemExit(0)
+          if not os.path.isdir("out"):
+              print("没有 out 目录（本次可能无事可做），跳过上传")
+              raise SystemExit(0)
+          files = sorted(os.listdir("out"))
+          if not files:
+              print("out 为空，跳过上传")
+              raise SystemExit(0)
           host = "%s.cos.%s.myqcloud.com" % (bucket, region)
-          for fn in os.listdir("out"):
-              base = fn.replace("minute_", "").replace(".json", "")   # 600000_20260915_p7
+          ok = fail = 0
+          for fn in files:
+              base = fn.replace("minute_", "").replace(".json", "")
               parts = base.split("_")
+              if len(parts) != 3:
+                  continue
               key = "minute/%s/%s/%s.json" % (parts[0], parts[1], parts[2])
               body = open(os.path.join("out", fn), "rb").read()
               now = int(time.time())
               sign_time = "%d;%d" % (now - 60, now + 600)
-              key_time = sign_time
-              sign_key = hmac.new(skey.encode(), key_time.encode(), hashlib.sha1).hexdigest()
+              sign_key = hmac.new(skey.encode(), sign_time.encode(), hashlib.sha1).hexdigest()
               http_string = "put\n/%s\n\nhost=%s\n" % (key, host)
-              string_to_sign = "sha1\n%s\n%s\n" % (sign_time, hashlib.sha1(http_string.encode()).hexdigest())
-              sig = hmac.new(sign_key.encode(), string_to_sign.encode(), hashlib.sha1).hexdigest()
-              auth = "q-sign-algorithm=sha1&q-ak=%s&q-sign-time=%s&q-key-time=%s&q-header-list=host&q-url-param-list=&q-signature=%s" % (
-                  sid, sign_time, key_time, sig)
-              req = urllib.request.Request("https://%s/%s" % (host, key), data=body, method="PUT",
-                                           headers={"Authorization": auth, "Host": host})
-              with urllib.request.urlopen(req, timeout=30) as r:
-                  print("COS %s -> %s" % (key, r.status))
+              sts = "sha1\n%s\n%s\n" % (sign_time, hashlib.sha1(http_string.encode()).hexdigest())
+              sig = hmac.new(sign_key.encode(), sts.encode(), hashlib.sha1).hexdigest()
+              auth = ("q-sign-algorithm=sha1&q-ak=%s&q-sign-time=%s&q-key-time=%s"
+                      "&q-header-list=host&q-url-param-list=&q-signature=%s"
+                      % (sid, sign_time, sign_time, sig))
+              req = urllib.request.Request("https://%s/%s" % (host, key), data=body,
+                                           method="PUT", headers={"Authorization": auth, "Host": host})
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as r:
+                      ok += 1
+              except Exception as e:
+                  fail += 1
+                  print("上传失败", key, str(e)[:80])
+          print("COS 上传：成功 %d 失败 %d" % (ok, fail))
           PY
