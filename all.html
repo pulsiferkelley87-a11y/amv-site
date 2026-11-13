@@ -1916,9 +1916,22 @@ function kvSVG() {
   }
   if (CUR.flags.sig && res.sig) {
     res.sig.forEach((s) => {
-      const a = s.i - i0;
-      if (a < 0 || a > m - 1) return;
       const buy = s.type.indexOf("买") >= 0;
+      let a = s.i - i0;
+      // 兜底：信号价与那根K线的区间不符时（旧引擎端点错位的数据），锚到最近的同价位K线
+      if (a >= 0 && a < m) {
+        const bp0 = rows[a];
+        const inRange = s.p >= bp0.l * 0.985 && s.p <= bp0.h * 1.015;
+        if (!inRange) {
+          let best = a, bestD = Infinity;
+          for (let k = Math.max(0, a - 30); k <= Math.min(m - 1, a + 30); k++) {
+            const dd = Math.abs((buy ? rows[k].l : rows[k].h) - s.p);
+            if (dd < bestD) { bestD = dd; best = k; }
+          }
+          if (bestD <= Math.abs(s.p) * 0.03) a = best;
+        }
+      }
+      if (a < 0 || a > m - 1) return;
       const col = buy ? "#f87171" : "#34d399";
       const yy = Y(s.p) + (buy ? 14 : -10);
       chanSvg += `<circle cx="${X(a).toFixed(1)}" cy="${Y(s.p).toFixed(1)}" r="3" fill="${col}"/>`
