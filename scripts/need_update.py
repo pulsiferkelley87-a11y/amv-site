@@ -65,21 +65,24 @@ def main():
         key = today_key
 
     if run and key:
-        try:
-            lm = head_lm(key)
-            d = lm_bj_date(lm)
-            print("闸门：%s Last-Modified=%s → 北京 %s（今天 %s）" % (key, lm, d, today))
-            if d == today:
+        fd = field_date(key, field) if field else ""
+        if field and fd:
+            # 有业务日期字段（如 updated_at / trade_date）时以它为准：
+            # 文件可能今天被重传，但里面装的是昨天算出来的数据。
+            print("闸门：%s.%s = %s（今天 %s）" % (key, field, fd, today))
+            if fd == today:
                 run = False
-                reason = "already-updated-today"
-        except Exception as e:
-            print("闸门：HEAD %s 失败（%s），按需要跑处理" % (key, str(e)[:80]))
-    if run and field and key:
-        fd = field_date(key, field)
-        print("闸门：%s.%s = %s" % (key, field, fd or "空"))
-        if fd == today:
-            run = False
-            reason = "field-is-today"
+                reason = "field-is-today"
+        else:
+            try:
+                lm = head_lm(key)
+                d = lm_bj_date(lm)
+                print("闸门：%s Last-Modified=%s → 北京 %s（今天 %s）" % (key, lm, d, today))
+                if d == today:
+                    run = False
+                    reason = "already-updated-today"
+            except Exception as e:
+                print("闸门：HEAD %s 失败（%s），按需要跑处理" % (key, str(e)[:80]))
 
     print("闸门结论：run=%s %s" % ("true" if run else "false", ("(%s)" % reason) if reason else ""))
     gh = os.environ.get("GITHUB_OUTPUT")
