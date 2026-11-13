@@ -92,7 +92,10 @@ jobs:
         if: github.event_name == 'workflow_dispatch' || steps.gate.outputs.run == 'true'
         run: |
           mkdir -p _site
-          find . -maxdepth 1 -type f -exec cp {} _site/ \;
+          find . -maxdepth 1 -type f \
+            ! -name 'chan_scan.json' ! -name 'bull_bear.json' \
+            ! -name 'breadth_history.json' ! -name 'news.json' \
+            -exec cp {} _site/ \;
 
       - name: Upload static site to Tencent COS
         if: github.event_name == 'workflow_dispatch' || steps.gate.outputs.run == 'true'
