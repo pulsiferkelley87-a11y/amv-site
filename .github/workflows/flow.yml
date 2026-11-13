@@ -4,19 +4,24 @@ on:
   workflow_dispatch:
     inputs:
       codes:
-        description: '逗号分隔股票代码（留空=全市场）'
+        description: '逗号分隔股票代码（留空=按片跑全市场）'
         required: false
         default: ''
       limit:
         description: '只跑前 N 只（调试用）'
         required: false
         default: ''
+      shard:
+        description: '分片 i/n，例如 0/4（留空=全量）'
+        required: false
+        default: ''
   schedule:
-    # 收盘后多档兜底（GitHub 的 cron 经常被丢弃/延迟）
-    - cron: '20 8 * * 1-5'    # 北京 16:20
-    - cron: '50 9 * * 1-5'    # 北京 17:50
-    - cron: '30 11 * * 1-5'   # 北京 19:30
-    - cron: '30 13 * * 1-5'   # 北京 21:30
+    # 分 4 片跑完整个市场：每片约 1250 只、并发 2、间隔 0.35s（约 6~9 分钟）。
+    # 分片既降速避开东财限流，也天然容错：某一片被丢弃，其它片照常更新。
+    - cron: '20 8 * * 1-5'    # 北京 16:20 → 第 0 片
+    - cron: '50 9 * * 1-5'    # 北京 17:50 → 第 1 片
+    - cron: '30 11 * * 1-5'   # 北京 19:30 → 第 2 片
+    - cron: '30 13 * * 1-5'   # 北京 21:30 → 第 3 片
 
 concurrency:
   group: tdx-flow
@@ -25,7 +30,7 @@ concurrency:
 jobs:
   flow:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 60
     env:
       COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
       COS_SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
@@ -38,10 +43,31 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: 闸门（今天已更新就跳过）
+      - name: 解析本次分片
+        id: shard
+        env:
+          SCHED: ${{ github.event.schedule }}
+          INPUT_SHARD: ${{ github.event.inputs.shard }}
+        run: |
+          case "$SCHED" in
+            '20 8 * * 1-5')  S='0/4' ;;
+            '50 9 * * 1-5')  S='1/4' ;;
+            '30 11 * * 1-5') S='2/4' ;;
+            '30 13 * * 1-5') S='3/4' ;;
+            *)               S='' ;;
+          esac
+          if [ -n "$INPUT_SHARD" ]; then S="$INPUT_SHARD"; fi
+          echo "shard=$S" >> "$GITHUB_OUTPUT"
+          echo "本次分片：${S:-全量}"
+
+      - name: 闸门（这一片今天跑过就跳过）
         id: gate
         if: github.event_name == 'schedule'
-        run: python scripts/need_update.py flow/600031.json --skip-weekend
+        env:
+          SHARD: ${{ steps.shard.outputs.shard }}
+        run: |
+          IDX=${SHARD%%/*}
+          python scripts/need_update.py "flow/_shard${IDX}.json" --field date --skip-weekend
 
       - name: 连通性自检（东财资金流）
         if: github.event_name == 'workflow_dispatch' || steps.gate.outputs.run == 'true'
@@ -60,19 +86,36 @@ jobs:
               raise SystemExit("东财返回空数据")
           PY
 
-      - name: 抓主力资金日线并写 COS（失败重试 3 次）
+      - name: 抓主力资金日线并写 COS
         if: github.event_name == 'workflow_dispatch' || steps.gate.outputs.run == 'true'
         env:
           INPUT_CODES: ${{ github.event.inputs.codes }}
           INPUT_LIMIT: ${{ github.event.inputs.limit }}
+          SHARD: ${{ steps.shard.outputs.shard }}
         run: |
-          ARGS="--workers 4"
+          ARGS="--workers 2 --delay 0.35"
+          if [ -n "$SHARD" ]; then ARGS="$ARGS --shard $SHARD"; fi
           if [ -n "$INPUT_CODES" ]; then ARGS="$ARGS --codes $INPUT_CODES"; fi
           if [ -n "$INPUT_LIMIT" ]; then ARGS="$ARGS --limit $INPUT_LIMIT"; fi
-          ok=0
-          for i in 1 2 3; do
-            echo "== 第 $i 次尝试：python scripts/warm_flow.py $ARGS"
-            if python scripts/warm_flow.py $ARGS; then ok=1; break; fi
-            echo "第 $i 次失败，60 秒后重试"; sleep 60
-          done
-          if [ "$ok" != "1" ]; then echo "三次都失败"; exit 1; fi
+          python scripts/warm_flow.py $ARGS
+
+      - name: 写分片完成标记
+        if: github.event_name == 'workflow_dispatch' || steps.gate.outputs.run == 'true'
+        env:
+          SHARD: ${{ steps.shard.outputs.shard }}
+        run: |
+          python - <<'PY'
+          import json, os, sys, time
+          sys.path.insert(0, "scripts")
+          import warm_flow as w
+          s = os.environ.get("SHARD") or "all"
+          idx = s.split("/")[0] if s else "all"
+          body = json.dumps({"date": time.strftime("%Y-%m-%d"),
+                             "shard": s or "all",
+                             "updated_at": time.strftime("%Y-%m-%d %H:%M:%S")},
+                            ensure_ascii=False).encode()
+          st = w.cos_put("flow/_shard%s.json" % idx, body)
+          print("标记 flow/_shard%s.json →" % idx, st)
+          if st != 200:
+              raise SystemExit("标记上传失败 %s" % st)
+          PY
