@@ -16,7 +16,13 @@ SECRET_KEY = os.environ.get("COS_SECRET_KEY", "")
 BUCKET = os.environ.get("COS_BUCKET", "")
 REGION = os.environ.get("COS_REGION", "ap-guangzhou")
 
-EXCLUDE = {"live_data.json"}  # 实盘云函数每分钟更新，静态同步不得覆盖
+EXCLUDE = {
+    "live_data.json",   # 实盘云函数每 15 分钟更新
+    "chan_scan.json",   # chan.yml 扫描产物，静态同步不得覆盖
+    "bull_bear.json",   # daily.yml 计算产物
+    "breadth_history.json",
+    "news.json",
+}  # 这些文件由各自的 workflow 负责更新，静态站点同步必须跳过
 
 CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
