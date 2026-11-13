@@ -973,6 +973,7 @@ function keyLevels(bars) {
 
 function draw(bars, r) {
   if (!bars || !bars.length) return;
+  if (!document.querySelector("#chart")) return; // 已切到手写 SVG，旧 echarts 流程停用
   if (document.querySelector("#kline").offsetParent === null) return; // 分区不可见时跳过（避免 0 尺寸初始化）
   const dates = bars.map((b) => b.d);
   const ohlc = bars.map((b) => [b.o, b.c, b.l, b.h]);
@@ -1556,6 +1557,7 @@ document.querySelector("#modal").addEventListener("click", (e) => { if (e.target
 
 // ---------- 双指缩放（手机） ----------
 (function pinchZoom() {
+  if (document.querySelector("#kvSvg")) return; // 已改用 SVG 版手势，旧逻辑停用
   const wrap = document.querySelector("#klWrap");
   if (!wrap) return;
   const dist = (e) => {
@@ -1889,10 +1891,33 @@ function kvBind() {
   const svg = document.querySelector("#kvSvg");
   if (!svg) return;
   const n = CUR.bars.length;
+  svg.style.touchAction = "none";
+  let raf = 0;
+  const schedule = () => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => { raf = 0; kvPaint(); });
+  };
+  const touchDist = (e) => Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+  let pinchBase = 0;
+  svg.addEventListener("touchstart", (e) => {
+    if (e.touches.length === 2) pinchBase = touchDist(e);
+  }, { passive: true });
+  svg.addEventListener("touchmove", (e) => {
+    if (e.touches.length !== 2 || !pinchBase) return;
+    e.preventDefault();
+    const d = touchDist(e);
+    const k = d / pinchBase;
+    if (Math.abs(k - 1) < 0.03) return;
+    KV.count = kvClamp(Math.round(KV.count / k), 20, 500);
+    pinchBase = d;
+    schedule();
+  }, { passive: false });
+  svg.addEventListener("touchend", () => { pinchBase = 0; }, { passive: true });
+  svg.addEventListener("touchcancel", () => { pinchBase = 0; KV.drag = null; }, { passive: true });
   svg.addEventListener("wheel", (e) => {
     e.preventDefault();
     KV.count = kvClamp(Math.round(KV.count * (e.deltaY > 0 ? 1.2 : 0.8)), 20, 500);
-    kvPaint();
+    schedule();
   }, { passive: false });
 
   svg.addEventListener("pointerdown", (e) => { KV.drag = e.clientX; KV.moved = false; });
@@ -1900,13 +1925,13 @@ function kvBind() {
   svg.addEventListener("pointermove", (e) => {
     if (KV.drag != null) {
       const dx = e.clientX - KV.drag;
-      if (Math.abs(dx) > 3) {
+      if (Math.abs(dx) > 6) {
         const iw = 1000 - 66, bw = iw / KV.count;
         const shift = Math.round(dx / (bw * (svg.clientWidth / 1000)));
         if (shift) {
           KV.end = kvClamp(KV.end - shift, 0, n - 1);
           KV.drag = e.clientX; KV.moved = true;
-          kvPaint();
+          schedule();
         }
       }
       return;
@@ -1940,12 +1965,13 @@ function kvBind() {
       + `<tspan x="62" dy="13">量 ${(b.v / 10000).toFixed(1)} 万手</tspan>`;
     t.innerHTML = lbl;
   });
+  svg.addEventListener("pointercancel", () => { KV.drag = null; });
   svg.addEventListener("pointerleave", () => {
     const g = svg.querySelector("#kvCross");
     if (g) g.style.display = "none";
   });
   svg.addEventListener("dblclick", () => {
-    KV.count = Math.min(250, n); KV.end = n - 1; kvPaint();
+    KV.count = Math.min(250, n); KV.end = n - 1; schedule();
   });
   svg.addEventListener("click", (e) => {
     if (KV.moved) { KV.moved = false; return; }
