@@ -94,7 +94,9 @@ const res = {
   updated_at: new Date().toLocaleString("zh-CN", { hour12: false, timeZone: "Asia/Shanghai" }),
   ok, fail, ms: Date.now() - t0,
   counts, totals,
-  signals: recent.slice(0, 800),
+  signals: recent
+    .slice()
+    .sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0)),
   backtest: { all: stats(bt.map((x) => x.ret)), buckets, byType },
   engine: "chan-engine v1 · 通达信日线(CI dump) · 离线扫描",
 };
