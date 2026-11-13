@@ -22,6 +22,7 @@ import hashlib
 import hmac
 import json
 import os
+import random
 import sys
 import threading
 import time
@@ -89,19 +90,21 @@ def secid(c6):
     return ("1." if c6[0] in "659" else "0.") + c6
 
 
-def fetch_flow(c6, attempts=3):
+def fetch_flow(c6, attempts=4, delay=0.0):
     u = ("https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get"
          "?lmt=0&klt=101&secid=" + secid(c6)
          + "&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61")
     for k in range(attempts):
         try:
+            if delay:
+                time.sleep(delay * (0.6 + 0.8 * random.random()))
             req = urllib.request.Request(u, headers={
                 "User-Agent": UA, "Referer": "https://quote.eastmoney.com/", "Accept": "*/*"})
-            with urllib.request.urlopen(req, timeout=15) as r:
+            with urllib.request.urlopen(req, timeout=20) as r:
                 j = json.loads(r.read().decode("utf-8", "replace"))
             kl = ((j.get("data") or {}).get("klines")) or []
             if not kl:
-                raise ValueError("空数据")
+                raise ValueError("空数据（疑似限流）")
             days = {}
             for s in kl:
                 a = s.split(",")
@@ -112,11 +115,12 @@ def fetch_flow(c6, attempts=3):
                 xbig = float(a[5] or 0)
                 days[a[0]] = [round(main, 2), round(xbig + 0.2 * big, 2)]
             return days
-        except Exception:
+        except Exception as e:
+            last = e
             if k == attempts - 1:
-                return None
-            time.sleep(1.2 * (k + 1))
-    return None
+                raise
+            time.sleep(1.5 * (2 ** k) + random.random())
+    raise last
 
 
 def all_market():
@@ -133,14 +137,20 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--codes", default="", help="逗号分隔，指定股票")
     ap.add_argument("--limit", type=int, default=0)
-    ap.add_argument("--workers", type=int, default=4, help="并发（默认 4，别把东财打急）")
+    ap.add_argument("--workers", type=int, default=2, help="并发（默认 2，并发 4 会被东财限流）")
+    ap.add_argument("--delay", type=float, default=0.35, help="每个请求前的间隔秒（含抖动）")
+    ap.add_argument("--shard", default="", help="分片 i/n，例如 0/4")
     ap.add_argument("--list", action="store_true")
     a = ap.parse_args()
 
     codes = [c.strip()[-6:] for c in a.codes.split(",") if c.strip()] if a.codes else all_market()
+    if a.shard:
+        i, n = [int(x) for x in a.shard.split("/")]
+        codes = [c for k, c in enumerate(codes) if k % n == i]
     if a.limit:
         codes = codes[:a.limit]
-    print("主力资金预热：%d 只，并发 %d，COS=%s" % (len(codes), a.workers, BUCKET))
+    print("主力资金预热：%d 只，并发 %d，间隔 %.2fs，分片 %s，COS=%s"
+          % (len(codes), a.workers, a.delay, a.shard or "全量", BUCKET))
     if a.list:
         print(" ".join(codes[:50]), "...")
         return 0
@@ -156,7 +166,7 @@ def main():
     def work(i_c):
         i, c = i_c
         try:
-            days = fetch_flow(c)
+            days = fetch_flow(c, delay=a.delay)
         except Exception as e:
             with lock:
                 stat["fail"] += 1
@@ -184,7 +194,10 @@ def main():
 
     print("完成：成功 %d ｜ 取数失败 %d ｜ 上传失败 %d ｜ 耗时 %.0fs"
           % (stat["ok"], stat["fail"], stat["nofile"], time.time() - t0))
-    return 0 if stat["fail"] == 0 else 1
+    total = stat["ok"] + stat["fail"] + stat["nofile"]
+    if total and stat["ok"] == 0:
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
