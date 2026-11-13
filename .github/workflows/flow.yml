@@ -12,12 +12,15 @@ on:
         required: false
         default: ''
   schedule:
-    # 交易日 16:20 北京时间（UTC 08:20）—— 比分钟线预热晚 10 分钟，错开跑
-    - cron: '20 8 * * 1-5'
+    # 收盘后多档兜底（GitHub 的 cron 经常被丢弃/延迟）
+    - cron: '20 8 * * 1-5'    # 北京 16:20
+    - cron: '50 9 * * 1-5'    # 北京 17:50
+    - cron: '30 11 * * 1-5'   # 北京 19:30
+    - cron: '30 13 * * 1-5'   # 北京 21:30
 
 concurrency:
   group: tdx-flow
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   flow:
@@ -35,7 +38,13 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: 闸门（今天已更新就跳过）
+        id: gate
+        if: github.event_name == 'schedule'
+        run: python scripts/need_update.py flow/600031.json --skip-weekend
+
       - name: 连通性自检（东财资金流）
+        if: github.event_name == 'workflow_dispatch' || steps.gate.outputs.run == 'true'
         run: |
           python - <<'PY'
           import json, urllib.request
@@ -51,13 +60,19 @@ jobs:
               raise SystemExit("东财返回空数据")
           PY
 
-      - name: 抓主力资金日线并写 COS
+      - name: 抓主力资金日线并写 COS（失败重试 3 次）
+        if: github.event_name == 'workflow_dispatch' || steps.gate.outputs.run == 'true'
+        env:
+          INPUT_CODES: ${{ github.event.inputs.codes }}
+          INPUT_LIMIT: ${{ github.event.inputs.limit }}
         run: |
           ARGS="--workers 4"
-          if [ -n "${{ github.event.inputs.codes }}" ]; then
-            ARGS="$ARGS --codes ${{ github.event.inputs.codes }}"
-          fi
-          if [ -n "${{ github.event.inputs.limit }}" ]; then
-            ARGS="$ARGS --limit ${{ github.event.inputs.limit }}"
-          fi
-          python scripts/warm_flow.py $ARGS
+          if [ -n "$INPUT_CODES" ]; then ARGS="$ARGS --codes $INPUT_CODES"; fi
+          if [ -n "$INPUT_LIMIT" ]; then ARGS="$ARGS --limit $INPUT_LIMIT"; fi
+          ok=0
+          for i in 1 2 3; do
+            echo "== 第 $i 次尝试：python scripts/warm_flow.py $ARGS"
+            if python scripts/warm_flow.py $ARGS; then ok=1; break; fi
+            echo "第 $i 次失败，60 秒后重试"; sleep 60
+          done
+          if [ "$ok" != "1" ]; then echo "三次都失败"; exit 1; fi
