@@ -1817,6 +1817,33 @@ function kvBind() {
   }, { passive: false });
   svg.addEventListener("touchend", () => { pinchBase = 0; }, { passive: true });
   svg.addEventListener("touchcancel", () => { pinchBase = 0; KV.drag = null; }, { passive: true });
+  const kvCrossAt = (clientX, clientY) => {
+    const rect = svg.getBoundingClientRect();
+    const px = ((clientX - rect.left) / rect.width) * 1000;
+    const dispStart = Math.max(0, KV.end - KV.count + 1);
+    const i0 = Math.max(0, dispStart - 3);
+    const bw = (1000 - 66) / Math.min(CUR.bars.length || 1, KV.count + 6);
+    const idx = Math.round((px - 54 - bw / 2) / bw);
+    const gi = i0 + idx;
+    if (gi < 0 || gi >= (CUR.bars.length || 0)) return;
+    const b = CUR.bars[gi];
+    const g = svg.querySelector("#kvCross");
+    const v = svg.querySelector("#kvV"), h = svg.querySelector("#kvH");
+    const t = svg.querySelector("#kvText");
+    if (!g || !v || !h || !t) return;
+    g.style.display = "";
+    v.setAttribute("x1", px.toFixed(1)); v.setAttribute("x2", px.toFixed(1));
+    const yv = clientY - rect.top;
+    h.setAttribute("y1", yv.toFixed(1)); h.setAttribute("y2", yv.toFixed(1));
+    const prev = gi > 0 ? CUR.bars[gi - 1].c : b.o;
+    const pct = ((b.c - prev) / prev) * 100;
+    t.innerHTML = `<tspan x="62" dy="0">${b.d}</tspan>`
+      + `<tspan x="62" dy="13">开 ${b.o.toFixed(2)}  高 ${b.h.toFixed(2)}</tspan>`
+      + `<tspan x="62" dy="13">低 ${b.l.toFixed(2)}  收 ${b.c.toFixed(2)}</tspan>`
+      + `<tspan x="62" dy="13">涨跌 ${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</tspan>`
+      + `<tspan x="62" dy="13">量 ${(b.v / 10000).toFixed(1)} 万手</tspan>`;
+  };
+
   svg.addEventListener("wheel", (e) => {
     e.preventDefault();
     KV.count = kvClamp(Math.round(KV.count * (e.deltaY > 0 ? 1.2 : 0.8)), 20, 500);
@@ -1839,34 +1866,7 @@ function kvBind() {
       }
       return;
     }
-    // 十字光标
-    const rect = svg.getBoundingClientRect();
-    const px = ((e.clientX - rect.left) / rect.width) * 1000;
-    const dispStart = Math.max(0, KV.end - KV.count + 1);
-    const i0 = Math.max(0, dispStart - 3);
-    const bw = (1000 - 66) / Math.min(CUR.bars.length, KV.count + 6);
-    const idx = Math.round((px - 54 - bw / 2) / bw);
-    const gi = i0 + idx;
-    if (gi < 0 || gi >= n) return;
-    const b = CUR.bars[gi];
-    const g = svg.querySelector("#kvCross");
-    const v = svg.querySelector("#kvV"), h = svg.querySelector("#kvH");
-    const t = svg.querySelector("#kvText");
-    if (!g) return;
-    const rowsLo = -Infinity;
-    void rowsLo;
-    g.style.display = "";
-    v.setAttribute("x1", px.toFixed(1)); v.setAttribute("x2", px.toFixed(1));
-    const yv = e.clientY - rect.top;
-    h.setAttribute("y1", yv.toFixed(1)); h.setAttribute("y2", yv.toFixed(1));
-    const prev = gi > 0 ? CUR.bars[gi - 1].c : b.o;
-    const pct = ((b.c - prev) / prev) * 100;
-    const lbl = `<tspan x="62" dy="0">${b.d}</tspan>`
-      + `<tspan x="62" dy="13">开 ${b.o.toFixed(2)}  高 ${b.h.toFixed(2)}</tspan>`
-      + `<tspan x="62" dy="13">低 ${b.l.toFixed(2)}  收 ${b.c.toFixed(2)}</tspan>`
-      + `<tspan x="62" dy="13">涨跌 ${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</tspan>`
-      + `<tspan x="62" dy="13">量 ${(b.v / 10000).toFixed(1)} 万手</tspan>`;
-    t.innerHTML = lbl;
+    kvCrossAt(e.clientX, e.clientY);
   });
   svg.addEventListener("pointercancel", () => { KV.drag = null; });
   svg.addEventListener("pointerleave", () => {
@@ -1878,6 +1878,7 @@ function kvBind() {
   });
   svg.addEventListener("click", (e) => {
     if (KV.moved) { KV.moved = false; return; }
+    kvCrossAt(e.clientX, e.clientY);
     const d = e.target.getAttribute && e.target.getAttribute("data-d");
     if (d && typeof showMinute === "function") showMinute(d);
   });
