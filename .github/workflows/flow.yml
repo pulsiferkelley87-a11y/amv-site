@@ -15,6 +15,14 @@ on:
         description: '分片 i/n，例如 0/4（留空=全量）'
         required: false
         default: ''
+      workers:
+        description: '并发（默认 2）'
+        required: false
+        default: ''
+      delay:
+        description: '每秒间隔（默认 0.35）'
+        required: false
+        default: ''
   schedule:
     # 分 4 片跑完整个市场：每片约 1250 只、并发 2、间隔 0.35s（约 6~9 分钟）。
     # 分片既降速避开东财限流，也天然容错：某一片被丢弃，其它片照常更新。
@@ -91,9 +99,11 @@ jobs:
         env:
           INPUT_CODES: ${{ github.event.inputs.codes }}
           INPUT_LIMIT: ${{ github.event.inputs.limit }}
+          INPUT_WORKERS: ${{ github.event.inputs.workers }}
+          INPUT_DELAY: ${{ github.event.inputs.delay }}
           SHARD: ${{ steps.shard.outputs.shard }}
         run: |
-          ARGS="--workers 2 --delay 0.35"
+          ARGS="--workers ${INPUT_WORKERS:-2} --delay ${INPUT_DELAY:-0.35}"
           if [ -n "$SHARD" ]; then ARGS="$ARGS --shard $SHARD"; fi
           if [ -n "$INPUT_CODES" ]; then ARGS="$ARGS --codes $INPUT_CODES"; fi
           if [ -n "$INPUT_LIMIT" ]; then ARGS="$ARGS --limit $INPUT_LIMIT"; fi
