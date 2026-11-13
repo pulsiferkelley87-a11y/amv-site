@@ -143,8 +143,11 @@ export function segments(sl) {
     const lo = Math.min(...part.map((s) => s.p1));
     const p1 = dir === 1 ? hi : lo;
     const last = part[part.length - 1];
+    // 端点必须落在「产生极值的那一笔」上：p1 取段内最高/最低，
+    // 而这一价可能出现在段中间，若用最后一笔的 i1 会与 p1 错位（图上表现为信号点飘在K线外）
+    const ext = part.find((s) => (dir === 1 ? s.p1 === hi : s.p1 === lo)) || last;
     segs.push({
-      dir, i0: sl[start].i0, i1: last.i1, d0: sl[start].d0, d1: last.d1,
+      dir, i0: sl[start].i0, i1: ext.i1, d0: sl[start].d0, d1: ext.d1,
       p0: sl[start].p0, p1, hi, lo, strokes: part.length,
       amp: Math.abs(p1 - sl[start].p0),
     });
@@ -155,9 +158,11 @@ export function segments(sl) {
     const part = sl.slice(start);
     const hi = Math.max(...part.map((s) => s.p1));
     const lo = Math.min(...part.map((s) => s.p1));
+    // 未完成段同样要把端点钉在产生极值的那一笔上
+    const extT = part.find((s) => (dir === 1 ? s.p1 === hi : s.p1 === lo)) || part[part.length - 1];
     segs.push({
-      dir, i0: part[0].i0, i1: part[part.length - 1].i1,
-      d0: part[0].d0, d1: part[part.length - 1].d1,
+      dir, i0: part[0].i0, i1: extT.i1,
+      d0: part[0].d0, d1: extT.d1,
       p0: part[0].p0, p1: dir === 1 ? hi : lo, hi, lo, strokes: part.length, open: true,
       amp: Math.abs((dir === 1 ? hi : lo) - part[0].p0),
     });
