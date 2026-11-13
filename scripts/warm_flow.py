@@ -155,7 +155,14 @@ def main():
 
     def work(i_c):
         i, c = i_c
-        days = fetch_flow(c)
+        try:
+            days = fetch_flow(c)
+        except Exception as e:
+            with lock:
+                stat["fail"] += 1
+            if stat["fail"] <= 5:
+                print("  取数异常 %s: %s" % (c, str(e)[:100]))
+            return
         if not days:
             with lock:
                 stat["fail"] += 1
