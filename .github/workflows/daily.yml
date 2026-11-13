@@ -122,3 +122,51 @@ jobs:
         if: github.event_name == 'workflow_dispatch' || steps.gate.outputs.run == 'true'
         id: deployment
         uses: actions/deploy-pages@v4
+
+  # 缠论扫描兜底：chan.yml 自己的 cron 若没被 GitHub 触发，就由本 job 代打一次
+  kick-chan:
+    needs: update
+    if: always() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检查今天有没有跑过缠论扫描
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          python3 - <<'PY'
+          import datetime, json, os, urllib.request
+
+          pat = os.environ.get("GH_PAT", "")
+          if not pat:
+              print("没有 GH_PAT，跳过兜底")
+              raise SystemExit(0)
+
+          base = "https://api.github.com/repos/pulsiferkelley87-a11y/amv-site"
+          hdr = {
+              "Authorization": "Bearer " + pat,
+              "Accept": "application/vnd.github+json",
+              "User-Agent": "amv-kick",
+          }
+
+          def get(url):
+              return json.loads(urllib.request.urlopen(
+                  urllib.request.Request(url, headers=hdr), timeout=30).read().decode())
+
+          today = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+          runs = get(base + "/actions/workflows/chan.yml/runs?per_page=10")["workflow_runs"]
+          ran = [w for w in runs if w["created_at"][:10] == today
+                 and w["status"] in ("queued", "in_progress", "completed")]
+          print("今天 chan.yml 运行次数:", len(ran))
+
+          if ran:
+              print("今天已经跑过，不重复触发")
+              raise SystemExit(0)
+
+          req = urllib.request.Request(
+              base + "/actions/workflows/chan.yml/dispatches",
+              data=json.dumps({"ref": "main"}).encode(),
+              method="POST",
+              headers={**hdr, "Content-Type": "application/json"},
+          )
+          print("兜底 dispatch 状态:", urllib.request.urlopen(req, timeout=30).status)
+          PY
