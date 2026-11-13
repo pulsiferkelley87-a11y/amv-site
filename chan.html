@@ -123,7 +123,7 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
 <header>
   <div class="brand">缠论 · <b>缠中说禅</b></div>
   <button class="btn" id="refresh">刷新数据</button>
-  <button class="btn ghost" id="scanBtn">全市场扫描</button>
+  <button class="btn ghost" id="scanBtn">扫描时间表</button>
   <div class="idx" id="idxBar"></div>
 </header>
 
@@ -1220,7 +1220,25 @@ async function runScan(opts = {}) {
     b.textContent = old;
   }
 }
-$("#scanBtn").onclick = () => runScan();
+$("#scanBtn").onclick = () => {
+  openModal("全市场缠论扫描：什么时候跑", `
+    <h4 style="margin:14px 0 6px">自动跑</h4>
+    <p>GitHub Actions 任务 <b>Chan Scan</b>，仅工作日（周一至周五）：</p>
+    <ul>
+      <li>主跑：<b>北京时间 18:20</b>（UTC 10:20）</li>
+      <li>兜底：<b>北京时间 21:00</b>（UTC 13:00）</li>
+    </ul>
+    <p>单次约 8~12 分钟：dump 5,200 只日线 → 缠论分析 → 近 10 日信号入池 → 回测 → 写 <code>chan_scan.json</code> 与 <code>chan/&lt;代码&gt;.json</code> 到云端。</p>
+    <p>跑完后刷新本页即可看到新结果；两次都失败时页面继续显示上一次成功的数据，不会空。</p>
+
+    <h4 style="margin:14px 0 6px">手动跑一次</h4>
+    <p>打开 <a href="https://github.com/pulsiferkelley87-a11y/amv-site/actions/workflows/chan.yml" target="_blank" rel="noopener">Chan Scan 页面</a> → 右上角 <b>Run workflow</b> → 分支选 <code>main</code> → 点绿色按钮。</p>
+    <p>需要该仓库的写权限（登录自己的 GitHub 账号；没有权限只能看记录，点不了按钮）。</p>
+
+    <h4 style="margin:14px 0 6px">为什么不在本页扫</h4>
+    <p>浏览器端要逐只去拉 5,000+ 只 K 线，数据源跨域限制 + 单线程，实际跑不完；云端机器没有跨域问题，也快得多。所以这个按钮只做说明，不再执行扫描。</p>
+  `);
+};
 window.__runScan = runScan;
 
 
