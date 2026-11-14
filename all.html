@@ -1089,9 +1089,12 @@ function computeLevelsZ(bars) {
 
 function keyLevels(bars) {
   const lv = computeLevelsZ(bars);
+  const byDist = (arr) => arr.slice()
+    .sort((a, b) => Math.abs(a.price - lv.cur) - Math.abs(b.price - lv.cur))
+    .slice(0, 2);
   return [
-    ...lv.S.slice(0, 2).reverse().map((x, i) => ({ p: +x.price.toFixed(2), t: "支撑" + (i + 1), k: "down", src: x.src })),
-    ...lv.R.slice(0, 2).map((x, i) => ({ p: +x.price.toFixed(2), t: "压力" + (i + 1), k: "up", src: x.src })),
+    ...byDist(lv.S).map((x, i) => ({ p: +x.price.toFixed(2), t: "支撑" + (i + 1), k: "down", src: x.src })),
+    ...byDist(lv.R).map((x, i) => ({ p: +x.price.toFixed(2), t: "压力" + (i + 1), k: "up", src: x.src })),
   ];
 }
 function draw(bars, r) {
@@ -1171,8 +1174,8 @@ function draw(bars, r) {
                 : []),
               ...(f.levels
                 ? keyLevels(bars).map((l) => [
-                    { yAxis: l.k === "up" ? l.p : +(l.p * 0.985).toFixed(2), itemStyle: { color: l.k === "up" ? "rgba(239,68,68,.12)" : "rgba(34,197,94,.12)" } },
-                    { yAxis: l.k === "up" ? +(l.p * 1.015).toFixed(2) : l.p },
+                    { yAxis: l.k === "up" ? l.p : +(l.p * 0.993).toFixed(2), itemStyle: { color: l.k === "up" ? "rgba(239,68,68,.12)" : "rgba(34,197,94,.12)" } },
+                    { yAxis: l.k === "up" ? +(l.p * 1.007).toFixed(2) : l.p },
                   ])
                 : []),
             ],
