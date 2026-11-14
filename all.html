@@ -957,26 +957,143 @@ function ma(arr, n) {
   return out;
 }
 
-function keyLevels(bars) {
-  // 最近 250 根里的摆动高低点 + 20/60 日均线，取离现价最近的上下各两条
-  const n = bars.length, i0 = Math.max(0, n - 250);
-  const c = bars[n - 1].c;
-  const highs = [], lows = [];
-  for (let i = i0 + 2; i < n - 2; i++) {
-    const b = bars[i];
-    if (b.h >= bars[i - 1].h && b.h >= bars[i - 2].h && b.h >= bars[i + 1].h && b.h >= bars[i + 2].h) highs.push(b.h);
-    if (b.l <= bars[i - 1].l && b.l <= bars[i - 2].l && b.l <= bars[i + 1].l && b.l <= bars[i + 2].l) lows.push(b.l);
+// 关键位：五源打分（分型 / 缺口 / 均线 / 筹码VWAP / 斐波），口径对齐主站 live.html
+function computeLevelsZ(bars) {
+  if (!bars || bars.length < 30) return { R: [], S: [], broken: 0, cur: 0 };
+  const win = bars.slice(-250);
+  const n = win.length;
+  const H = win.map((b) => b.h), L = win.map((b) => b.l), C = win.map((b) => b.c), V = win.map((b) => b.v);
+  const cur = C[n - 1];
+  if (!(cur > 0)) return { R: [], S: [], broken: 0, cur: 0 };
+
+  // ATR14 自适应阈值
+  let atr = 0, atrN = 0;
+  for (let i = 1; i < n; i++) {
+    atr += Math.max(H[i] - L[i], Math.abs(H[i] - C[i - 1]), Math.abs(L[i] - C[i - 1]));
+    atrN++;
   }
-  const above = [...new Set(highs.filter((x) => x > c * 1.005).map((x) => +x.toFixed(2)))]
-    .sort((a, b) => a - b).slice(0, 2);
-  const below = [...new Set(lows.filter((x) => x < c * 0.995).map((x) => +x.toFixed(2)))]
-    .sort((a, b) => b - a).slice(0, 1);
-  return [
-    ...above.map((p, i) => ({ p, t: "压力" + (i + 1), k: "up" })),
-    ...below.map((p, i) => ({ p, t: "支撑" + (i + 1), k: "down" })),
-  ];
+  atr = atrN ? atr / atrN : cur * 0.03;
+
+  // 源一：分型转折（左右各 3 根确认）
+  const ph = [], pl = [];
+  for (let i = 3; i < n - 3; i++) {
+    let isH = true, isL = true;
+    for (let k = 1; k <= 3; k++) {
+      if (H[i] <= H[i - k] || H[i] <= H[i + k]) isH = false;
+      if (L[i] >= L[i - k] || L[i] >= L[i + k]) isL = false;
+    }
+    if (isH) ph.push({ i, price: H[i] });
+    if (isL) pl.push({ i, price: L[i] });
+  }
+  const mergePivots = (list, isHigh) => {
+    if (!list.length) return [];
+    list.sort((a, b) => a.i - b.i);
+    const out = [];
+    for (const p of list) {
+      const last = out[out.length - 1];
+      const tol = Math.max(2 * atr, 0.02 * p.price);
+      if (last && p.i - last.i <= 10 && Math.abs(p.price - last.price) <= tol) {
+        last.price = isHigh ? Math.max(last.price, p.price) : Math.min(last.price, p.price);
+      } else out.push({ i: p.i, price: p.price });
+    }
+    return out;
+  };
+  const highsP = mergePivots(ph, true), lowsP = mergePivots(pl, false);
+
+  // 源二：120 根成交额加权 VWAP
+  let vwap = 0, vwN = 0;
+  win.slice(-120).forEach((b) => {
+    const amt = b.v > 0 ? b.v * (b.h + b.l) / 2 : 0;
+    if (amt > 0) { vwap += amt * (b.h + b.l) / 2; vwN += amt; }
+  });
+  const vwapP = vwN ? vwap / vwN : 0;
+
+  // 源三：未回补缺口（宽度 ≥0.8%）
+  const gapsUp = [], gapsDown = [];
+  for (let i = 1; i < n; i++) {
+    if (L[i] > H[i - 1]) gapsUp.push({ lo: H[i - 1], hi: L[i], i });
+    else if (H[i] < L[i - 1]) gapsDown.push({ lo: H[i], hi: L[i - 1], i });
+  }
+  const unfilledUp = gapsUp.filter((g) => {
+    if ((g.hi - g.lo) / g.lo < 0.008) return false;
+    for (let j = g.i + 1; j < n; j++) if (L[j] <= g.lo) return false;
+    return true;
+  }).slice(-3);
+  const unfilledDown = gapsDown.filter((g) => {
+    if ((g.hi - g.lo) / g.lo < 0.008) return false;
+    for (let j = g.i + 1; j < n; j++) if (H[j] >= g.hi) return false;
+    return true;
+  }).slice(-3);
+
+  // 源四：MA60
+  let ma60 = 0;
+  {
+    let s = 0, c2 = 0;
+    for (let i = Math.max(0, n - 60); i < n; i++) { s += C[i]; c2++; }
+    ma60 = c2 ? s / c2 : 0;
+  }
+
+  // 源五：120 根波段斐波 0.5 / 0.618
+  let swingH = -Infinity, swingL = Infinity;
+  for (let i = Math.max(0, n - 120); i < n; i++) { if (H[i] > swingH) swingH = H[i]; if (L[i] < swingL) swingL = L[i]; }
+  const fib = [0.5, 0.618].map((f) => swingH - (swingH - swingL) * f);
+
+  const near = (a, b) => Math.abs(a - b) / Math.max(b, 0.001) < 0.01;
+  const testCount = (price) => {
+    let c2 = 0;
+    for (let i = Math.max(1, n - 120); i < n; i++) if (H[i] >= price * 0.99 && L[i] <= price * 1.01) c2++;
+    return c2;
+  };
+  const buildCands = (dir) => {
+    const cands = [];
+    const add = (price, src, w) => {
+      if (!price || price <= 0) return;
+      if (dir === "R" && price < cur * 1.005) return;
+      if (dir === "S" && price > cur * 0.995) return;
+      const hit = cands.find((c) => near(c.price, price));
+      if (hit) { hit.src += "+" + src; hit.w = Math.max(hit.w, w); }
+      else cands.push({ price, src, w, tests: 0 });
+    };
+    if (dir === "R") {
+      highsP.forEach((p) => add(p.price, "分型", 3));
+      unfilledDown.forEach((g) => add(g.hi, "缺口", 2));
+      add(ma60, "均线", 1); add(vwapP, "筹码", 2); fib.forEach((f) => add(f, "斐波", 1.5));
+    } else {
+      lowsP.forEach((p) => add(p.price, "分型", 3));
+      unfilledUp.forEach((g) => add(g.lo, "缺口", 2));
+      add(ma60, "均线", 1); add(vwapP, "筹码", 2); fib.forEach((f) => add(f, "斐波", 1.5));
+    }
+    cands.forEach((c) => {
+      c.tests = testCount(c.price);
+      const multi = 1 + (c.src.split("+").length - 1) * 0.5;
+      const distW = Math.max(0, 1 - Math.abs(c.price - cur) / Math.max(cur, 0.001));
+      c.score = c.w * multi * 3 + c.tests * 3 + distW * 1.5;
+    });
+    cands.sort((a, b) => b.score - a.score);
+    return cands.slice(0, 3);
+  };
+  const R = buildCands("R"), S = buildCands("S");
+
+  // 突破判定：收盘站上最近压力 + 放量 1.2 倍 + 前一日也站上
+  const topR = R.length ? R[0].price : 0;
+  let broken = 0;
+  if (topR > 0 && C[n - 1] > topR) {
+    const v5 = V.slice(Math.max(0, n - 6), n - 1).filter((x) => x > 0);
+    const volAvg5 = v5.length ? v5.reduce((a, b) => a + b, 0) / v5.length : 0;
+    const volOk = volAvg5 > 0 && V[n - 1] >= volAvg5 * 1.2;
+    const stand2 = C[n - 2] > topR;
+    broken = volOk ? (stand2 ? 2 : 1) : (stand2 ? 1 : 0);
+  }
+  return { R, S, broken, topR, cur, ma60 };
 }
 
+function keyLevels(bars) {
+  const lv = computeLevelsZ(bars);
+  return [
+    ...lv.S.slice(0, 2).reverse().map((x, i) => ({ p: +x.price.toFixed(2), t: "支撑" + (i + 1), k: "down", src: x.src })),
+    ...lv.R.slice(0, 2).map((x, i) => ({ p: +x.price.toFixed(2), t: "压力" + (i + 1), k: "up", src: x.src })),
+  ];
+}
 function draw(bars, r) {
   if (!bars || !bars.length) return;
   if (!document.querySelector("#chart")) return; // 已切到手写 SVG，旧 echarts 流程停用
