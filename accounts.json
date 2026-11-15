@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-11-15 22:20:00",
+  "updated": "2026-11-15 13:34:14",
   "users": [
     {
       "u": "admin",
@@ -10,6 +10,15 @@
       "iter": 120000,
       "note": "站点管理员",
       "created": "2026-11-15 21:40:00"
+    },
+    {
+      "u": "sun",
+      "role": "user",
+      "salt": "291bdb2df6567b3374ab8b771c94074c",
+      "hash": "ffcd5f17dd12f01288149fb1680b8460fbe11ea4f4b5b5cce60964ac3504cf9a",
+      "iter": 120000,
+      "note": "",
+      "created": "2026-11-15 13:32:24"
     }
   ]
 }
