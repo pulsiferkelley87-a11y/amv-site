@@ -55,6 +55,14 @@
     return _cache;
   }
 
+  // 站点发布有延迟：账号表最终以仓库原文为准，本地读不到人/密码对不上时再来这里取一次
+  const RAW_URL = "https://raw.githubusercontent.com/pulsiferkelley87-a11y/amv-site/main/accounts.json";
+  async function loadRaw() {
+    const r = await fetch(RAW_URL + "?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) throw new Error("raw 读取失败 " + r.status);
+    return await r.json();
+  }
+
   function findUser(acc, name) {
     const u = (name || "").trim().toLowerCase();
     return (acc.users || []).find((x) => String(x.u).toLowerCase() === u) || null;
@@ -95,10 +103,31 @@
 
   /* ---------- 登录 / 登出 ---------- */
   async function login(name, password, remember) {
-    const acc = await loadAccounts(true);
-    const u = findUser(acc, name);
+    let acc = await loadAccounts(true);
+    let u = findUser(acc, name);
+
+    // 站点上的账号表可能还是上一次发布的版本 → 直接找仓库原文重试
+    if (!u) {
+      try {
+        const raw = await loadRaw();
+        const u2 = findUser(raw, name);
+        if (u2) { acc = raw; _cache = raw; u = u2; }
+      } catch (e) { /* 忽略，按未开通处理 */ }
+    }
     if (!u) return { ok: false, msg: "这个账号还没有开通，请联系管理员" };
-    const h = await pbkdf2(password, u.salt, u.iter);
+
+    let h = await pbkdf2(password, u.salt, u.iter);
+    if (h !== u.hash) {
+      // 也可能是刚改过密码，站点还没刷新
+      try {
+        const raw = await loadRaw();
+        const u2 = findUser(raw, name);
+        if (u2) {
+          const h2 = await pbkdf2(password, u2.salt, u2.iter);
+          if (h2 === u2.hash) { u = u2; h = h2; _cache = raw; }
+        }
+      } catch (e) { /* 忽略 */ }
+    }
     if (h !== u.hash) return { ok: false, msg: "密码不对" };
     const s = await makeSession(u, remember);
     writeSession(s, remember);
