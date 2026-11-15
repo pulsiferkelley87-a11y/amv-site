@@ -124,6 +124,8 @@
     if (!s || !s.x || s.x < Date.now()) return kick();
     // 先放行（避免闪烁），随后异步校验签名，失败再踢
     verifyThen();
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", badge);
+    else badge();
     return;
   }
 
