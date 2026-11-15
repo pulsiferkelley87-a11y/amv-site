@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-11-15 21:40:00",
+  "updated": "2026-11-15 22:05:00",
   "users": [
     {
       "u": "admin",
@@ -10,6 +10,15 @@
       "iter": 120000,
       "note": "站点管理员",
       "created": "2026-11-15 21:40:00"
+    },
+    {
+      "u": "test_friend",
+      "role": "user",
+      "salt": "acdb6046ebb74f171929c8d85fe27ac4",
+      "hash": "f1b68d2a7670c29695c1cccc0ee9007efbac3977105366ca5fb8f129a1336f0c",
+      "iter": 120000,
+      "note": "临时验证用",
+      "created": "2026-11-15 22:05:00"
     }
   ]
 }
