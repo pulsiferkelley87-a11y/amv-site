@@ -1,6 +1,9 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
+<script src="auth.js"></script>
+<script>AUTH.guard();</script>
+
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>全能看盘 · 缠论 + 实盘 + 主页</title>
@@ -124,6 +127,7 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
   <div class="brand">缠论 · <b>缠中说禅</b></div>
   <button class="btn" id="refresh">刷新数据</button>
   <button class="btn ghost" id="scanBtn">扫描时间表</button>
+      <a class="btn ghost" href="admin.html">账号</a>
   <a class="btn ghost" href="index.html" title="原主页">主页</a>
   <a class="btn ghost" href="live.html" title="原实盘页">实盘页</a>
   <div class="idx" id="idxBar"></div>
