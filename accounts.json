@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "updated": "2026-11-15 21:40:00",
+  "users": [
+    {
+      "u": "admin",
+      "role": "admin",
+      "salt": "f0c1caf9f0b3da183706ea6c9712b514",
+      "hash": "172ee9e039a11cc1d2fb7db60294c6f936fcb18228ba489ee82095f41c44b583",
+      "iter": 120000,
+      "note": "站点管理员",
+      "created": "2026-11-15 21:40:00"
+    }
+  ]
+}
