@@ -266,7 +266,10 @@
     go.disabled = true;
     go.innerHTML = '<span class="spin"></span>正在验证…';
     try {
-      const r = await AUTH.login(u, p, document.getElementById("r").checked);
+      const r = await Promise.race([
+        AUTH.login(u, p, document.getElementById("r").checked),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("网络超时，请重试")), 15000)),
+      ]);
       if (!r.ok) { fail(r.msg); go.disabled = false; go.textContent = "登 录"; return; }
       localStorage.setItem("amv_last_user", u);
       okName.textContent = "欢迎回来，" + r.user.u;
