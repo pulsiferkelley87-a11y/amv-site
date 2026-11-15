@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: pages-live
-  cancel-in-progress: false  # 不取消在跑的部署：取消会让 Pages 卡在旧版本
+  cancel-in-progress: true   # 只保留最新部署，不积压
 
 jobs:
   deploy:
@@ -83,10 +83,6 @@ jobs:
             --exclude 'app20.js' \
             --exclude 'live[0-9]*.html' \
             --exclude 'diag_*.html' \
-            --exclude 'd2.js' \
-            --exclude 'app-data.js' \
-            --exclude 'app/' \
-            --exclude 'shadcn/' \
             ./ _site/
           echo '--- _site 顶层 ---'
           ls -1 _site
