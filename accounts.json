@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-11-15 13:35:19",
+  "updated": "2026-11-15 13:36:58",
   "users": [
     {
       "u": "admin",
@@ -14,11 +14,11 @@
     {
       "u": "sun",
       "role": "user",
-      "salt": "291bdb2df6567b3374ab8b771c94074c",
-      "hash": "ffcd5f17dd12f01288149fb1680b8460fbe11ea4f4b5b5cce60964ac3504cf9a",
+      "salt": "3da358c4a435a4dfb978227746fafd4f",
+      "hash": "e60873dd8947572f97ed9f4020c46f9c1bb7407efe60b537592021cab03360b9",
       "iter": 120000,
       "note": "",
-      "created": "2026-11-15 13:32:24"
+      "created": "2026-11-15 13:36:56"
     }
   ]
 }
