@@ -134,6 +134,10 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
 .sumnote .lvrow i{font-style:normal;color:#8ea3bd;opacity:.9}
 .sumnote .lvrow.up{border-left-color:#ef4444}
 .sumnote .lvrow.down{border-left-color:#22c55e}
+.st{font-size:11.5px;white-space:nowrap}
+.st.ok{color:#86efac}
+.st.bad{color:#fca5a5}
+.st.mid{color:#94a3b8}
 </style>
 </head>
 <body>
@@ -558,10 +562,11 @@ function renderPick() {
   $("#pickCount").textContent = `${rows.length} 条`;
   $("#pickTable").innerHTML = `<table><thead><tr>
     <th class="l">代码</th><th class="l">名称</th><th>类型</th><th>信号日</th><th>距今</th>
-    <th>买点价</th><th>现价</th><th>至今</th><th>250日位置</th><th class="l">说明</th></tr></thead><tbody>
+    <th>买点价</th><th>现价</th><th>至今</th><th>250日位置</th><th>结构</th><th class="l">说明</th></tr></thead><tbody>
     ${rows.map((s) => `<tr data-code="${s.code}"><td class="l">${s.code}</td><td class="l">${s.name}</td>
       <td>${tag(s.type)}</td><td>${s.d}</td><td>${s.days}日</td><td>${fmt(s.p)}</td><td>${fmt(s.close)}</td>
       <td class="${cls(s.pct)}">${pct(s.pct)}</td><td>${s.pos == null ? "—" : s.pos + "%"}</td>
+      <td class="st ${s.st == null ? "mid" : s.st >= 1 ? "ok" : s.st <= -1 ? "bad" : "mid"}">${s.tag || "—"}</td>
       <td class="l muted">${s.note || ""}</td></tr>`).join("")}
     </tbody></table>`;
   $("#pickTable").onclick = (e) => {
