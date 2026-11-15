@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>账号管理 · 缠中说禅看盘</title>
+<style>
+  :root{
+    --bg:#070b12;--card:#111a26;--line:rgba(148,163,184,.16);--fg:#e5e7eb;--dim:#94a3b8;
+    --acc:#6366f1;--ok:#34d399;--bad:#f87171;--warn:#fbbf24;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.6 system-ui,-apple-system,"PingFang SC",sans-serif}
+  header{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(7,11,18,.92);backdrop-filter:blur(10px);z-index:5}
+  header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.3px}
+  header .sp{flex:1}
+  a.btn,button.btn{
+    display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:9px;border:1px solid var(--line);
+    background:#0f172a;color:var(--fg);font-size:13px;text-decoration:none;cursor:pointer
+  }
+  a.btn:hover,button.btn:hover{border-color:rgba(99,102,241,.6)}
+  button.primary{background:linear-gradient(100deg,#4f46e5,#0ea5e9);border:0;color:#fff;font-weight:600}
+  button.danger{color:#fca5a5;border-color:rgba(248,113,113,.35)}
+  main{max-width:1080px;margin:0 auto;padding:22px 18px 60px;display:grid;gap:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 16px 18px}
+  .card h2{margin:0 0 4px;font-size:14px;font-weight:600}
+  .card p.sub{margin:0 0 14px;color:var(--dim);font-size:12.5px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+  label.f{display:block;font-size:12px;color:var(--dim);margin-bottom:5px}
+  input,select{width:100%;height:36px;padding:0 10px;border-radius:9px;background:#0b1220;border:1px solid var(--line);color:var(--fg);font-size:13px;outline:none}
+  input:focus,select:focus{border-color:rgba(99,102,241,.7)}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:9px 8px;border-bottom:1px solid rgba(148,163,184,.1);white-space:nowrap}
+  th{color:var(--dim);font-weight:500;font-size:12px}
+  td.mono{font-family:ui-monospace,Menlo,Consolas,monospace;color:#a5b4fc}
+  .tag{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;border:1px solid}
+  .tag.admin{color:#c4b5fd;border-color:rgba(139,92,246,.45);background:rgba(139,92,246,.12)}
+  .tag.user{color:#93c5fd;border-color:rgba(59,130,246,.4);background:rgba(59,130,246,.1)}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);opacity:0;transition:.25s;
+    background:#0f172a;border:1px solid var(--line);border-radius:10px;padding:10px 16px;font-size:13px;z-index:20}
+  .toast.on{opacity:1;transform:translate(-50%,0)}
+  .toast.ok{border-color:rgba(52,211,153,.45)}
+  .toast.bad{border-color:rgba(248,113,113,.5)}
+  .note{font-size:12px;color:var(--dim);line-height:1.75}
+  .warnbox{border:1px dashed rgba(251,191,36,.35);background:rgba(251,191,36,.06);border-radius:10px;padding:10px 12px;font-size:12.5px;color:#fcd34d}
+  .hide{display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>账号管理</h1>
+  <span class="sp"></span>
+  <a class="btn" href="all.html">看盘台</a>
+  <button class="btn" id="out">退出</button>
+</header>
+
+<main>
+  <div class="warnbox" id="guardBox">正在校验管理员身份…</div>
+
+  <section class="card hide" id="patCard">
+    <h2>① 写入通道（只需设置一次）</h2>
+    <p class="sub">账号表存放在仓库的 <code>accounts.json</code>，保存时需要用你的 GitHub 令牌提交一次。令牌只保存在这台电脑的浏览器里，不会上传到任何服务器。</p>
+    <div class="grid">
+      <div><label class="f">GitHub 令牌（fine-grained，权限：Contents 读写，仅 amv-site）</label><input id="pat" type="password" placeholder="github_pat_..."></div>
+      <div><label class="f">仓库</label><input id="repo" value="pulsiferkelley87-a11y/amv-site"></div>
+      <div><label class="f">分支</label><input id="branch" value="main"></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn" id="savePat">保存到本机</button>
+      <button class="btn" id="clearPat">清除</button>
+      <span class="note" id="patState"></span>
+    </div>
+    <p class="note" style="margin-top:10px">生成地址：github.com/settings/personal-access-tokens/new → 仅选择 amv-site 仓库 → Repository permissions 里把 <b>Contents</b> 设为 Read and write。</p>
+  </section>
+
+  <section class="card hide" id="addCard">
+    <h2>② 开通一个新账号</h2>
+    <p class="sub">只有在这里开通过的人，才能登录站点。密码只以哈希形式保存，你自己也看不到明文。</p>
+    <div class="grid">
+      <div><label class="f">用户名</label><input id="nu" placeholder="例如 zhangsan"></div>
+      <div><label class="f">密码</label><input id="np" placeholder="至少 6 位"></div>
+      <div><label class="f">角色</label>
+        <select id="nr"><option value="user">普通用户</option><option value="admin">管理员</option></select>
+      </div>
+      <div><label class="f">备注</label><input id="nn" placeholder="给谁用 / 到期提醒"></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn primary" id="add">生成并加入待保存列表</button>
+      <span class="note">生成后要点下面的「保存到云端」才真正生效</span>
+    </div>
+  </section>
+
+  <section class="card hide" id="listCard">
+    <h2>③ 账号列表 <span class="note" id="cnt"></span></h2>
+    <p class="sub">修改或删除后同样需要「保存到云端」。改动会让对方当前的登录状态失效（下次刷新即掉线）。</p>
+    <table>
+      <thead><tr><th>用户名</th><th>角色</th><th>备注</th><th>创建时间</th><th style="width:150px">操作</th></tr></thead>
+      <tbody id="tb"></tbody>
+    </table>
+    <div class="row" style="margin-top:14px">
+      <button class="btn primary" id="push">保存到云端</button>
+      <button class="btn" id="reload">丢弃改动并重载</button>
+      <span class="note" id="dirty"></span>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script src="auth.js"></script>
+<script>
+(function () {
+  const $ = (s) => document.querySelector(s);
+  const toastEl = $("#toast");
+  let TOAST_T = 0;
+
+  function toast(text, kind) {
+    toastEl.textContent = text;
+    toastEl.className = "toast on " + (kind || "");
+    clearTimeout(TOAST_T);
+    TOAST_T = setTimeout(() => (toastEl.className = "toast"), 2600);
+  }
+
+  let ACC = null;       // 内存中的账号表
+  let DIRTY = false;
+
+  function markDirty(on) {
+    DIRTY = on;
+    $("#dirty").textContent = on ? "有未保存的改动" : "";
+    $("#dirty").style.color = on ? "#fbbf24" : "";
+  }
+
+  /* ---------- 身份校验 ---------- */
+  (async function boot() {
+    const s = AUTH.session();
+    if (!s || !s.u || s.x < Date.now()) { location.replace("login.html?next=admin.html"); return; }
+    let acc;
+    try { acc = await AUTH.loadAccounts(true); }
+    catch (e) { $("#guardBox").textContent = "账号表读取失败：" + e.message; return; }
+    const me = AUTH.findUser(acc, s.u);
+    if (!me || me.role !== "admin" || !(await AUTH.isValid(s, acc))) {
+      $("#guardBox").textContent = "当前账号没有管理权限，请用管理员账号登录。";
+      $("#guardBox").style.borderColor = "rgba(248,113,113,.45)";
+      $("#guardBox").style.color = "#fca5a5";
+      return;
+    }
+    $("#guardBox").classList.add("hide");
+    ACC = acc;
+    ["#patCard", "#addCard", "#listCard"].forEach((k) => $(k).classList.remove("hide"));
+
+    const pat = localStorage.getItem("amv_pat") || "";
+    if (pat) { $("#pat").value = pat; $("#patState").textContent = "已保存在本机"; }
+    $("#repo").value = localStorage.getItem("amv_repo") || "pulsiferkelley87-a11y/amv-site";
+    $("#branch").value = localStorage.getItem("amv_branch") || "main";
+    render();
+  })();
+
+  $("#out").onclick = () => AUTH.logout();
+
+  $("#savePat").onclick = () => {
+    const v = $("#pat").value.trim();
+    if (!v) return toast("先填令牌", "bad");
+    localStorage.setItem("amv_pat", v);
+    localStorage.setItem("amv_repo", $("#repo").value.trim());
+    localStorage.setItem("amv_branch", $("#branch").value.trim());
+    $("#patState").textContent = "已保存在本机";
+    toast("令牌已存到本机浏览器", "ok");
+  };
+  $("#clearPat").onclick = () => {
+    localStorage.removeItem("amv_pat");
+    $("#pat").value = "";
+    $("#patState").textContent = "未设置";
+    toast("已清除");
+  };
+
+  /* ---------- 列表 ---------- */
+  function render() {
+    const tb = $("#tb");
+    tb.innerHTML = "";
+    (ACC.users || []).forEach((u, i) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        '<td class="mono">' + u.u + "</td>" +
+        '<td><span class="tag ' + (u.role === "admin" ? "admin" : "user") + '">' + (u.role === "admin" ? "管理员" : "普通") + "</span></td>" +
+        "<td>" + (u.note || "—") + "</td>" +
+        '<td class="note">' + (u.created || "—") + "</td>" +
+        '<td><button class="btn" data-act="pw" data-i="' + i + '">改密码</button> ' +
+        '<button class="btn danger" data-act="del" data-i="' + i + '">删除</button></td>';
+      tb.appendChild(tr);
+    });
+    $("#cnt").textContent = "共 " + (ACC.users || []).length + " 个";
+
+    tb.querySelectorAll("button").forEach((b) => {
+      b.onclick = async () => {
+        const i = +b.dataset.i;
+        const u = ACC.users[i];
+        if (b.dataset.act === "del") {
+          if (u.role === "admin" && (ACC.users.filter((x) => x.role === "admin").length === 1)) {
+            return toast("至少要留一个管理员", "bad");
+          }
+          if (!confirm("确定删除账号 " + u.u + " ？")) return;
+          ACC.users.splice(i, 1);
+          render(); markDirty(true);
+          return;
+        }
+        const pw = prompt("给 " + u.u + " 设置新密码（至少 6 位）：");
+        if (!pw) return;
+        if (pw.length < 6) return toast("密码太短", "bad");
+        const e = await AUTH.grant(u.u, pw, { role: u.role, note: u.note });
+        ACC.users[i] = Object.assign({}, u, { salt: e.salt, hash: e.hash, iter: e.iter });
+        render(); markDirty(true);
+        toast("已改：" + u.u + "（记得保存）", "ok");
+      };
+    });
+  }
+
+  /* ---------- 新增 ---------- */
+  $("#add").onclick = async () => {
+    const u = $("#nu").value.trim();
+    const p = $("#np").value;
+    if (u.length < 2) return toast("用户名太短", "bad");
+    if (p.length < 6) return toast("密码至少 6 位", "bad");
+    if (AUTH.findUser(ACC, u)) return toast("这个用户名已经存在", "bad");
+    const e = await AUTH.grant(u, p, { role: $("#nr").value, note: $("#nn").value.trim() });
+    ACC.users.push(e);
+    $("#nu").value = ""; $("#np").value = ""; $("#nn").value = "";
+    render(); markDirty(true);
+    toast("已加入：" + u + "，点「保存到云端」生效", "ok");
+  };
+
+  /* ---------- 保存 ---------- */
+  $("#push").onclick = async () => {
+    const pat = localStorage.getItem("amv_pat");
+    if (!pat) { toast("先在上面填 GitHub 令牌", "bad"); return; }
+    const repo = $("#repo").value.trim();
+    const branch = $("#branch").value.trim() || "main";
+    const [owner, name] = repo.split("/");
+    if (!owner || !name) return toast("仓库格式应为 owner/repo", "bad");
+
+    ACC.updated = new Date().toISOString().slice(0, 19).replace("T", " ");
+    $("#push").disabled = true;
+    $("#push").textContent = "保存中…";
+    try {
+      await AUTH.saveToGitHub(pat, owner, name, branch, ACC);
+      markDirty(false);
+      toast("已提交到仓库，约 1 分钟后生效", "ok");
+    } catch (e) {
+      toast(e.message, "bad");
+    } finally {
+      $("#push").disabled = false;
+      $("#push").textContent = "保存到云端";
+    }
+  };
+
+  $("#reload").onclick = async () => {
+    if (DIRTY && !confirm("丢弃未保存的改动？")) return;
+    ACC = await AUTH.loadAccounts(true);
+    render(); markDirty(false);
+    toast("已重载");
+  };
+
+  addEventListener("beforeunload", (e) => {
+    if (DIRTY) { e.preventDefault(); e.returnValue = ""; }
+  });
+})();
+</script>
+</body>
+</html>
