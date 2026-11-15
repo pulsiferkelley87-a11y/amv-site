@@ -119,6 +119,14 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
 #macd{display:none}
 #klLegend{display:none}
 @media(min-width:761px){#kvSvg{min-height:380px}}
+.sumnote{margin-top:9px;padding-top:9px;border-top:1px solid rgba(255,255,255,.08);font-size:12px;line-height:1.68;display:grid;gap:4px}
+.sumnote .ln{padding-left:7px;border-left:2px solid transparent}
+.sumnote .ln.bad{color:#fca5a5;border-left-color:#ef4444}
+.sumnote .ln.good{color:#86efac;border-left-color:#22c55e}
+.sumnote .ln.mid{color:#cbd5e1;border-left-color:#64748b}
+.sumnote .ln.sig{color:#bfdbfe;border-left-color:#6366f1}
+.sumnote .ln.sum{color:#e2e8f0;border-left-color:#f59e0b;font-weight:600}
+@media(min-width:761px){.side{max-height:none;overflow:visible}}
 </style>
 </head>
 <body>
@@ -1332,6 +1340,64 @@ function draw(bars, r) {
   );
 }
 
+function buildSumNote(bars, r) {
+  const el = document.querySelector("#sumNote");
+  if (!el || !bars || !bars.length || !r) return;
+  const last = bars[bars.length - 1];
+  const cur = last.c;
+  const seg = r.segs && r.segs.length ? r.segs[r.segs.length - 1] : null;
+  const pv = r.pivots && r.pivots.length ? r.pivots[r.pivots.length - 1] : null;
+  const sig = r.sig && r.sig.length ? r.sig[r.sig.length - 1] : null;
+  const L = [];
+  const push = (cls, html) => L.push('<div class="ln ' + cls + '">' + html + "</div>");
+
+  if (seg) {
+    const up = seg.dir === 1;
+    const long = seg.strokes >= 12;
+    push(up ? "good" : "bad",
+      "方向：" + (up ? "向上" : "向下") + "段" + (seg.open ? "还没走完" : "刚结束") +
+      "，共 " + seg.strokes + " 笔 —— " + (up ? "回调找买点，别追高" : "等买点，别猜底") +
+      (long ? "；段过长（正常 3~10 笔），信号可信度打折" : ""));
+  }
+
+  if (pv) {
+    const above = cur > pv.zg, below = cur < pv.zd;
+    const pos = above ? "上方" : below ? "下方" : "内部";
+    const mood = above ? "强势" : below ? "弱势" : "震荡";
+    const tip = below
+      ? "回到 " + fmt(pv.zd) + " 之上才算止跌"
+      : above ? "跌回 " + fmt(pv.zg) + " 之下才算走坏"
+        : "上下沿之间来回磨，等突破";
+    push(above ? "good" : below ? "bad" : "mid",
+      "位置：现价 " + fmt(cur) + " 在最近中枢 " + fmt(pv.zd) + "~" + fmt(pv.zg) + " 的" + pos + "，属" + mood + " —— " + tip + "。");
+  }
+
+  if (sig) {
+    const gap = ((cur - sig.p) / sig.p) * 100;
+    let idx = -1;
+    for (let i = bars.length - 1; i >= 0; i--) { if (bars[i].d === sig.d) { idx = i; break; } }
+    const age = idx >= 0 ? bars.length - 1 - idx : null;
+    const isBuy = String(sig.type).indexOf("买") >= 0;
+    const alive = isBuy ? gap > -0.5 : gap < 0.5;
+    push("sig",
+      "信号：" + sig.type + " " + sig.d + " @" + fmt(sig.p) + (age != null ? "（" + age + " 根前）" : "") +
+      "，现价" + (gap >= 0 ? "高" : "低") + " " + Math.abs(gap).toFixed(2) + "% —— " +
+      (alive ? "还没破位，结构仍有效" : "已破位，这个" + sig.type + "作废，等下一个"));
+  } else {
+    push("mid", "信号：近 10 日没有新的买卖点，只是结构在走。");
+  }
+
+  const s1 = seg ? (seg.dir === 1 ? 1 : -1) : 0;
+  const s2 = pv ? (cur > pv.zg ? 1 : cur < pv.zd ? -1 : 0) : 0;
+  const score = s1 + s2;
+  push("sum",
+    "一句话：" + (score >= 2 ? "多头结构，回调可等二买/三买"
+      : score <= -2 ? "空头结构，反弹不追，等段走完"
+        : "结构中性，观望为主，等段结束或站上中枢上沿"));
+
+  el.innerHTML = L.join("");
+}
+
 function drawStruct(bars, r) {
   const last = bars[bars.length - 1];
   const seg = r.segs[r.segs.length - 1];
@@ -1344,7 +1410,10 @@ function drawStruct(bars, r) {
       <span class="muted">段区间</span><span>${seg ? fmt(seg.lo) + " ~ " + fmt(seg.hi) : "—"}</span>
       <span class="muted">最近中枢</span><span>${pv ? fmt(pv.zd) + " ~ " + fmt(pv.zg) + (last.c > pv.zg ? "（上方）" : last.c < pv.zd ? "（下方）" : "（内部）") : "—"}</span>
       <span class="muted">最近信号</span><span>${sig ? `${tag(sig.type)} ${sig.d} @${fmt(sig.p)}` : "—"}</span>
-    </div>`;
+    </div>
+    <div id="sumNote" class="sumnote"></div>`;
+
+  buildSumNote(bars, r);
 
   const rows = r.sl.slice(-14).reverse();
   $("#strokeCount").textContent = `共 ${r.sl.length}`;
