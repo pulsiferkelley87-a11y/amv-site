@@ -127,6 +127,13 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
 .sumnote .ln.sig{color:#bfdbfe;border-left-color:#6366f1}
 .sumnote .ln.sum{color:#e2e8f0;border-left-color:#f59e0b;font-weight:600}
 @media(min-width:761px){.side{max-height:none;overflow:visible}}
+.sumnote .lvhead{margin-top:5px;padding-top:6px;border-top:1px dashed rgba(255,255,255,.12);color:#94a3b8;font-size:11px;letter-spacing:.04em}
+.sumnote .lvrow{display:flex;gap:6px;align-items:baseline;flex-wrap:wrap;padding-left:7px;border-left:2px solid transparent;font-size:11.5px;color:#cbd5e1;line-height:1.5}
+.sumnote .lvrow b{font-variant-numeric:tabular-nums;color:#e8eef7;min-width:46px}
+.sumnote .lvrow span{color:#9aa9bd}
+.sumnote .lvrow i{font-style:normal;color:#8ea3bd;opacity:.9}
+.sumnote .lvrow.up{border-left-color:#ef4444}
+.sumnote .lvrow.down{border-left-color:#22c55e}
 </style>
 </head>
 <body>
@@ -1394,6 +1401,33 @@ function buildSumNote(bars, r) {
     "一句话：" + (score >= 2 ? "多头结构，回调可等二买/三买"
       : score <= -2 ? "空头结构，反弹不追，等段走完"
         : "结构中性，观望为主，等段结束或站上中枢上沿"));
+
+  const cands = [];
+  const addLv = (p, label, act) => {
+    if (!(p > 0)) return;
+    for (let i = 0; i < cands.length; i++) if (Math.abs(cands[i].p - p) / p < 0.004) return;
+    cands.push({ p: p, label: label, act: act });
+  };
+  if (pv) {
+    addLv(pv.zd, "中枢下沿 ZD", "站回中枢内 → 下跌暂停");
+    addLv(pv.zg, "中枢上沿 ZG", "站上并回踩不破 → 三买，结构转强");
+  }
+  if (sig) {
+    const isB = String(sig.type).indexOf("买") >= 0;
+    addLv(sig.p, sig.type + " 位置", isB ? "跌破 → 这个买点作废" : "站上 → 这个卖点作废");
+  }
+  if (seg) {
+    if (seg.dir === 1) addLv(seg.hi, "段最高", "跌破段高点 → 上攻未成，转震荡");
+    else addLv(seg.lo, "段最低", "跌破段低点 → 段继续延长，下跌未完");
+  }
+  cands.sort((a, b) => Math.abs(a.p - cur) - Math.abs(b.p - cur));
+  const top = cands.slice(0, 4).sort((a, b) => b.p - a.p);
+  if (top.length) {
+    L.push('<div class="lvhead">接下来盯这几个价</div>');
+    for (const x of top) {
+      L.push('<div class="lvrow ' + (x.p > cur ? "up" : "down") + '"><b>' + fmt(x.p) + '</b><span>' + x.label + '</span><i>' + x.act + '</i></div>');
+    }
+  }
 
   el.innerHTML = L.join("");
 }
