@@ -39,6 +39,16 @@ for (const code of codes) {
   ok++;
   const closes = bs.map((b) => b.c);
   const last = closes.length - 1;
+  const segL = r.segs && r.segs.length ? r.segs[r.segs.length - 1] : null;
+  const pvL = r.pivots && r.pivots.length ? r.pivots[r.pivots.length - 1] : null;
+  const cNow = closes[last];
+  const trend = segL ? segL.dir : 0;
+  const posw = pvL ? (cNow > pvL.zg ? 1 : cNow < pvL.zd ? -1 : 0) : 0;
+  const stScore = trend + posw;
+  const stTag =
+    (trend === 1 ? "向上" : trend === -1 ? "向下" : "无段") +
+    "·" +
+    (posw === 1 ? "中枢上" : posw === -1 ? "中枢下" : "中枢内");
 
   for (const sg of r.signals) {
     totals[sg.type] = (totals[sg.type] || 0) + 1;
@@ -56,6 +66,7 @@ for (const code of codes) {
         pct: +(((closes[last] - p) / p) * 100).toFixed(2),
         pos: hi > lo ? Math.round(((closes[last] - lo) / (hi - lo)) * 100) : null,
         note: sg.note || "",
+        tag: stTag, st: stScore,
       });
     }
   }
