@@ -158,6 +158,23 @@ th[aria-sort="descending"]>button[data-sort]::after{content:"\25BC"}
 @media(max-width:760px){.bar .pill{flex:0 0 auto;white-space:nowrap}}
 @media(min-width:761px){*{scrollbar-color:#2a3648 transparent;scrollbar-width:thin}}
 @media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+/* visible polish */
+@keyframes _fadeUp{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+@keyframes _dlgIn{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes _bdIn{from{opacity:0}to{opacity:1}}
+section.on{animation:_fadeUp .22s cubic-bezier(.2,.7,.3,1)}
+dialog[open]{animation:_dlgIn .2s cubic-bezier(.2,.8,.3,1)}
+dialog[open]::backdrop{animation:_bdIn .2s ease-out}
+.btn{transition:background .16s,border-color .16s,transform .08s,color .16s}
+.btn:active{transform:translateY(1px)}
+.card{transition:border-color .18s,box-shadow .18s}
+tbody tr{transition:background .12s}
+header{transition:box-shadow .2s}
+header.scrolled{box-shadow:0 6px 18px rgba(0,0,0,.38)}
+@media(hover:hover) and (min-width:761px){
+  .card:hover{border-color:rgba(255,255,255,.15);box-shadow:0 6px 22px rgba(0,0,0,.28)}
+  tbody tr:hover{background:rgba(99,102,241,.10)}
+}
 </style>
 </head>
 <body>
@@ -2012,7 +2029,13 @@ document.addEventListener("click", (e) => {
   if (tb.moveBefore) rows.forEach((r) => tb.moveBefore(r, null));
   else { const frag = document.createDocumentFragment(); rows.forEach((r) => frag.appendChild(r)); tb.appendChild(frag); }
 });
-new MutationObserver(() => { wrapTables(); enhanceSort(); })
+new MutationObserver(() => { wrapTables(); enhanceSort();
+// 顶栏滚动阴影
+addEventListener("scroll", () => {
+  const h = document.querySelector("header");
+  if (h) h.classList.toggle("scrolled", scrollY > 6);
+}, { passive: true });
+ })
   .observe(document.body, { childList: true, subtree: true });
 wrapTables(); enhanceSort();
 
