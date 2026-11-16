@@ -904,12 +904,18 @@ async function fromMinuteP7(code, stepMin) {
 }
 
 async function fetchBars(code, per = 'day') {
-  // ① 优先读 COS 上的本地 dump（信号池股票都有，日线）
+  let cosFallback = null;
+  // ① 优先读 COS 上的本地 dump；只有已含"今天"才直接用，否则继续向东财要最新
   if (per === 'day') {
     try {
       const j = await (await fetch(COS + "/chan/" + code + ".json?t=" + Date.now())).json();
       if (j && j.bars && j.bars.length > 100) {
-        return j.bars.map((r) => ({ d: r[0], o: r[1], c: r[2], h: r[3], l: r[4], v: r[5] }));
+        const bs = j.bars.map((r) => ({ d: r[0], o: r[1], c: r[2], h: r[3], l: r[4], v: r[5] }));
+        const lastD = String(bs[bs.length - 1].d);
+        const now = new Date();
+        const today = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+        if (lastD >= today) return bs;   // 已经是最新（扫描当日/当日收盘后）
+        cosFallback = bs;                // 旧快照先留着兜底
       }
     } catch (e) { /* 没有就落到东财 */ }
   }
@@ -939,12 +945,21 @@ async function fetchBars(code, per = 'day') {
   const u = "https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=" + emSecid(code)
     + "&klt=" + klt + "&fqt=1&beg=0&end=20500101"
     + "&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&_=" + Date.now();
-  const j = await (await fetch(u)).json();
-  const k = j?.data?.klines || [];
-  return k.map((s) => {
-    const [d, o, c, h, l, v] = s.split(',');
-    return { d, o: +o, c: +c, h: +h, l: +l, v: +v };
-  });
+  try {
+    const j = await (await fetch(u)).json();
+    const k = j?.data?.klines || [];
+    const em = k.map((s) => {
+      const [d, o, c, h, l, v] = s.split(',');
+      return { d, o: +o, c: +c, h: +h, l: +l, v: +v };
+    });
+    if (em.length && cosFallback) {
+      const lastEm = String(em[em.length - 1].d), lastCos = String(cosFallback[cosFallback.length - 1].d);
+      if (lastEm < lastCos) return cosFallback;   // 东财反而更旧，用本地 dump
+    }
+    if (em.length) return em;
+  } catch (e) { /* 网络失败，回退 dump */ }
+  if (cosFallback) return cosFallback;
+  return [];
 }
 function toWeek(bars) {
   const out = [];
