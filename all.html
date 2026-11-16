@@ -6,6 +6,7 @@
 
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0a0e15">
 <title>全能看盘 · 缠论 + 实盘 + 主页</title>
 <script src="echarts.min.js"></script>
 <style>
@@ -93,11 +94,8 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
   #klineMeta{white-space:nowrap}
 #klLegend{font-size:10px;line-height:1.5}
   #minBox svg{height:110px!important}
-  table{display:block;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch}
-  thead, tbody{display:table}
-  thead{width:100%}
-  table{width:100%}
-  #modal > div{width:94vw;max-height:86vh}
+  table{width:100%;min-inline-size:560px}
+  .mcard{width:94vw;max-height:86vh}
   #favBar{gap:4px}
   .kpi .val{font-size:22px}
   main section .grid.g4{gap:8px}
@@ -138,6 +136,28 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
 .st.ok{color:#86efac}
 .st.bad{color:#fca5a5}
 .st.mid{color:#94a3b8}
+/* ui-polish */
+:root{color-scheme:dark}
+:where(button,a,input,select,textarea,[tabindex]):focus-visible{outline:2px solid #818cf8;outline-offset:2px}
+.scroll,.tblwrap,.mbody{overscroll-behavior:contain}
+.tblwrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tblwrap:focus-visible{outline-offset:-2px}
+dialog{border:0;padding:0;background:transparent;color:inherit;max-width:none;max-height:none}
+dialog::backdrop{background:rgba(3,7,18,.72);overflow:hidden;overscroll-behavior:contain}
+dialog:modal{overscroll-behavior:contain}
+.mcard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);width:min(760px,92vw);max-height:80vh;display:flex;flex-direction:column;overflow:hidden}
+.mhead{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.mbody{padding:12px 14px;font-size:13px;overflow:auto;-webkit-overflow-scrolling:touch}
+th[data-sort]{padding:0}
+th>button[data-sort]{width:100%;padding:6px 8px;font:inherit;color:inherit;background:none;border:0;display:inline-flex;gap:4px;align-items:center;justify-content:flex-end;cursor:pointer}
+th.l>button[data-sort]{justify-content:flex-start}
+th[aria-sort]>button[data-sort]{color:#c7d2fe}
+th[aria-sort]>button[data-sort]::after{content:"\25B2";font-size:9px;opacity:.8}
+th[aria-sort="descending"]>button[data-sort]::after{content:"\25BC"}
+.more{padding:8px 0}
+@media(max-width:760px){.bar .pill{flex:0 0 auto;white-space:nowrap}}
+@media(min-width:761px){*{scrollbar-color:#2a3648 transparent;scrollbar-width:thin}}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
 </style>
 </head>
 <body>
@@ -236,18 +256,16 @@ footer{color:var(--muted);font-size:12px;padding:18px 16px;text-align:center}
     </div>
   </section>
 
-  <!-- 缠论K线 -->
-  <div id="modal" style="display:none;position:fixed;inset:0;background:rgba(3,7,18,.72);z-index:99;align-items:center;justify-content:center">
-    <div style="background:var(--card);border:1px solid var(--line);border-radius:var(--radius);width:min(760px,92vw);max-height:80vh;overflow:auto">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)">
-        <b id="modalTitle" style="font-size:13px"></b>
-        <button class="btn" id="modalClose">关闭 ✕</button>
-      </div>
-      <div id="modalBody" style="padding:12px 14px;font-size:13px"></div>
+    <!-- 通用弹窗（原生 dialog：Esc / 焦点陷阱 / 防滚动穿透） -->
+  <dialog id="modal" aria-labelledby="modalTitle">
+    <div class="mcard">
+      <div class="mhead"><b id="modalTitle" style="font-size:13px"></b>
+        <button type="button" class="btn" id="modalClose">关闭</button></div>
+      <div id="modalBody" class="mbody"></div>
     </div>
-  </div>
+  </dialog>
 
-  <section id="kline">
+<section id="kline">
     <div class="card">
       <div class="bar">
         <span style="position:relative;display:inline-block"><input type="text" id="code" value="600031" placeholder="代码/名称" autocomplete="off" style="width:120px"><div id="codePick" style="display:none;position:absolute;left:0;top:30px;z-index:60;background:#0f172a;border:1px solid var(--line);border-radius:8px;min-width:190px;max-height:260px;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.5)"></div></span>
@@ -649,26 +667,50 @@ function tag(t) {
 
 // ---------- 选股 ----------
 let PICK_TYPE = "all";
+const PICK_PAGE = 300;
+let PICK_ALL = [], PICK_SHOWN = 0;
+const PICK_HEAD = `<div class="tblwrap" role="region" aria-label="选股结果" tabindex="0"><table><thead><tr>
+    <th class="l" data-sort="text">代码</th><th class="l" data-sort="text">名称</th><th data-sort="text">类型</th>
+    <th data-sort="text">信号日</th><th data-sort="num">距今</th><th data-sort="num">买点价</th><th data-sort="num">现价</th>
+    <th data-sort="num">至今</th><th data-sort="num">250日位置</th><th data-sort="text">结构</th><th class="l">说明</th>
+    </tr></thead><tbody>`;
+function pickRowHTML(s) {
+  return `<tr data-code="${s.code}"><td class="l">${s.code}</td><td class="l">${s.name}</td>
+      <td>${tag(s.type)}</td><td>${s.d}</td><td>${s.days}日</td>
+      <td data-value="${s.p}">${fmt(s.p)}</td><td data-value="${s.close}">${fmt(s.close)}</td>
+      <td data-value="${s.pct}" class="${cls(s.pct)}">${pct(s.pct)}</td>
+      <td data-value="${s.pos == null ? -999 : s.pos}">${s.pos == null ? "—" : s.pos + "%"}</td>
+      <td class="st ${s.st == null ? "mid" : s.st >= 1 ? "ok" : s.st <= -1 ? "bad" : "mid"}">${s.tag || "—"}</td>
+      <td class="l muted">${s.note || ""}</td></tr>`;
+}
+function paintPick(more) {
+  const box = $("#pickTable");
+  const tb = box.querySelector("tbody");
+  const next = PICK_ALL.slice(PICK_SHOWN, PICK_SHOWN + PICK_PAGE);
+  if (tb && more) tb.insertAdjacentHTML("beforeend", next.map(pickRowHTML).join(""));
+  else box.innerHTML = PICK_HEAD + next.map(pickRowHTML).join("") + "</tbody></table></div>" +
+    `<div class="more"><button type="button" class="btn" id="pickMore"></button></div>`;
+  PICK_SHOWN += next.length;
+  const btn = box.querySelector("#pickMore");
+  const rest = PICK_ALL.length - PICK_SHOWN;
+  if (btn) {
+    btn.style.display = rest > 0 ? "" : "none";
+    btn.textContent = `显示更多（还有 ${rest} 条）`;
+    btn.onclick = () => paintPick(true);
+  }
+}
 function renderPick() {
   if (!SCAN) { $("#pickTable").innerHTML = '<div class="bd muted">没有扫描结果</div>'; return; }
   const q = ($("#pickQ").value || "").trim().toLowerCase();
   let rows = SCAN.signals || [];
   if (PICK_TYPE !== "all") rows = rows.filter((s) => s.type === PICK_TYPE);
   if (q) rows = rows.filter((s) => s.code.includes(q) || (s.name || "").toLowerCase().includes(q));
-  rows = rows.slice(0, 1500);
+  PICK_ALL = rows; PICK_SHOWN = 0;
   $("#pickCount").textContent = `${rows.length} 条`;
-  $("#pickTable").innerHTML = `<table><thead><tr>
-    <th class="l">代码</th><th class="l">名称</th><th>类型</th><th>信号日</th><th>距今</th>
-    <th>买点价</th><th>现价</th><th>至今</th><th>250日位置</th><th>结构</th><th class="l">说明</th></tr></thead><tbody>
-    ${rows.map((s) => `<tr data-code="${s.code}"><td class="l">${s.code}</td><td class="l">${s.name}</td>
-      <td>${tag(s.type)}</td><td>${s.d}</td><td>${s.days}日</td><td>${fmt(s.p)}</td><td>${fmt(s.close)}</td>
-      <td class="${cls(s.pct)}">${pct(s.pct)}</td><td>${s.pos == null ? "—" : s.pos + "%"}</td>
-      <td class="st ${s.st == null ? "mid" : s.st >= 1 ? "ok" : s.st <= -1 ? "bad" : "mid"}">${s.tag || "—"}</td>
-      <td class="l muted">${s.note || ""}</td></tr>`).join("")}
-    </tbody></table>`;
+  paintPick(false);
   $("#pickTable").onclick = (e) => {
     const tr = e.target.closest("tr[data-code]");
-    if (tr) gotoKline(tr.dataset.code);
+    if (tr && !e.target.closest("button")) gotoKline(tr.dataset.code);
   };
 }
 $$("#pick .bar button[data-type]").forEach((b) =>
@@ -1891,11 +1933,80 @@ function openModal(title, html) {
   const m = document.querySelector("#modal");
   document.querySelector("#modalTitle").textContent = title;
   document.querySelector("#modalBody").innerHTML = html;
-  m.style.display = "flex";
+  if (m.open) m.close();
+  m.showModal();
 }
-function closeModal() { document.querySelector("#modal").style.display = "none"; }
+function closeModal() { const m = document.querySelector("#modal"); if (m.open) m.close(); }
 document.querySelector("#modalClose").addEventListener("click", closeModal);
 document.querySelector("#modal").addEventListener("click", (e) => { if (e.target.id === "modal") closeModal(); });
+
+// ---------- 表格增强：横滑容器 / 排序 / 提示 ----------
+const _collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+function wrapTables() {
+  document.querySelectorAll("table").forEach((t) => {
+    if (t.parentElement && t.parentElement.classList.contains("tblwrap")) return;
+    if (t.closest(".hp")) return;
+    const cap = t.querySelector("caption");
+    const w = document.createElement("div");
+    w.className = "tblwrap";
+    w.setAttribute("role", "region");
+    w.setAttribute("aria-label", (cap && cap.textContent.trim()) || "数据表");
+    w.tabIndex = 0;
+    t.parentNode.insertBefore(w, t);
+    w.appendChild(t);
+  });
+}
+function enhanceSort() {
+  document.querySelectorAll("table").forEach((tbl) => {
+    const head = tbl.tHead;
+    if (!head || !head.rows.length) return;
+    [...head.rows[0].cells].forEach((th) => {
+      if (!th.dataset.sort || th.dataset.enh) return;
+      th.dataset.enh = "1";
+      const b = document.createElement("button");
+      b.type = "button";
+      b.dataset.sort = th.dataset.sort;
+      b.textContent = th.textContent.trim();
+      th.textContent = "";
+      th.appendChild(b);
+    });
+  });
+}
+const _cellVal = (td, type) => {
+  if (td.dataset.value !== undefined) {
+    const v = parseFloat(td.dataset.value);
+    return type === "num" ? (Number.isNaN(v) ? -Infinity : v) : td.dataset.value;
+  }
+  const t = td.textContent.trim();
+  if (type === "num") {
+    const n = parseFloat(t.replace(/[+,%]/g, ""));
+    return Number.isNaN(n) ? -Infinity : n;
+  }
+  return t;
+};
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("th[data-sort] > button[data-sort]");
+  if (!btn) return;
+  const th = btn.closest("th"), tbl = th.closest("table"), tb = tbl.tBodies[0];
+  if (!tb) return;
+  const dir = th.getAttribute("aria-sort") === "ascending" ? "descending" : "ascending";
+  [...tbl.tHead.rows[0].cells].forEach((h) => h.removeAttribute("aria-sort"));
+  th.setAttribute("aria-sort", dir);
+  const f = dir === "ascending" ? 1 : -1, type = th.dataset.sort, idx = th.cellIndex;
+  const rows = [...tb.rows].sort((a, b) => {
+    const va = _cellVal(a.cells[idx], type), vb = _cellVal(b.cells[idx], type);
+    return typeof va === "number" ? f * (va - vb) : f * _collator.compare(va, vb);
+  });
+  if (tb.moveBefore) rows.forEach((r) => tb.moveBefore(r, null));
+  else { const frag = document.createDocumentFragment(); rows.forEach((r) => frag.appendChild(r)); tb.appendChild(frag); }
+});
+let _uiq = 0;
+new MutationObserver(() => {
+  if (_uiq) return;
+  _uiq = requestAnimationFrame(() => { _uiq = 0; wrapTables(); enhanceSort(); });
+}).observe(document.body, { childList: true, subtree: true });
+wrapTables(); enhanceSort();
+
 
 // ---------- 双指缩放（手机） ----------
 (function pinchZoom() {
