@@ -287,6 +287,8 @@ header.scrolled{box-shadow:0 6px 18px rgba(0,0,0,.38)}
         <button class="btn" data-flag="flow">主力带</button>
         <button class="btn" data-flag="levels">关键位</button>
         <button class="btn" id="subBtn">副图：量</button>
+        <button class="btn ghost" id="zoomOut" title="缩小（Ctrl+滚轮）">−</button>
+        <button class="btn ghost" id="zoomIn" title="放大（Ctrl+滚轮）">+</button>
         <button class="btn" id="conceptBtn">概念</button>
         <button class="btn" id="multiBtn">多级别</button>
         <button class="btn" id="helpBtn">缠论说明</button>
@@ -2347,11 +2349,18 @@ function kvBind() {
       + `<tspan x="62" dy="13">量 ${(b.v / 10000).toFixed(1)} 万手</tspan>`;
   };
 
+  // 普通滚轮交给页面滚动；Ctrl / ⌘ + 滚轮才缩放（原来无条件 preventDefault，落在图上就翻不动页）
   svg.addEventListener("wheel", (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
     e.preventDefault();
     KV.count = kvClamp(Math.round(KV.count * (e.deltaY > 0 ? 1.2 : 0.8)), 20, 500);
     schedule();
   }, { passive: false });
+
+  const kvZoom = (k) => { KV.count = kvClamp(Math.round(KV.count * k), 20, 500); schedule(); };
+  const zin = document.querySelector("#zoomIn"), zout = document.querySelector("#zoomOut");
+  if (zin) zin.onclick = () => kvZoom(0.8);
+  if (zout) zout.onclick = () => kvZoom(1.25);
 
   svg.addEventListener("pointerdown", (e) => { KV.drag = e.clientX; KV.moved = false; });
   window.addEventListener("pointerup", () => { KV.drag = null; });
