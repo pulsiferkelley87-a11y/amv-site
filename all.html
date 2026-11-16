@@ -2225,7 +2225,12 @@ function kvSVG() {
       <text id="kvText" x="${PL + 8}" y="${PT + 15}" font-size="10.5" fill="#cbd5e1"></text>
     </g>`;
 
-  const legend = `日K（前复权）｜橙MA5 蓝MA10 紫MA20 紫MA60 ｜ 红=压力带 绿=支撑带 蓝=突破线 ｜ 筹码带：蓝=核心(≥66%峰) 灰=边缘，POC=最密档 ｜ ${(rows[dispStart - i0] || {}).d} ~ ${(rows[dispEnd - i0] || {}).d}`;
+  const perName2 = { day: "日K", week: "周K", month: "月K", m60: "60分", m30: "30分" }[CUR.per] || "日K";
+  const lastD = String((bars[bars.length - 1] || {}).d || "");
+  const _n = new Date();
+  const _t = _n.getFullYear() + "-" + String(_n.getMonth() + 1).padStart(2, "0") + "-" + String(_n.getDate()).padStart(2, "0");
+  const staleTag = lastD && lastD < _t ? " ｜ ⚠ 数据截至 " + lastD + "（未含今日）" : "";
+  const legend = `${perName2}（前复权）｜橙MA5 蓝MA10 紫MA20 紫MA60 ｜ 红=压力带 绿=支撑带 蓝=突破线 ｜ 筹码带：蓝=核心(≥66%峰) 灰=边缘，POC=最密档 ｜ ${(rows[dispStart - i0] || {}).d} ~ ${(rows[dispEnd - i0] || {}).d}${staleTag}`;
 
   return `<svg id="kvSvg" viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="none"
       style="display:block;width:100%;height:auto;touch-action:none;cursor:crosshair">
