@@ -18,6 +18,11 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 from qcloud_cos import CosConfig, CosS3Client
 
 SECRET_ID = os.environ.get("COS_SECRET_ID", "")
@@ -59,15 +64,15 @@ def put(local, key, attempts=3):
 def main():
     scan = os.path.join(OUT, "chan_scan.json")
     if not os.path.exists(scan):
-        print("!! 缺少 %s，无法上传" % scan)
+        print("[FAIL] 缺少 %s，无法上传" % scan)
         return 1
 
     # ① 关键产物：先传，失败就整轮失败（页面靠它显示清单）
     key, ok, err = put(scan, "chan_scan.json", attempts=4)
     if not ok:
-        print("!! chan_scan.json 上传失败：", err)
+        print("[FAIL] chan_scan.json 上传失败：", err)
         return 1
-    print("chan_scan.json ✓ %d B" % os.path.getsize(scan))
+    print("[OK] chan_scan.json %d B" % os.path.getsize(scan))
 
     # ② 个股快照：允许部分失败
     files = sorted(glob.glob(os.path.join(OUT, "chan", "*.json")))
@@ -90,7 +95,7 @@ def main():
         print("失败样例：", ", ".join(errs))
 
     if total and failed / total > FAIL_RATIO:
-        print("!! 失败比例 %.0f%% 超过阈值 %.0f%%，判整轮失败" % (failed * 100.0 / total, FAIL_RATIO * 100))
+        print("[FAIL] 失败比例 %.0f%% 超过阈值 %.0f%%，判整轮失败" % (failed * 100.0 / total, FAIL_RATIO * 100))
         return 1
     if failed:
         print("部分失败，但已传的够用（页面缺图时会回退东财），本轮不判失败")
