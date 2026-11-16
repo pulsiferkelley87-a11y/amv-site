@@ -602,6 +602,16 @@ function paintPick(more) {
     btn.onclick = () => paintPick(true);
   }
 }
+function ensureAllPick() {
+  if (PICK_ALL.length <= PICK_SHOWN) return;
+  const tb = document.querySelector('#pickTable tbody');
+  if (!tb) return;
+  tb.insertAdjacentHTML('beforeend', PICK_ALL.slice(PICK_SHOWN).map(pickRowHTML).join(''));
+  PICK_SHOWN = PICK_ALL.length;
+  const b = document.querySelector('#pickMore');
+  if (b) b.style.display = 'none';
+}
+
 function renderPick() {
   if (!SCAN) { $("#pickTable").innerHTML = '<div class="bd muted">没有扫描结果</div>'; return; }
   const q = ($("#pickQ").value || "").trim().toLowerCase();
@@ -1848,6 +1858,7 @@ const _collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "ba
 function wrapTables() {
   document.querySelectorAll("table").forEach((t) => {
     if (t.parentElement && t.parentElement.classList.contains("tblwrap")) return;
+    if (!t.parentNode) return;
     if (t.closest(".hp")) return;
     const cap = t.querySelector("caption");
     const w = document.createElement("div");
@@ -1892,6 +1903,7 @@ document.addEventListener("click", (e) => {
   if (!btn) return;
   const th = btn.closest("th"), tbl = th.closest("table"), tb = tbl.tBodies[0];
   if (!tb) return;
+  if (tbl.closest("#pickTable")) ensureAllPick();
   const dir = th.getAttribute("aria-sort") === "ascending" ? "descending" : "ascending";
   [...tbl.tHead.rows[0].cells].forEach((h) => h.removeAttribute("aria-sort"));
   th.setAttribute("aria-sort", dir);
@@ -1903,11 +1915,8 @@ document.addEventListener("click", (e) => {
   if (tb.moveBefore) rows.forEach((r) => tb.moveBefore(r, null));
   else { const frag = document.createDocumentFragment(); rows.forEach((r) => frag.appendChild(r)); tb.appendChild(frag); }
 });
-let _uiq = 0;
-new MutationObserver(() => {
-  if (_uiq) return;
-  _uiq = requestAnimationFrame(() => { _uiq = 0; wrapTables(); enhanceSort(); });
-}).observe(document.body, { childList: true, subtree: true });
+new MutationObserver(() => { wrapTables(); enhanceSort(); })
+  .observe(document.body, { childList: true, subtree: true });
 wrapTables(); enhanceSort();
 
 
