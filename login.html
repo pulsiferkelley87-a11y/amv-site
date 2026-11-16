@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0a0e15">
 <title>登录 · 缠中说禅看盘</title>
 <style>
   :root{
@@ -106,6 +107,9 @@
     .brand h1{font-size:26px}
     .card{max-width:420px;padding:26px 20px 22px}
   }
+:root{color-scheme:dark}
+  input:focus-visible,button:focus-visible,a:focus-visible{outline:2px solid #818cf8;outline-offset:2px}
+  @media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 </style>
 </head>
 <body>
@@ -223,7 +227,7 @@
     }
     requestAnimationFrame(frame);
   }
-  requestAnimationFrame(frame);
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) requestAnimationFrame(frame);
 
   /* ---------- 登录逻辑 ---------- */
   const form = document.getElementById("form");
