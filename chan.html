@@ -921,10 +921,12 @@ async function fetchBars(code, per = 'day') {
   try {
     const j = await (await fetch(u)).json();
     const k = j?.data?.klines || [];
-    const em = k.map((s) => {
+    let em = k.map((s) => {
       const [d, o, c, h, l, v] = s.split(',');
       return { d, o: +o, c: +c, h: +h, l: +l, v: +v };
     });
+    // 与扫描端同窗口（700 根）：历史长度不同会让段/中枢/买点重算结果不一致
+    if (per === 'day' && em.length > 700) em = em.slice(-700);
     if (em.length && cosFallback) {
       const lastEm = String(em[em.length - 1].d), lastCos = String(cosFallback[cosFallback.length - 1].d);
       if (lastEm < lastCos) return cosFallback;   // 东财反而更旧，用本地 dump
@@ -2258,8 +2260,10 @@ function kvSVG() {
       }
       if (a < 0 || a > m - 1) return;
       const col = buy ? "#f87171" : "#34d399";
-      const yy = Y(s.p) + (buy ? 14 : -10);
-      chanSvg += `<circle cx="${X(a).toFixed(1)}" cy="${Y(s.p).toFixed(1)}" r="3" fill="${col}"/>`
+      const yP = Y(s.p);
+      if (yP < PT - 1 || yP > PT + ih + 1) return;   // 价格不在可视区间，不画（否则贴在边框上）
+      const yy = Math.min(PT + ih - 2, Math.max(PT + 10, yP + (buy ? 14 : -10)));
+      chanSvg += `<circle cx="${X(a).toFixed(1)}" cy="${yP.toFixed(1)}" r="3" fill="${col}"/>`
         + `<text x="${X(a).toFixed(1)}" y="${yy.toFixed(1)}" font-size="9" fill="${col}" text-anchor="middle">${s.type}</text>`;
     });
   }
