@@ -42,6 +42,27 @@ def field_date(key, field):
         return ""
 
 
+def field_ts(key, field):
+    """取完整时间戳字段（如 2026-11-17 23:17:07）。"""
+    try:
+        with urllib.request.urlopen("%s/%s" % (COS, key), timeout=60) as r:
+            j = json.loads(r.read().decode("utf-8"))
+        return str(j.get(field) or "")
+    except Exception:
+        return ""
+
+
+def ts_age_min(ts):
+    """把北京时间字符串时间戳换算成距今多少分钟。"""
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            dt = datetime.datetime.strptime(str(ts).strip(), fmt)
+            return (bj_now() - dt).total_seconds() / 60.0
+        except Exception:
+            continue
+    return None
+
+
 def main():
     args = sys.argv[1:]
     now = bj_now()
@@ -53,6 +74,13 @@ def main():
         print("闸门：今天是周末（%s），跳过" % now.strftime("%a"))
         run = False
         reason = "weekend"
+
+    max_age = None
+    if "--max-age-min" in args:
+        try:
+            max_age = float(args[args.index("--max-age-min") + 1])
+        except Exception:
+            max_age = None
 
     key, field, today_key = "", "", ""
     if "--field" in args:
@@ -66,11 +94,25 @@ def main():
 
     if run and key:
         fd = field_date(key, field) if field else ""
+        raw_ts = field_ts(key, field) if field else ""
+        if run and max_age is not None:
+            age = ts_age_min(raw_ts) if raw_ts else None
+            if age is None:
+                try:
+                    lm = head_lm(key)
+                    dt = datetime.datetime.strptime(lm, "%a, %d %b %Y %H:%M:%S GMT") + datetime.timedelta(hours=8)
+                    age = (now - dt).total_seconds() / 60.0
+                except Exception:
+                    age = None
+            if age is not None and age < max_age:
+                print("闸门：数据 %.1f 分钟前刚更新（阈值 %s 分钟），跳过" % (age, max_age))
+                run = False
+                reason = "too-fresh"
         if field and fd:
             # 有业务日期字段（如 updated_at / trade_date）时以它为准：
             # 文件可能今天被重传，但里面装的是昨天算出来的数据。
             print("闸门：%s.%s = %s（今天 %s）" % (key, field, fd, today))
-            if fd == today:
+            if fd == today and max_age is None:
                 run = False
                 reason = "field-is-today"
         else:
