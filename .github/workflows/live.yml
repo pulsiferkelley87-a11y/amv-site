@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: live-loop
-  cancel-in-progress: true   # 新 run 立即接管，不排队积压
+  cancel-in-progress: false  # 不再自我取消：延迟时排在后面的 run 会靠『新鲜度闸门』秒退，不会积压
 
 jobs:
   update:
@@ -29,7 +29,12 @@ jobs:
       - name: Install deps
         run: pip install requests
 
+      - name: Fresh gate（6 分钟内刚更新过就跳过这一轮）
+        id: fresh
+        run: python scripts/need_update.py live_data.json --field updated_at --max-age-min 6
+
       - name: Loop fetch & push (per minute)
+        if: steps.fresh.outputs.run == 'true'
         run: |
           git config user.name "amv-bot"
           git config user.email "bot@users.noreply.github.com"
@@ -57,6 +62,15 @@ jobs:
                 https://api.github.com/repos/${{ github.repository }}/actions/workflows/daily.yml/dispatches \
                 -d '{"ref":"main"}'
               echo "daily stale -> dispatched"
+            fi
+            # 收盘后若今天的缠论扫描还没跑出来 → 代打 chan.yml（本 job 有 actions:write）
+            if [ "$(date -u +%H)" -ge "8" ] && python scripts/need_update.py chan_scan.json --field updated_at --skip-weekend | grep -q "run=true"; then
+              curl -s -X POST \
+                -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github+json" \
+                https://api.github.com/repos/${{ github.repository }}/actions/workflows/chan.yml/dispatches \
+                -d '{"ref":"main"}'
+              echo "chan stale -> dispatched"
             fi
             # 每分钟 dispatch 部署（deploy.yml 用 cancel-in-progress 只留最新）
             curl -s -X POST \
