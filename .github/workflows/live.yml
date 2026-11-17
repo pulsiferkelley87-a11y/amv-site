@@ -2,7 +2,7 @@ name: Live Snapshot (loop)
 
 on:
   schedule:
-    - cron: '2,17,32,47 * * * *'   # 每15分钟一个 cron 点，run 内循环 ~12 分钟；挂掉最多 15 分钟自动重启
+    - cron: '2,17,32,47 * * * *'   # 每15分钟一个 cron 点，run 内循环 ~8 分钟
   workflow_dispatch: {}
 
 permissions:
@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: live-loop
-  cancel-in-progress: false  # 不再自我取消：延迟时排在后面的 run 会靠『新鲜度闸门』秒退，不会积压
+  cancel-in-progress: false   # 延迟时排在后面的 run 靠『新鲜度闸门』秒退，不再自我取消
 
 jobs:
   update:
@@ -32,6 +32,37 @@ jobs:
       - name: Fresh gate（6 分钟内刚更新过就跳过这一轮）
         id: fresh
         run: python scripts/need_update.py live_data.json --field updated_at --max-age-min 6
+
+      # 兜底触发器：本 job 有 actions:write，可代打 daily / chan（不依赖 GH_PAT）
+      - name: Stale checks → dispatch daily / chan（整轮只查一次）
+        if: steps.fresh.outputs.run == 'true'
+        env:
+          GH: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "$(date -u +%H)" -lt "8" ]; then
+            echo "before 16:05 Beijing, skip dispatch checks"
+            exit 0
+          fi
+          if ! python scripts/check_daily_stale.py; then
+            curl -s -X POST \
+              -H "Authorization: Bearer $GH" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/daily.yml/dispatches" \
+              -d '{"ref":"main"}'
+            echo "daily stale -> dispatched"
+          else
+            echo "daily fresh"
+          fi
+          if python scripts/need_update.py chan_scan.json --field updated_at --skip-weekend | grep -q "run=true"; then
+            curl -s -X POST \
+              -H "Authorization: Bearer $GH" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/chan.yml/dispatches" \
+              -d '{"ref":"main"}'
+            echo "chan stale -> dispatched"
+          else
+            echo "chan fresh"
+          fi
 
       - name: Loop fetch & push (per minute)
         if: steps.fresh.outputs.run == 'true'
@@ -53,24 +84,6 @@ jobs:
                 fi
                 sleep 4
               done
-            fi
-            # 收盘后（UTC>=8h）若主页数据停留在昨天 → 触发 daily 全量
-            if [ "$(date -u +%H)" -ge "8" ] && ! python scripts/check_daily_stale.py; then
-              curl -s -X POST \
-                -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-                -H "Accept: application/vnd.github+json" \
-                https://api.github.com/repos/${{ github.repository }}/actions/workflows/daily.yml/dispatches \
-                -d '{"ref":"main"}'
-              echo "daily stale -> dispatched"
-            fi
-            # 收盘后若今天的缠论扫描还没跑出来 → 代打 chan.yml（本 job 有 actions:write）
-            if [ "$(date -u +%H)" -ge "8" ] && python scripts/need_update.py chan_scan.json --field updated_at --skip-weekend | grep -q "run=true"; then
-              curl -s -X POST \
-                -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-                -H "Accept: application/vnd.github+json" \
-                https://api.github.com/repos/${{ github.repository }}/actions/workflows/chan.yml/dispatches \
-                -d '{"ref":"main"}'
-              echo "chan stale -> dispatched"
             fi
             # 每分钟 dispatch 部署（deploy.yml 用 cancel-in-progress 只留最新）
             curl -s -X POST \
