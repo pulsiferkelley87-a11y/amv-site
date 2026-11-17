@@ -43,6 +43,10 @@ jobs:
             echo "before 16:05 Beijing, skip dispatch checks"
             exit 0
           fi
+          if [ "$(date -u +%u)" -ge "6" ]; then
+            echo "weekend, skip dispatch checks"
+            exit 0
+          fi
           if ! python scripts/check_daily_stale.py; then
             curl -s -X POST \
               -H "Authorization: Bearer $GH" \
