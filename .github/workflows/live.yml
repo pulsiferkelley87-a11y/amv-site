@@ -18,7 +18,7 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 14
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -73,7 +73,7 @@ jobs:
         run: |
           git config user.name "amv-bot"
           git config user.email "bot@users.noreply.github.com"
-          for i in $(seq 1 11); do
+          for i in $(seq 1 8); do
             echo "--- round $i $(date -u +%H:%M:%S) ---"
             python scripts/live_update.py || echo "fetch fail or partial (round $i)"
             git add live_data.json
