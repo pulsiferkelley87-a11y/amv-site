@@ -38,7 +38,7 @@ jobs:
       - name: 闸门（今天已扫过就跳过）
         id: gate
         if: github.event_name == 'schedule'
-        run: python scripts/need_update.py chan_scan.json --field updated_at --skip-weekend
+        run: python scripts/need_update.py chan_scan.json --field updated_at --skip-weekend --min-time 15:00
 
       - name: Install deps
         if: github.event_name == 'workflow_dispatch' || steps.gate.outputs.run == 'true'
@@ -65,14 +65,7 @@ jobs:
 
       - name: Upload to COS
         if: github.event_name == 'workflow_dispatch' || steps.gate.outputs.run == 'true'
-        run: |
-          ok=0
-          for i in 1 2; do
-            echo "== 第 $i 次上传尝试"
-            if python scripts/chan_upload.py; then ok=1; break; fi
-            echo "上传失败，30 秒后整步重试"; sleep 30
-          done
-          if [ "$ok" != "1" ]; then echo "两次上传都失败"; exit 1; fi
+        run: python scripts/chan_upload.py
 
       - name: Print summary
         if: github.event_name == 'workflow_dispatch' || steps.gate.outputs.run == 'true'
