@@ -57,7 +57,7 @@ jobs:
           else
             echo "daily fresh"
           fi
-          if python scripts/need_update.py chan_scan.json --field updated_at --skip-weekend | grep -q "run=true"; then
+          if python scripts/need_update.py chan_scan.json --field updated_at --skip-weekend --min-time 15:00 | grep -q "run=true"; then
             curl -s -X POST \
               -H "Authorization: Bearer $GH" \
               -H "Accept: application/vnd.github+json" \
