@@ -127,7 +127,7 @@ jobs:
       - name: Scan gate（今天已扫过就跳过）
         id: sgate
         if: always()
-        run: python scripts/need_update.py chan_scan.json --field updated_at --skip-weekend
+        run: python scripts/need_update.py chan_scan.json --field updated_at --skip-weekend --min-time 15:00
 
       - name: Chan setup node
         if: always() && steps.sgate.outputs.run == 'true'
