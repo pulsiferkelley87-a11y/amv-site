@@ -203,7 +203,7 @@ export function pivotsByStrokes(sl) {
     if (!ok) { i++; continue; }
     pv.push({
       i0: a.i0, i1: sl[j - 1].i1, d0: a.d0, d1: sl[j - 1].d1,
-      zd, zg, gg: hi, dd: lo, n: j - i, done: j < sl.length,
+      zd, zg, gg: hi, dd: lo, n: j - i, done: j < sl.length, si0: i, si1: j - 1,
     });
     i = j;
   }
@@ -240,24 +240,27 @@ export function signals(sl, pv, dv, bars, mi) {
   const sig = [];
   const price = (i) => { const k = mi[i]; return k == null ? null : bars[k].c; };
 
-  // 三买/三卖：离开中枢后的第一笔回踩不破 ZG（三买）或不破 ZD（三卖）
+  // 三买/三卖：离开中枢区间后的第一笔回踩不破 ZG（三买）或不破 ZD（三卖）
+  // 注意：中枢按 czsc 口径会一直延伸吸收「没完全脱离」的笔，所以这里不能用 p.i1 当起点，
+  // 而是从中枢前 3 笔之后，找第一根「终点跑出 [zd,zg]」的笔作为离开笔。
   for (const p of pv) {
-    // 从中枢最后一笔之后开始找「离开笔 → 回抽笔」
-    for (let i = 1; i < sl.length; i++) {
+    const from = (p.si0 != null ? p.si0 + 3 : 1);
+    for (let i = Math.max(1, from); i < sl.length - 1; i++) {
       const s = sl[i];
-      if (s.i1 <= p.i1) continue;
       const pb = sl[i + 1];
-      if (s.dir === 1) {
-        // 向上离开后，第一个下跌笔不回到 ZG 之下 = 三买
-        if (pb && pb.dir === -1 && pb.p1 > p.zg) {
-          sig.push({ type: "三买", d: pb.d1, p: pb.p1, i: pb.i1, note: `回踩不破 ZG ${p.zg.toFixed(2)}` });
-        }
-      } else {
-        if (pb && pb.dir === 1 && pb.p1 < p.zd) {
-          sig.push({ type: "三卖", d: pb.d1, p: pb.p1, i: pb.i1, note: `反抽不破 ZD ${p.zd.toFixed(2)}` });
-        }
+      if (!pb) break;
+      const exitUp = s.dir === 1 && s.p1 > p.zg;
+      const exitDown = s.dir === -1 && s.p1 < p.zd;
+      if (!exitUp && !exitDown) continue;
+      if (exitUp && pb.dir === -1 && pb.p1 > p.zg) {
+        sig.push({ type: "三买", d: pb.d1, p: pb.p1, i: pb.i1, note: `回踩不破 ZG ${p.zg.toFixed(2)}` });
+        break;
       }
-      break;
+      if (exitDown && pb.dir === 1 && pb.p1 < p.zd) {
+        sig.push({ type: "三卖", d: pb.d1, p: pb.p1, i: pb.i1, note: `反抽不破 ZD ${p.zd.toFixed(2)}` });
+        break;
+      }
+      // 第一根离开笔失败（又回到区间内）→ 继续找下一根，不退出
     }
   }
 
