@@ -51,8 +51,8 @@ export function fractals(m) {
   const fs = [];
   for (let i = 1; i < m.length - 1; i++) {
     const a = m[i - 1], b = m[i], c = m[i + 1];
-    if (b.h > a.h && b.h > c.h && b.l > a.l && b.l > c.l) fs.push({ k: "top", i, d: b.d, p: b.h });
-    else if (b.l < a.l && b.l < c.l && b.h < a.h && b.h < c.h) fs.push({ k: "bot", i, d: b.d, p: b.l });
+    if (b.h > a.h && b.h > c.h && b.l > a.l && b.l > c.l) fs.push({ k: "top", i, d: b.d, p: b.h, h: b.h, l: b.l });
+    else if (b.l < a.l && b.l < c.l && b.h < a.h && b.h < c.h) fs.push({ k: "bot", i, d: b.d, p: b.l, h: b.h, l: b.l });
   }
   return fs;
 }
@@ -66,11 +66,13 @@ export function strokes(fs, m) {
     if (f.k === last.k) {
       // 同类分型取更极端
       if ((f.k === "top" && f.p >= last.p) || (f.k === "bot" && f.p <= last.p)) {
-        last.p = f.p; last.i = f.i; last.d = f.d; last.p1 = f.p; last.i1 = f.i;
+        last.p = f.p; last.i = f.i; last.d = f.d; last.p1 = f.p; last.i1 = f.i; last.h = f.h; last.l = f.l;
       }
       continue;
     }
-    if (f.i - last.i < 4) continue; // 间隔不足，不成笔
+    if (f.i - last.i < 3) continue; // 间隔不足，不成笔（czsc: bars_a >= min_bi_len=6）
+    // czsc ab_include：顶底互相包含时不成笔
+    if ((last.h > f.h && last.l < f.l) || (last.h < f.h && last.l > f.l)) continue;
     st.push({ k: f.k, i: f.i, d: f.d, p: f.p, i0: last.i, i1: f.i, p0: last.p, p1: f.p });
   }
   return st;
@@ -184,11 +186,21 @@ export function pivotsByStrokes(sl) {
     let hi = zg, lo = zd;
     while (j < sl.length) {
       const s = sl[j];
-      // 中枢延伸：该笔终点仍落在 [zd, zg] 内；终点跑出区间即「离开笔」，不算中枢
-      if (s.p1 <= zg && s.p1 >= zd) {
-        hi = Math.max(hi, s.hi); lo = Math.min(lo, s.lo); j++;
-      } else break;
+      // czsc: 只有整根笔完全脱离区间才算离开；否则并入中枢
+      const outside = (s.dir === 1 && s.hi < zd) || (s.dir === -1 && s.lo > zg);
+      if (outside) break;
+      hi = Math.max(hi, s.hi); lo = Math.min(lo, s.lo); j++;
     }
+    // czsc is_valid：每根笔都要与 [zd,zg] 有交集，否则不算中枢
+    let ok = true;
+    for (let k = i; k < j; k++) {
+      const s = sl[k];
+      const hiIn = s.hi <= zg && s.hi >= zd;
+      const loIn = s.lo <= zg && s.lo >= zd;
+      const covers = s.hi >= zg && s.lo <= zd;
+      if (!(hiIn || loIn || covers)) { ok = false; break; }
+    }
+    if (!ok) { i++; continue; }
     pv.push({
       i0: a.i0, i1: sl[j - 1].i1, d0: a.d0, d1: sl[j - 1].d1,
       zd, zg, gg: hi, dd: lo, n: j - i, done: j < sl.length,
