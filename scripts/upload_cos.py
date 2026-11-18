@@ -17,10 +17,10 @@ BUCKET = os.environ.get("COS_BUCKET", "")
 REGION = os.environ.get("COS_REGION", "ap-guangzhou")
 
 EXCLUDE = {
-    "live_data.json",   # 实盘云函数每 15 分钟直传，静态同步不得覆盖
-    "chan_scan.json",   # chan.yml 自己直传
-    "news.json",        # news.yml 自己直传
-}  # 只排除"有独立上传者"的文件；bull_bear / breadth_history 由本脚本上传
+    "live_data.json",   # 实盘云函数每 15 分钟更新
+    "chan_scan.json",   # chan.yml 扫描产物，静态同步不得覆盖
+    "news.json",        # news.yml 自己上传
+}  # bull_bear / breadth_history 由 daily 计算并需要静态同步上传，不能排除
 
 CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
