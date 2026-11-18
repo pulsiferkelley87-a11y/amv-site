@@ -63,6 +63,17 @@ def ts_age_min(ts):
     return None
 
 
+def ts_hm(ts):
+    """从时间戳里取 (时, 分)。"""
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            dt = datetime.datetime.strptime(str(ts).strip(), fmt)
+            return (dt.hour, dt.minute)
+        except Exception:
+            continue
+    return None
+
+
 def main():
     args = sys.argv[1:]
     now = bj_now()
@@ -74,6 +85,14 @@ def main():
         print("闸门：今天是周末（%s），跳过" % now.strftime("%a"))
         run = False
         reason = "weekend"
+
+    min_time = None
+    if "--min-time" in args:
+        try:
+            hh, mm = args[args.index("--min-time") + 1].split(":")
+            min_time = (int(hh), int(mm))
+        except Exception:
+            min_time = None
 
     max_age = None
     if "--max-age-min" in args:
@@ -113,8 +132,17 @@ def main():
             # 文件可能今天被重传，但里面装的是昨天算出来的数据。
             print("闸门：%s.%s = %s（今天 %s）" % (key, field, fd, today))
             if fd == today and max_age is None:
-                run = False
-                reason = "field-is-today"
+                keep = False
+                if min_time is not None:
+                    tt = ts_hm(raw_ts)
+                    if tt is not None and tt < min_time:
+                        keep = True
+                        print("闸门：今天的扫描发生在 %02d:%02d（早于收盘后 %02d:%02d），仍需重扫" % (tt[0], tt[1], min_time[0], min_time[1]))
+                if keep:
+                    reason = "before-cutoff"
+                else:
+                    run = False
+                    reason = "field-is-today"
         else:
             try:
                 lm = head_lm(key)
