@@ -28,6 +28,8 @@ const recent = [];
 const bt = [];
 const counts = { 一买: 0, 二买: 0, 三买: 0, 一卖: 0, 二卖: 0, 三卖: 0 };
 const totals = { 一买: 0, 二买: 0, 三买: 0, 一卖: 0, 二卖: 0, 三卖: 0 };
+const S1 = [];
+const S1BT = [];
 let ok = 0, fail = 0;
 
 for (const code of codes) {
@@ -49,6 +51,37 @@ for (const code of codes) {
     (trend === 1 ? "向上" : trend === -1 ? "向下" : "无段") +
     "·" +
     (posw === 1 ? "中枢上" : posw === -1 ? "中枢下" : "中枢内");
+
+  // ===== 策略 A：超跌反转（当日候选 + 滚动回测）=====
+  if (closes.length >= 70) {
+    for (let i = 30; i < closes.length - 5; i++) {
+      const c20 = closes[i - 20];
+      if (!c20) continue;
+      const r20 = ((closes[i] - c20) / c20) * 100;
+      if (r20 > -12) continue;
+      let sc = 0, sv = 0;
+      for (let k = i - 4; k <= i; k++) { sc += closes[k]; sv += bs[k].v; }
+      const m5 = sc / 5, a5 = sv / 5;
+      if (!(closes[i] > m5 * 0.97)) continue;
+      if (!(a5 > 0 && bs[i].v < a5 * 0.9)) continue;
+      S1BT.push(((closes[i + 5] - closes[i]) / closes[i]) * 100);
+    }
+    let sc = 0, sv = 0;
+    for (let k = closes.length - 5; k < closes.length; k++) { sc += closes[k]; sv += bs[k].v; }
+    const m5 = sc / 5, a5 = sv / 5;
+    const cN = closes[last], c20N = closes[last - 20];
+    const r20N = c20N ? ((cN - c20N) / c20N) * 100 : 0;
+    if (c20N && r20N <= -12 && cN > m5 * 0.97 && a5 > 0 && bs[last].v < a5 * 0.9) {
+      const low3 = Math.min(bs[last].l, bs[last - 1].l, bs[last - 2].l);
+      const stop = low3 * 0.99, risk = cN - stop;
+      if (risk > 0) S1.push({
+        code, name: nameOf.get(code) || "", d: bs[last].d, close: +cN.toFixed(2),
+        r20: +r20N.toFixed(1), vr: +(bs[last].v / a5).toFixed(2),
+        stop: +stop.toFixed(2), tgt: +(cN + risk * 1.8).toFixed(2), rr: 1.8,
+        why: "20日跌 " + r20N.toFixed(1) + "% · 量能 " + (bs[last].v / a5).toFixed(2) + "× · 站回MA5",
+      });
+    }
+  }
 
   for (const sg of r.signals) {
     totals[sg.type] = (totals[sg.type] || 0) + 1;
@@ -104,6 +137,27 @@ for (let k = 0; k < edges.length - 1; k++) {
 const res = {
   updated_at: new Date().toLocaleString("zh-CN", { hour12: false, timeZone: "Asia/Shanghai" }),
   ok, fail, ms: Date.now() - t0,
+  strat: {
+    s1: S1.sort((a, b) => a.r20 - b.r20).slice(0, 150),
+    s2: recent
+      .filter((x) => (x.type === "二买" || x.type === "三买") && x.days <= 3)
+      .map((x) => {
+        const stop = +(x.p * 0.985).toFixed(2);
+        const risk = x.close - stop;
+        return {
+          code: x.code, name: x.name, type: x.type, d: x.d, days: x.days,
+          close: x.close, stop, tgt: +(x.close + risk * 2).toFixed(2), rr: 2,
+          tag: x.tag, why: x.type + " · " + x.tag + " · " + x.days + " 日前",
+        };
+      })
+      .filter((x) => x.close > x.stop)
+      .slice(0, 150),
+    stat: { s1: stats(S1BT), erMai: byType["二买"] || null, sanMai: byType["三买"] || null },
+    rule: {
+      s1: "20日跌幅≤-12% + 收盘站回MA5(≥-3%) + 当日量<5日均量x0.9；止损=近3日最低x0.99，目标=1.8倍风险",
+      s2: "缠论二买/三买 且 3日内；止损=买点x0.985，目标=2倍风险",
+    },
+  },
   counts, totals,
   signals: recent
     .slice()
