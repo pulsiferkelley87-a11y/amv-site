@@ -70,6 +70,7 @@ for (const code of codes) {
       const m5 = sc / 5, a5 = sv / 5;
       if (!(closes[i] > m5 * 0.97)) continue;
       if (!(a5 > 0 && bs[i].v < a5 * 0.9)) continue;
+      if (!(bs[i].c > bs[i - 1].h)) continue;
       S1BT.push(((closes[i + 5] - closes[i]) / closes[i]) * 100 - COST);
       if (i + 10 < closes.length) S1BT10.push(((closes[i + 10] - closes[i]) / closes[i]) * 100 - COST);
     }
@@ -78,14 +79,14 @@ for (const code of codes) {
     const m5 = sc / 5, a5 = sv / 5;
     const cN = closes[last], c20N = closes[last - 20];
     const r20N = c20N ? ((cN - c20N) / c20N) * 100 : 0;
-    if (c20N && r20N <= -12 && cN > m5 * 0.97 && a5 > 0 && bs[last].v < a5 * 0.9) {
+    if (c20N && r20N <= -12 && cN > m5 * 0.97 && a5 > 0 && bs[last].v < a5 * 0.9 && cN > bs[last - 1].h) {
       const low3 = Math.min(bs[last].l, bs[last - 1].l, bs[last - 2].l);
       const stop = low3 * 0.99, risk = cN - stop;
       if (risk > 0) S1.push({
         code, name: nameOf.get(code) || "", d: bs[last].d, close: +cN.toFixed(2),
         r20: +r20N.toFixed(1), vr: +(bs[last].v / a5).toFixed(2),
         stop: +stop.toFixed(2), tgt: +(cN + risk * 1.8).toFixed(2), rr: 1.8,
-        why: "20日跌 " + r20N.toFixed(1) + "% · 量能 " + (bs[last].v / a5).toFixed(2) + "× · 站回MA5",
+        why: "20日跌 " + r20N.toFixed(1) + "% · 量能 " + (bs[last].v / a5).toFixed(2) + "× · 阳包阴收复MA5",
       });
     }
   }
@@ -162,7 +163,7 @@ const res = {
       .slice(0, 150),
     stat: { s1: stats(S1BT), s1_10: stats(S1BT10), erMai: byType["二买"] || null, sanMai: byType["三买"] || null },
     rule: {
-      s1: "20日跌幅≤-12% + 收盘站回MA5(≥-3%) + 当日量<5日均量x0.9；止损=近3日最低x0.99，目标=1.8倍风险",
+      s1: "20日跌幅≤-12% + 收盘站回MA5(≥-3%) + 缩量(量<5日均量x0.9) + 阳包阴(收>昨高)；止损=近3日最低x0.99，目标=1.8倍风险",
       s2: "缠论二买/三买 且 3日内；止损=买点x0.985，目标=2倍风险",
     },
   },
