@@ -28,13 +28,19 @@ const recent = [];
 const bt = [];
 const counts = { 一买: 0, 二买: 0, 三买: 0, 一卖: 0, 二卖: 0, 三卖: 0 };
 const totals = { 一买: 0, 二买: 0, 三买: 0, 一卖: 0, 二卖: 0, 三卖: 0 };
+const COST = 0.2;
 const S1 = [];
 const S1BT = [];
+const S1BT10 = [];
+let skip = 0;
 let ok = 0, fail = 0;
 
 for (const code of codes) {
   const raw = bars[code];
   if (!raw || raw.length < 150) { fail++; continue; }
+  const nmRaw = nameOf.get(code) || "";
+  if (/ST|退/.test(nmRaw)) { skip++; continue; }
+  if (!raw[raw.length - 1][5]) { skip++; continue; }
   const bs = raw.map((r) => ({ d: r[0], o: r[1], c: r[2], h: r[3], l: r[4], v: r[5] }));
   let r;
   try { r = analyze(bs); } catch (e) { fail++; continue; }
@@ -64,7 +70,8 @@ for (const code of codes) {
       const m5 = sc / 5, a5 = sv / 5;
       if (!(closes[i] > m5 * 0.97)) continue;
       if (!(a5 > 0 && bs[i].v < a5 * 0.9)) continue;
-      S1BT.push(((closes[i + 5] - closes[i]) / closes[i]) * 100);
+      S1BT.push(((closes[i + 5] - closes[i]) / closes[i]) * 100 - COST);
+      if (i + 10 < closes.length) S1BT10.push(((closes[i + 10] - closes[i]) / closes[i]) * 100 - COST);
     }
     let sc = 0, sv = 0;
     for (let k = closes.length - 5; k < closes.length; k++) { sc += closes[k]; sv += bs[k].v; }
@@ -136,7 +143,7 @@ for (let k = 0; k < edges.length - 1; k++) {
 
 const res = {
   updated_at: new Date().toLocaleString("zh-CN", { hour12: false, timeZone: "Asia/Shanghai" }),
-  ok, fail, ms: Date.now() - t0,
+  ok, fail, skip, ms: Date.now() - t0,
   strat: {
     s1: S1.sort((a, b) => a.r20 - b.r20).slice(0, 150),
     s2: recent
@@ -151,8 +158,9 @@ const res = {
         };
       })
       .filter((x) => x.close > x.stop)
+      .filter((x, i, arr) => arr.findIndex((y) => y.code === x.code) === i)
       .slice(0, 150),
-    stat: { s1: stats(S1BT), erMai: byType["二买"] || null, sanMai: byType["三买"] || null },
+    stat: { s1: stats(S1BT), s1_10: stats(S1BT10), erMai: byType["二买"] || null, sanMai: byType["三买"] || null },
     rule: {
       s1: "20日跌幅≤-12% + 收盘站回MA5(≥-3%) + 当日量<5日均量x0.9；止损=近3日最低x0.99，目标=1.8倍风险",
       s2: "缠论二买/三买 且 3日内；止损=买点x0.985，目标=2倍风险",
