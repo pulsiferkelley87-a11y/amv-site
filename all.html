@@ -194,7 +194,8 @@ header.scrolled{box-shadow:0 6px 18px rgba(0,0,0,.38)}
   <button class="tab on" data-t="home">首页</button>
   <button class="tab" data-t="live">实盘监测</button>
   <button class="tab" data-t="pick">选股结果</button>
-  <button class="tab" data-t="kline">缠论K线</button>
+  <button class="tab" data-t="strat">短线策略</button>
+      <button class="tab" data-t="kline">缠论K线</button>
   <button class="tab" data-t="bt">策略回测</button>
   <button class="tab" data-t="market">大盘行情</button>
 </nav>
@@ -283,6 +284,28 @@ header.scrolled{box-shadow:0 6px 18px rgba(0,0,0,.38)}
     </div>
   </dialog>
 
+    <!-- 短线策略 -->
+    <section id="strat">
+      <div class="card">
+        <div class="bar">
+          <span class="pill"><span class="dot"></span>短线策略</span>
+          <button class="btn on" data-s="s1">A 超跌反转</button>
+          <button class="btn" data-s="s2">B 缠论二买/三买</button>
+          <span class="muted" id="stratMeta"></span>
+        </div>
+        <div class="scroll" id="stratBox"></div>
+      </div>
+      <div class="card">
+        <div class="hp">
+          <b>这两条策略是怎么来的</b>
+          <p>· <b>A 超跌反转</b>：A 股短期反转有实证 —— 招商证券把"前两个月跌幅最大"的一组买入、持有 1 个月，扣 0.25% 成本后 7 年多累计 261%，同期沪深300 为 117%；bigquant 用 2015–2025 数据测得动量因子 IC −0.032（ICIR −0.244、t −2.66），即短期是"跌多了反弹"而不是"涨多了继续涨"。</p>
+          <p>· <b>B 缠论二买/三买</b>：用本项目 700 根日线自己回测，二买胜率约 63%、三买约 61%，均值 +3.8% 左右（没扣成本、没剔大盘 beta）。</p>
+          <p>· <b>已否决：放量突破 20 日新高</b> —— 14.1 万笔回测胜率 41.5%、中位 −1.22%、58.5% 亏损；另一组 19 次只赢 7 次。所以这里不给"突破追高"信号。</p>
+          <p class="muted">口径：止损用结构位（近 3 日最低 / 买点下 1.5%），目标 1.8~2 倍风险，持有 5~10 个交易日；未计手续费滑点，T+1、不能做空。</p>
+        </div>
+      </div>
+    </section>
+
 <section id="kline">
     <div class="card">
       <div class="bar">
@@ -369,6 +392,53 @@ const pct = (v) => (v == null || isNaN(v) ? "—" : (v > 0 ? "+" : "") + (+v).to
 const cls = (v) => (v > 0 ? "up" : v < 0 ? "down" : "");
 
 let SCAN = null, LIVE = null, HIST = null, BB = null;
+let STRAT_KIND = "s1";
+function stratStatText(k, st) {
+  if (!st || !st.stat) return "";
+  if (k === "s1") {
+    const s = st.stat.s1;
+    if (!s || !s.n) return "回测样本不足";
+    return "回测 " + s.n + " 次 · 胜率 " + s.win + "% · 均值 " + s.avg + "% · 中位 " + s.med + "% · 盈亏比 " + s.pf;
+  }
+  const f = (x) => (x && x.n ? "胜率 " + x.win + "% · 均值 " + x.avg + "% · 盈亏比 " + x.pf : "—");
+  return "二买 " + f(st.stat.erMai) + " ｜ 三买 " + f(st.stat.sanMai);
+}
+function renderStrat() {
+  const box = $("#stratBox");
+  if (!box) return;
+  const meta = $("#stratMeta");
+  const st = SCAN && SCAN.strat;
+  if (!st) {
+    box.innerHTML = '<div class="muted" style="padding:14px">还没有策略数据：等下一次全市场扫描（交易日 18:20 / 21:00 / 22:30 自动跑）。</div>';
+    if (meta) meta.textContent = "";
+    return;
+  }
+  if (meta) meta.textContent = stratStatText(STRAT_KIND, st);
+  const rows = st[STRAT_KIND] || [];
+  if (!rows.length) {
+    box.innerHTML = '<div class="muted" style="padding:14px">今天没有满足条件的票。</div>';
+    return;
+  }
+  const head = '<table><thead><tr><th scope="col" data-sort="text">代码</th><th scope="col" data-sort="text">名称</th><th scope="col" data-sort="text">策略</th><th scope="col" data-sort="text">触发</th><th scope="col" data-sort="num">现价</th><th scope="col" data-sort="num">止损</th><th scope="col" data-sort="num">目标</th><th scope="col" data-sort="num">盈亏比</th><th scope="col" data-sort="text">理由</th></tr></thead><tbody>';
+  const body = rows.map((s) => {
+    const kind = STRAT_KIND === "s1" ? "A 超跌反转" : (s.type || "二买/三买");
+    const when = s.days != null ? s.days + " 日前" : (s.d || "");
+    return '<tr data-code="' + s.code + '"><td class="l">' + s.code + '</td><td class="l">' + (s.name || "") +
+      '</td><td class="l">' + kind + '</td><td class="l">' + when + '</td><td data-value="' + s.close + '">' + s.close +
+      '</td><td data-value="' + s.stop + '">' + s.stop + '</td><td data-value="' + s.tgt + '">' + s.tgt +
+      '</td><td data-value="' + (s.rr || 0) + '">' + (s.rr ? s.rr.toFixed(1) : "—") + '</td><td class="l">' + (s.why || "") + '</td></tr>';
+  }).join("");
+  box.innerHTML = head + body + "</tbody></table>";
+  try { wrapTables(); enhanceSort(); } catch (e) {}
+}
+function stratOpen(code) {
+  $$("nav .tab").forEach((x) => x.classList.toggle("on", x.dataset.t === "kline"));
+  $$("main section").forEach((s) => s.classList.toggle("on", s.id === "kline"));
+  const inp = $("#code");
+  if (inp) inp.value = code;
+  loadKline(code);
+}
+
 let chart = null, macdChart = null;
 let CUR = { bars: [], res: null, per: "day", flags: { stroke: 1, seg: 1, pivot: 1, sig: 1, ma: 1, chips: 0, flow: 0, levels: 0, sub: "vol" } };
 
@@ -526,7 +596,7 @@ async function loadScan() {
     try { SCAN = await (await fetch("chan_scan.json?t=" + Date.now())).json(); }
     catch (e2) { SCAN = null; }
   }
-  renderHome(); renderPick(); renderBT(); try { renderAllHome(); } catch (e) {}
+  renderHome(); renderPick(); renderBT(); renderStrat(); try { renderAllHome(); } catch (e) {}
 }
 
 async function loadLive() {
@@ -1662,7 +1732,7 @@ async function runScan(opts = {}) {
     });
     SCAN = res;
     window.__scanResult = res;
-    renderHome(); renderPick(); renderBT();
+    renderHome(); renderPick(); renderBT(); renderStrat();
     $("#scanMeta2").textContent = `扫描 ${res.ok} 只 ｜ 更新 ${res.updated_at} ｜ 用时 ${(res.ms / 1000).toFixed(0)}s`;
     try {
       await fetch("/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(res) });
@@ -2138,6 +2208,18 @@ renderFavs();
 $("#ver").textContent = "BUILD " + new Date().toISOString().slice(0, 10);
 loadScan();
 loadLive();
+
+$$("#strat .bar button[data-s]").forEach((b) => b.addEventListener("click", () => {
+  $$("#strat .bar button[data-s]").forEach((x) => x.classList.toggle("on", x === b));
+  STRAT_KIND = b.dataset.s;
+  renderStrat();
+}));
+$("#stratBox") && $("#stratBox").addEventListener("click", (e) => {
+  const tr = e.target.closest("tr[data-code]");
+  if (!tr) return;
+  stratOpen(tr.dataset.code);
+});
+
 loadKline("600031");
 window.addEventListener("resize", () => { chart && chart.resize(); macdChart && macdChart.resize(); });
 
