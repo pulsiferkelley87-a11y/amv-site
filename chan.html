@@ -382,7 +382,9 @@ function stratStatText(k, st) {
   if (k === "s1") {
     const s = st.stat.s1;
     if (!s || !s.n) return "回测样本不足";
-    return "回测 " + s.n + " 次 · 胜率 " + s.win + "% · 均值 " + s.avg + "% · 中位 " + s.med + "% · 盈亏比 " + s.pf;
+    const s10 = st.stat.s1_10;
+    const tail = s10 && s10.n ? " ｜ 持有10日：胜率 " + s10.win + "% · 均值 " + s10.avg + "%" : "";
+    return "回测 " + s.n + " 次（已扣 0.2% 成本）· 持有5日：胜率 " + s.win + "% · 均值 " + s.avg + "% · 中位 " + s.med + "% · 盈亏比 " + s.pf + tail;
   }
   const f = (x) => (x && x.n ? "胜率 " + x.win + "% · 均值 " + x.avg + "% · 盈亏比 " + x.pf : "—");
   return "二买 " + f(st.stat.erMai) + " ｜ 三买 " + f(st.stat.sanMai);
